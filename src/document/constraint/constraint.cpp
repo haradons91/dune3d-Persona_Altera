@@ -85,6 +85,10 @@ std::string Constraint::get_type_name(Type type)
         return "Bezier/Bezier tangent symmetric";
     case Type::POINT_ON_BEZIER:
         return "Point on bezier";
+    case Type::LINE_TANGENT_ON_BEZIER:
+        return "Line tangent on bezier";
+    case Type::LINE_PERDENDICULAR_ON_BEZIER:
+        return "Line perpendicular on bezier";
     case Type::BEZIER_BEZIER_SAME_CURVATURE:
         return "Bezier/Bezier same curvature";
     case Type::BEZIER_ARC_SAME_CURVATURE:
@@ -142,6 +146,8 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Constraint::Type,
                                      {Constraint::Type::BEZIER_BEZIER_TANGENT_SYMMETRIC,
                                       "bezier_bezier_tangent_symmetric"},
                                      {Constraint::Type::POINT_ON_BEZIER, "point_on_bezier"},
+                                     {Constraint::Type::LINE_TANGENT_ON_BEZIER, "line_tangent_on_bezier"},
+                                     {Constraint::Type::LINE_PERDENDICULAR_ON_BEZIER, "line_perpendicular_on_bezier"},
                                      {Constraint::Type::BEZIER_BEZIER_SAME_CURVATURE, "bezier_bezier_same_curvature"},
                                      {Constraint::Type::BEZIER_ARC_SAME_CURVATURE, "bezier_arc_same_curvature"},
                                      {Constraint::Type::LENGTH_RATIO, "length_ratio"},
@@ -224,6 +230,10 @@ std::unique_ptr<Constraint> Constraint::new_from_json(const UUID &uu, const json
         return std::make_unique<ConstraintBezierBezierTangentSymmetric>(uu, j);
     case Type::POINT_ON_BEZIER:
         return std::make_unique<ConstraintPointOnBezier>(uu, j);
+    case Type::LINE_TANGENT_ON_BEZIER:
+        return std::make_unique<ConstraintLineTangentOnBezier>(uu, j);
+    case Type::LINE_PERDENDICULAR_ON_BEZIER:
+        return std::make_unique<ConstraintLinePerpendicularOnBezier>(uu, j);
     case Type::BEZIER_BEZIER_SAME_CURVATURE:
         return std::make_unique<ConstraintBezierBezierSameCurvature>(uu, j);
     case Type::BEZIER_ARC_SAME_CURVATURE:

@@ -61,6 +61,7 @@
 #include "tools/tool_convert_point_on_line_constraint.hpp"
 #include "tools/tool_convert_tangent_constraint.hpp"
 #include "tools/tool_create_circular_sweep_group.hpp"
+#include "tools/tool_convert_point_on_bezier_constraint.hpp"
 #include "tool_id.hpp"
 
 namespace dune3d {
@@ -238,6 +239,8 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
         return std::make_unique<ToolConstrainPointOnCircle>(tool_id, *this, m_intf, flags);
 
     case ToolID::CONSTRAIN_POINT_ON_BEZIER:
+    case ToolID::CONSTRAIN_LINE_TANGENT_ON_BEZIER:
+    case ToolID::CONSTRAIN_LINE_PERPENDICULAR_ON_BEZIER:
         return std::make_unique<ToolConstrainPointOnBezier>(tool_id, *this, m_intf, flags);
 
     case ToolID::CONSTRAIN_POINT_LINE_DISTANCE:
@@ -297,9 +300,15 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
     case ToolID::CONVERT_TO_TANGENT_CONSTRAINT:
     case ToolID::CONVERT_TO_TANGENT_SYMMETRIC_CONSTRAINT:
         return std::make_unique<ToolConvertTangentConstraint>(tool_id, *this, m_intf, flags);
+
     case ToolID::CREATE_REVOLVE_GROUP:
     case ToolID::CREATE_LATHE_GROUP:
         return std::make_unique<ToolCreateCircularSweepGroup>(tool_id, *this, m_intf, flags);
+
+    case ToolID::CONVERT_TO_POINT_ON_BEZIER_CONSTRAINT:
+    case ToolID::CONVERT_TO_LINE_TANGENT_ON_BEZIER_CONSTRAINT:
+    case ToolID::CONVERT_TO_LINE_PERPENDICULAR_ON_BEZIER_CONSTRAINT:
+        return std::make_unique<ToolConvertPointOnBezierConstraint>(tool_id, *this, m_intf, flags);
     }
     throw std::runtime_error("unknown tool");
 }

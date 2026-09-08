@@ -229,8 +229,8 @@ void render_text(EntityText &text, Glib::RefPtr<Pango::Context> ctx, const Docum
     hb_buffer_destroy(buf);
     hb_ft_font_unlock_face(hb_font);
 
-
     text.m_content = content;
+    text.create_bbox_anchors();
 }
 
 } // namespace dune3d

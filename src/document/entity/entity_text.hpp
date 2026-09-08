@@ -63,9 +63,23 @@ public:
         }
     }
 
+    enum class AnchorBBX { LEFT, RIGHT };
+    enum class AnchorBBY { BOTTOM, TOP };
+    static constexpr unsigned int get_anchor_index(AnchorBBX x, AnchorBBY y)
+    {
+        unsigned int index = 30;
+        if (x == AnchorBBX::RIGHT)
+            index += 1;
+        if (y == AnchorBBY::TOP)
+            index += 2;
+
+        return index;
+    }
+
 
     void add_anchor(unsigned int i, const glm::dvec2 &pt);
     void clear_anchors();
+    void create_bbox_anchors();
 
     glm::dvec2 transform(const glm::dvec2 &p) const;
 

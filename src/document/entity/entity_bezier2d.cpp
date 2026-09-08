@@ -175,14 +175,63 @@ void EntityBezier2D::move(const Entity &last, const glm::dvec2 &delta, unsigned 
     }
 }
 
+// ported from https://iquilezles.org/articles/bezierbbox/
+static auto aabbBezier(const glm::dvec2 p0, const glm::dvec2 p1, const glm::dvec2 p2, const glm::dvec2 p3)
+{
+    glm::dvec2 mi = min(p0, p3);
+    glm::dvec2 ma = max(p0, p3);
+
+    // d=position, c=velocity, b=acceleration, a=jerk
+    // following finite differences with binomial/Pascal's coefficients
+    // const glm::dvec2 d = p0;
+    const glm::dvec2 c = -1.0 * p0 + 1.0 * p1;
+    const glm::dvec2 b = 1.0 * p0 - 2.0 * p1 + 1.0 * p2;
+    const glm::dvec2 a = -1.0 * p0 + 3.0 * p1 - 3.0 * p2 + 1.0 * p3;
+
+    glm::dvec2 h = b * b - a * c;
+
+    if (h.x > 0.0) {
+        h.x = sqrt(h.x);
+        double t = (-b.x - h.x) / a.x;
+        if (t > 0.0 && t < 1.0) {
+            const double s = 1.0 - t;
+            const double q = s * s * s * p0.x + 3.0 * s * s * t * p1.x + 3.0 * s * t * t * p2.x + t * t * t * p3.x;
+            mi.x = std::min(mi.x, q);
+            ma.x = std::max(ma.x, q);
+        }
+        t = (-b.x + h.x) / a.x;
+        if (t > 0.0 && t < 1.0) {
+            const double s = 1.0 - t;
+            const double q = s * s * s * p0.x + 3.0 * s * s * t * p1.x + 3.0 * s * t * t * p2.x + t * t * t * p3.x;
+            mi.x = std::min(mi.x, q);
+            ma.x = std::max(ma.x, q);
+        }
+    }
+
+    if (h.y > 0.0) {
+        h.y = sqrt(h.y);
+        double t = (-b.y - h.y) / a.y;
+        if (t > 0.0 && t < 1.0) {
+            const double s = 1.0 - t;
+            const double q = s * s * s * p0.y + 3.0 * s * s * t * p1.y + 3.0 * s * t * t * p2.y + t * t * t * p3.y;
+            mi.y = std::min(mi.y, q);
+            ma.y = std::max(ma.y, q);
+        }
+        t = (-b.y + h.y) / a.y;
+        if (t > 0.0 && t < 1.0) {
+            const double s = 1.0 - t;
+            const double q = s * s * s * p0.y + 3.0 * s * s * t * p1.y + 3.0 * s * t * t * p2.y + t * t * t * p3.y;
+            mi.y = std::min(mi.y, q);
+            ma.y = std::max(ma.y, q);
+        }
+    }
+
+    return std::make_pair(mi, ma);
+}
+
 std::pair<glm::dvec2, glm::dvec2> EntityBezier2D::get_bbox() const
 {
-    BBoxAccumulator<glm::dvec2> acc;
-    acc.accumulate(m_p1);
-    acc.accumulate(m_p2);
-    acc.accumulate(m_c1);
-    acc.accumulate(m_c2);
-    return acc.get().value();
+    return aabbBezier(m_p1, m_c1, m_c2, m_p2);
 }
 
 } // namespace dune3d

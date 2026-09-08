@@ -2685,6 +2685,24 @@ void System::visit(const ConstraintBezierBezierTangentSymmetric &constraint)
     AddEq(hConstraint{c}, &m_sys->eq, e.y, 3);
 }
 
+void System::visit(const ConstraintLineTangentOnBezier &constraint)
+{
+    visit(static_cast<const ConstraintPointOnBezier &>(constraint));
+}
+
+void System::visit(const ConstraintLinePerpendicularOnBezier &constraint)
+{
+    visit(static_cast<const ConstraintPointOnBezier &>(constraint));
+}
+
+static EntityAndPoint get_other_point(const EntityAndPoint &enp)
+{
+    if (enp.point == 1)
+        return {enp.entity, 2};
+    else
+        return {enp.entity, 1};
+}
+
 void System::visit(const ConstraintPointOnBezier &constraint)
 {
     const auto c = n_constraint++;
@@ -2726,6 +2744,27 @@ void System::visit(const ConstraintPointOnBezier &constraint)
 
     AddEq(hConstraint{c}, &m_sys->eq, point.x->Minus(p_t.x), 0);
     AddEq(hConstraint{c}, &m_sys->eq, point.y->Minus(p_t.y), 1);
+
+    if (constraint.of_type(ConstraintType::LINE_PERDENDICULAR_ON_BEZIER, ConstraintType::LINE_TANGENT_ON_BEZIER)) {
+        auto en_other_point = SK.GetEntity({get_entity_ref(get_other_point(constraint.m_point))});
+        auto other_point = en_other_point->PointGetExprsInWorkplane({en_wrkpl});
+        auto v_line = other_point.Minus(point);
+
+        ExprVector v_perp;
+        if (constraint.of_type(ConstraintType::LINE_TANGENT_ON_BEZIER))
+            v_perp = ExprVector{v_line.y->Times(Expr::From(-1)), v_line.x, v_line.z};
+        else
+            v_perp = v_line;
+
+        auto t6_one_minus_t = t->Times(Expr::From(6))->Times(one_minus_t);
+        auto bezier_tangent =
+                p1.ScaledBy(one_minus_t_square->Times(Expr::From(-3)))
+                        .Plus(c1.ScaledBy(one_minus_t_square->Times(Expr::From(3))->Minus(t6_one_minus_t)))
+                        .Plus(c2.ScaledBy(t_square->Times(Expr::From(-3))->Plus(t6_one_minus_t)))
+                        .Plus(p2.ScaledBy(t_square->Times(Expr::From(3))));
+
+        AddEq(hConstraint{c}, &m_sys->eq, bezier_tangent.Dot(v_perp), 2);
+    }
 }
 
 void System::visit(const ConstraintBezierBezierSameCurvature &constraint)

@@ -1454,13 +1454,28 @@ void Renderer::visit(const ConstraintBezierLineTangent &constraint)
     add_constraint(p1, IconID::CONSTRAINT_ARC_LINE_TANGENT, constraint.m_uuid, v);
 }
 
-void Renderer::visit(const ConstraintPointOnBezier &constraint)
+void Renderer::visit(const ConstraintPointOnBezier &constraint, IconTexture::IconTextureID icon)
 {
     const auto pt = m_doc->get_point(constraint.m_point);
     const auto &bez = m_doc->get_entity<IEntityTangentProjected>(constraint.m_line);
     const auto &wrkpl = m_doc->get_entity<EntityWorkplane>(constraint.m_wrkpl);
     const auto v = wrkpl.transform_relative(bez.get_tangent_in_workplane(constraint.m_val, wrkpl));
-    add_constraint(pt, IconID::CONSTRAINT_POINT_ON_BEZIER, constraint.m_uuid, v);
+    add_constraint(pt, icon, constraint.m_uuid, v);
+}
+
+void Renderer::visit(const ConstraintPointOnBezier &constraint)
+{
+    visit(constraint, IconID::CONSTRAINT_POINT_ON_BEZIER);
+}
+
+void Renderer::visit(const ConstraintLineTangentOnBezier &constraint)
+{
+    visit(constraint, IconID::CONSTRAINT_LINE_TANGENT_ON_BEZIER);
+}
+
+void Renderer::visit(const ConstraintLinePerpendicularOnBezier &constraint)
+{
+    visit(constraint, IconID::CONSTRAINT_LINE_PERPENDICULAR_ON_BEZIER);
 }
 
 void Renderer::visit(const ConstraintBezierBezierSameCurvature &constraint)

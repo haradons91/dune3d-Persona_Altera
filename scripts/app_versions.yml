@@ -37,3 +37,5 @@ versions:
     35: add bezier/arc same curvature constraint
     36: add radius2 to chamfer groups
     37: add length ratio constraint
+    38: add text bounding box anchors
+    39: add tangent/perpendicular line on bezier constraint

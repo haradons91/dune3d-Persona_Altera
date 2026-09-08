@@ -233,6 +233,10 @@ const std::map<ActionToolID, ActionCatalogItem> action_catalog = {
          {"Constrain point on circle", ActionGroup::CONSTRAIN, ActionCatalogItem::FLAGS_DEFAULT}},
         {ToolID::CONSTRAIN_POINT_ON_BEZIER,
          {"Constrain point on bezier curve", ActionGroup::CONSTRAIN, ActionCatalogItem::FLAGS_DEFAULT}},
+        {ToolID::CONSTRAIN_LINE_TANGENT_ON_BEZIER,
+         {"Constrain tangent line on bezier curve", ActionGroup::CONSTRAIN, ActionCatalogItem::FLAGS_DEFAULT}},
+        {ToolID::CONSTRAIN_LINE_PERPENDICULAR_ON_BEZIER,
+         {"Constrain perpendicular line on bezier curve", ActionGroup::CONSTRAIN, ActionCatalogItem::FLAGS_DEFAULT}},
         {ToolID::CONSTRAIN_POINT_LINE_DISTANCE,
          {"Constrain point/line distance", ActionGroup::CONSTRAIN, ActionCatalogItem::FLAGS_DEFAULT}},
         {ToolID::CONSTRAIN_POINT_LINE_DISTANCE_3D,
@@ -306,6 +310,18 @@ const std::map<ActionToolID, ActionCatalogItem> action_catalog = {
         {ActionID::GO_TO_SOURCE_GROUP, {"Go to source group", ActionGroup::UNKNOWN, ActionCatalogItem::FLAGS_DEFAULT}},
         {ToolID::CREATE_REVOLVE_GROUP, {"Create revolve group", ActionGroup::UNKNOWN, ActionCatalogItem::FLAGS_HIDDEN}},
         {ToolID::CREATE_LATHE_GROUP, {"Create lathe group", ActionGroup::UNKNOWN, ActionCatalogItem::FLAGS_HIDDEN}},
+        {ToolID::CONVERT_TO_POINT_ON_BEZIER_CONSTRAINT,
+         {{"Convert to point on bezier constraint", "Convert to point on bezier"},
+          ActionGroup::UNKNOWN,
+          ActionCatalogItem::FLAGS_DEFAULT}},
+        {ToolID::CONVERT_TO_LINE_TANGENT_ON_BEZIER_CONSTRAINT,
+         {{"Convert to tangent line on bezier constraint", "Convert to tangent line on bezier"},
+          ActionGroup::UNKNOWN,
+          ActionCatalogItem::FLAGS_DEFAULT}},
+        {ToolID::CONVERT_TO_LINE_PERPENDICULAR_ON_BEZIER_CONSTRAINT,
+         {{"Convert to perpendicular line on bezier constraint", "Convert to perpendicular line on bezier"},
+          ActionGroup::UNKNOWN,
+          ActionCatalogItem::FLAGS_DEFAULT}},
 };
 
 
@@ -494,6 +510,8 @@ const LutEnumStr<ToolID> tool_lut = {
         TOOL_LUT_ITEM(CONSTRAIN_POINT_ON_LINE_3D),
         TOOL_LUT_ITEM(CONSTRAIN_POINT_ON_CIRCLE),
         TOOL_LUT_ITEM(CONSTRAIN_POINT_ON_BEZIER),
+        TOOL_LUT_ITEM(CONSTRAIN_LINE_TANGENT_ON_BEZIER),
+        TOOL_LUT_ITEM(CONSTRAIN_LINE_PERPENDICULAR_ON_BEZIER),
         TOOL_LUT_ITEM(CONSTRAIN_POINT_LINE_DISTANCE),
         TOOL_LUT_ITEM(CONSTRAIN_POINT_LINE_DISTANCE_3D),
         TOOL_LUT_ITEM(MEASURE_POINT_LINE_DISTANCE),
@@ -521,6 +539,9 @@ const LutEnumStr<ToolID> tool_lut = {
         TOOL_LUT_ITEM(CONVERT_TO_SAME_CURVATURE_CONSTRAINT),
         TOOL_LUT_ITEM(CONVERT_TO_TANGENT_CONSTRAINT),
         TOOL_LUT_ITEM(CONVERT_TO_TANGENT_SYMMETRIC_CONSTRAINT),
+        TOOL_LUT_ITEM(CONVERT_TO_POINT_ON_BEZIER_CONSTRAINT),
+        TOOL_LUT_ITEM(CONVERT_TO_LINE_TANGENT_ON_BEZIER_CONSTRAINT),
+        TOOL_LUT_ITEM(CONVERT_TO_LINE_PERPENDICULAR_ON_BEZIER_CONSTRAINT),
 };
 
 

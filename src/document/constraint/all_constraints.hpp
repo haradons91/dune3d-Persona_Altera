@@ -29,5 +29,7 @@
 #include "constraint_bezier_line_tangent.hpp"
 #include "constraint_bezier_bezier_tangent_symmetric.hpp"
 #include "constraint_point_on_bezier.hpp"
+#include "constraint_line_tangent_on_bezier.hpp"
+#include "constraint_line_perpendicular_on_bezier.hpp"
 #include "constraint_bezier_bezier_same_curvature.hpp"
 #include "constraint_bezier_arc_same_curvature.hpp"

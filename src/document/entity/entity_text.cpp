@@ -29,6 +29,10 @@ EntityText::EntityText(const UUID &uu, const json &j)
             m_anchors_transformed.emplace(std::stoi(k), transform(v.get<glm::dvec2>()));
         }
     }
+
+    // when opening a document that doesn't have text bbox anchors yet
+    if (!m_anchors.contains(get_anchor_index(AnchorBBX::LEFT, AnchorBBY::BOTTOM)))
+        create_bbox_anchors();
 }
 
 
@@ -111,6 +115,14 @@ std::string EntityText::get_point_name(unsigned int point) const
         return "Right top";
     case get_anchor_index(AnchorX::RIGHT, AnchorY::BASE):
         return "Right base";
+    case get_anchor_index(AnchorBBX::LEFT, AnchorBBY::BOTTOM):
+        return "Bounding box left bottom";
+    case get_anchor_index(AnchorBBX::LEFT, AnchorBBY::TOP):
+        return "Bounding box left top";
+    case get_anchor_index(AnchorBBX::RIGHT, AnchorBBY::BOTTOM):
+        return "Bounding box right bottom";
+    case get_anchor_index(AnchorBBX::RIGHT, AnchorBBY::TOP):
+        return "Bounding box right top";
     default:
         return "";
     }
@@ -168,6 +180,17 @@ void EntityText::clear_anchors()
 {
     m_anchors.clear();
     m_anchors_transformed.clear();
+}
+
+void EntityText::create_bbox_anchors()
+{
+    const auto bb = m_content->get_bbox();
+    using X = AnchorBBX;
+    using Y = AnchorBBY;
+    add_anchor(get_anchor_index(X::LEFT, Y::BOTTOM), bb.first);
+    add_anchor(get_anchor_index(X::LEFT, Y::TOP), {bb.first.x, bb.second.y});
+    add_anchor(get_anchor_index(X::RIGHT, Y::TOP), bb.second);
+    add_anchor(get_anchor_index(X::RIGHT, Y::BOTTOM), {bb.second.x, bb.first.y});
 }
 
 std::pair<glm::dvec2, glm::dvec2> EntityText::get_bbox() const
