@@ -10,6 +10,7 @@ public:
     void set_quat(const glm::quat &q);
 
     sigc::signal<void(const glm::quat &)> signal_quat_changed();
+    sigc::signal<void(float)> signal_roll_changed();
 
 private:
     glm::quat m_quat;
@@ -27,6 +28,7 @@ private:
     int m_cached_height = 0;
 
     sigc::signal<void(const glm::quat &)> m_signal_quat_changed;
+    sigc::signal<void(float)> m_signal_roll_changed;
 
     void render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h);
     void create_layout();

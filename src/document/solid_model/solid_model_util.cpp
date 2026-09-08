@@ -354,7 +354,8 @@ TopoDS_Wire FaceBuilder::path_to_wire(const Clipper2Lib::PathD &path, bool hole,
 }
 
 FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu, const UUID &source_group_uu,
-                                       Transform fn_transform, Transform fn_transform_normal)
+                                       Transform fn_transform, Transform fn_transform_normal,
+                                       std::optional<unsigned int> source_path)
 {
     auto paths = Paths::from_document(doc, wrkpl_uu, source_group_uu);
 
@@ -364,8 +365,9 @@ FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu
     {
         unsigned int path_index = 0;
         for (auto &path : paths.paths) {
-            if (path_is_valid(path))
-                cpaths.emplace_back(path_to_clipper(path, path_index++));
+            const auto current_path = path_index++;
+            if ((!source_path || current_path == *source_path) && path_is_valid(path))
+                cpaths.emplace_back(path_to_clipper(path, current_path));
         }
     }
     Clipper2Lib::PolyTreeD poly_tree;
@@ -399,11 +401,17 @@ FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu
 }
 
 FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu, const UUID &source_group_uu,
-                                       const glm::dvec3 &offset)
+                                       const glm::dvec3 &offset, std::optional<unsigned int> source_path)
 {
-    return from_document(
-            doc, wrkpl_uu, source_group_uu, [offset](const glm::dvec3 &p) { return p + offset; },
-            [](const glm::dvec3 &p) { return p; });
+    if (!source_path)
+        return from_document(doc, wrkpl_uu, source_group_uu, [offset](const glm::dvec3 &p) { return p + offset; },
+                             [](const glm::dvec3 &p) { return p; });
+
+    auto paths = Paths::from_document(doc, wrkpl_uu, source_group_uu);
+    if (*source_path >= paths.paths.size())
+        return FaceBuilder{};
+    return from_document(doc, wrkpl_uu, source_group_uu, [offset](const glm::dvec3 &p) { return p + offset; },
+                         [](const glm::dvec3 &p) { return p; }, source_path);
 }
 
 } // namespace dune3d::solid_model_util

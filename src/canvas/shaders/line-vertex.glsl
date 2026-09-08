@@ -2,10 +2,12 @@
 layout(location=0) in vec3 p1;
 layout(location=1) in vec3 p2;
 layout(location=2) in uint flags;
+layout(location=3) in uint axis_color;
 
 out vec4 p1_to_geom;
 out vec4 p2_to_geom;
 out uint flags_to_geom;
+flat out uint axis_color_to_geom;
 flat out uint pick_to_geom;
 uniform uint pick_base;
 
@@ -18,6 +20,7 @@ uniform float screen_scale;
 void main() {
 	pick_to_geom = uint(gl_VertexID+int(pick_base));
 	flags_to_geom = flags;
+	axis_color_to_geom = axis_color;
 	if(FLAG_IS_SET(flags, VERTEX_FLAG_SCREEN)) { //screen
 		p1_to_geom = (proj*view*vec4(p1, 1));
 		p1_to_geom /= p1_to_geom.w;
@@ -40,4 +43,3 @@ void main() {
 		p2_to_geom = (proj*view*vec4(p2, 1));
 	}
 }
-

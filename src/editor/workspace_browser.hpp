@@ -26,6 +26,11 @@ public:
         return m_signal_group_selected;
     }
 
+    type_signal_group_selected signal_group_activated()
+    {
+        return m_signal_group_activated;
+    }
+
     type_signal_group_selected signal_rename_body()
     {
         return m_signal_rename_body;
@@ -131,6 +136,7 @@ private:
     Core &m_core;
 
     type_signal_group_selected m_signal_group_selected;
+    type_signal_group_selected m_signal_group_activated;
     type_signal_group_checked m_signal_group_checked;
     type_signal_group_checked m_signal_body_checked;
     type_signal_group_checked m_signal_body_solid_model_checked;

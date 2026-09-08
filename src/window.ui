@@ -106,6 +106,578 @@ dim-label</property>
       <object class="GtkBox">
         <property name="orientation">vertical</property>
         <child>
+          <object class="GtkBox" id="fusion_ribbon_bar">
+            <property name="css-classes">fusion-ribbon-bar</property>
+            <property name="orientation">horizontal</property>
+            <property name="spacing">8</property>
+            <child>
+              <object class="GtkBox" id="ribbon_workspace_badge">
+                <property name="css-classes">fusion-workspace-badge-box</property>
+                <property name="valign">center</property>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="css-classes">fusion-workspace-badge-label</property>
+                    <property name="label">DESIGN</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkSeparator" id="ribbon_workspace_separator">
+                <property name="orientation">vertical</property>
+                <property name="margin-start">4</property>
+                <property name="margin-end">4</property>
+              </object>
+            </child>
+            <!-- Group 1: CREATE -->
+            <child>
+              <object class="GtkBox" id="ribbon_create_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">horizontal</property>
+                    <property name="spacing">4</property>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_sketch">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Create Sketch</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-workplane-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Sketch</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_extrude">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Extrude Profile</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">document-new-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Extrude</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_revolve">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Revolve Profile</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-circle-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Revolve</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_sweep">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Sweep / Pipe</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-contour-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Sweep</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_loft">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Loft Profiles</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-regular-polygon-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Loft</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="css-classes">fusion-ribbon-group-label</property>
+                    <property name="label">CREATE</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <!-- Group 2: MODIFY -->
+            <child>
+              <object class="GtkBox" id="ribbon_modify_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">horizontal</property>
+                    <property name="spacing">4</property>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_fillet">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Create Fillet</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-circle-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Fillet</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_chamfer">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Create Chamfer</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-rectangle-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Chamfer</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_combine">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Boolean Combine / Cut</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-regular-polygon-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Combine</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_pattern">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Linear Array Pattern</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-rectangle-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Pattern</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="css-classes">fusion-ribbon-group-label</property>
+                    <property name="label">MODIFY</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <!-- Group 3: SKETCH -->
+            <child>
+              <object class="GtkBox" id="ribbon_sketch_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">horizontal</property>
+                    <property name="spacing">4</property>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_line">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Draw Line / Contour</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-contour-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Line</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_rect">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Draw Rectangle</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-rectangle-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Rect</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_circle">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Draw Circle</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-circle-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Circle</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_polygon">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Draw Regular Polygon</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-regular-polygon-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Polygon</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_text">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Draw Text</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-text-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Text</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="css-classes">fusion-ribbon-group-label</property>
+                    <property name="label">SKETCH</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <!-- Group 4: CONSTRAIN -->
+            <child>
+              <object class="GtkBox" id="ribbon_sketch_modify_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <property name="visible">False</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">horizontal</property>
+                    <property name="spacing">4</property>
+                    <child>
+                      <object class="GtkButton" id="ribbon_btn_dimension">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Constrain Distance</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child>
+                              <object class="GtkImage">
+                                <property name="icon-name">action-draw-line-rectangle-symbolic</property>
+                                <property name="icon-size">large</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="css-classes">fusion-ribbon-btn-label</property>
+                                <property name="label">Dimension</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_sketch_btn_fillet">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Create Fillet</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child><object class="GtkImage"><property name="icon-name">action-draw-line-circle-symbolic</property><property name="icon-size">large</property></object></child>
+                            <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-btn-label</property><property name="label">Fillet</property></object></child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="ribbon_sketch_btn_chamfer">
+                        <property name="css-classes">fusion-ribbon-btn</property>
+                        <property name="tooltip-text">Create Chamfer</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <child><object class="GtkImage"><property name="icon-name">action-draw-line-rectangle-symbolic</property><property name="icon-size">large</property></object></child>
+                            <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-btn-label</property><property name="label">Chamfer</property></object></child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="css-classes">fusion-ribbon-group-label</property>
+                    <property name="label">MODIFY</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkBox" id="ribbon_body_inspect_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkButton" id="ribbon_body_btn_measure">
+                    <property name="css-classes">fusion-ribbon-btn</property>
+                    <property name="tooltip-text">Measure Distance</property>
+                    <child>
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">2</property>
+                        <child><object class="GtkImage"><property name="icon-name">action-clip-greater-symbolic</property><property name="icon-size">large</property></object></child>
+                        <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-btn-label</property><property name="label">Measure</property></object></child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-group-label</property><property name="label">INSPECT</property></object></child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkBox" id="ribbon_sketch_inspect_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <property name="visible">False</property>
+                <child>
+                  <object class="GtkButton" id="ribbon_sketch_btn_measure">
+                    <property name="css-classes">fusion-ribbon-btn</property>
+                    <property name="tooltip-text">Measure Distance</property>
+                    <child>
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">2</property>
+                        <child><object class="GtkImage"><property name="icon-name">action-clip-greater-symbolic</property><property name="icon-size">large</property></object></child>
+                        <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-btn-label</property><property name="label">Measure</property></object></child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-group-label</property><property name="label">INSPECT</property></object></child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkBox" id="finish_sketch_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <property name="visible">False</property>
+                <child>
+                  <object class="GtkButton" id="finish_sketch_button">
+                    <property name="css-classes">fusion-ribbon-btn</property>
+                    <property name="tooltip-text">Finish Sketch</property>
+                    <property name="valign">center</property>
+                    <child>
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">2</property>
+                        <child>
+                          <object class="GtkImage">
+                            <property name="icon-name">emblem-ok-symbolic</property>
+                            <property name="icon-size">large</property>
+                          </object>
+                        </child>
+                        <child>
+                      <object class="GtkLabel">
+                        <property name="css-classes">fusion-ribbon-btn-label</property>
+                        <property name="label">Finish</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="finish_sketch_label">
+                    <property name="css-classes">fusion-ribbon-group-label</property>
+                    <property name="label">SKETCH</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
           <object class="GtkPaned" id="paned">
             <property name="position">300</property>
             <property name="position-set">True</property>
@@ -147,6 +719,20 @@ dim-label</property>
                         <property name="halign">end</property>
                         <property name="margin-end">10</property>
                         <property name="margin-top">10</property>
+                        <property name="valign">start</property>
+                      </object>
+                    </child>
+                    <child type="overlay">
+                      <object class="GtkBox" id="sketch_plane_selector_box">
+                        <property name="can-target">True</property>
+                        <property name="halign">center</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                    <child type="overlay">
+                      <object class="GtkBox" id="rectangle_dimensions_box">
+                        <property name="can-target">True</property>
+                        <property name="halign">start</property>
                         <property name="valign">start</property>
                       </object>
                     </child>

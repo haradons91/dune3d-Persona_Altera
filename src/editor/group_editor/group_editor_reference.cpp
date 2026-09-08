@@ -47,6 +47,18 @@ GroupEditorReference::GroupEditorReference(Core &core, const UUID &group_uu) : G
         get_group().generate(m_core.get_current_document());
         m_signal_changed.emit(CommitMode::IMMEDIATE);
     });
+
+    m_switch_origin = Gtk::make_managed<Gtk::Switch>();
+    m_switch_origin->set_halign(Gtk::Align::START);
+    m_switch_origin->set_valign(Gtk::Align::CENTER);
+    grid_attach_label_and_widget(*this, "Origin", *m_switch_origin, m_top);
+    m_switch_origin->set_active(group.m_show_origin);
+    m_switch_origin->property_active().signal_changed().connect([this] {
+        if (is_reloading())
+            return;
+        get_group().m_show_origin = m_switch_origin->get_active();
+        m_signal_changed.emit(CommitMode::IMMEDIATE);
+    });
 }
 
 void GroupEditorReference::do_reload()
@@ -56,6 +68,7 @@ void GroupEditorReference::do_reload()
     m_switch_xy->set_active(group.m_show_xy);
     m_switch_yz->set_active(group.m_show_yz);
     m_switch_zx->set_active(group.m_show_zx);
+    m_switch_origin->set_active(group.m_show_origin);
 }
 
 GroupReference &GroupEditorReference::get_group()

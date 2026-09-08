@@ -14,6 +14,7 @@ uniform mat4 proj;
 uniform vec3 origin;
 uniform mat3 normal_mat;
 uniform vec3 override_color;
+uniform float override_alpha;
 uniform uint flags;
 
 ##ubo

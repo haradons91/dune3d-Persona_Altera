@@ -19,6 +19,7 @@ GLuint LineRenderer::create_vao(GLuint program, GLuint &vbo_out)
     GLuint p1_index = glGetAttribLocation(program, "p1");
     GLuint p2_index = glGetAttribLocation(program, "p2");
     GLuint flags_index = glGetAttribLocation(program, "flags");
+    GLuint axis_color_index = glGetAttribLocation(program, "axis_color");
     GLuint vao, buffer;
 
     /* we need to create a VAO to store the other buffers */
@@ -44,6 +45,9 @@ GLuint LineRenderer::create_vao(GLuint program, GLuint &vbo_out)
     glEnableVertexAttribArray(flags_index);
     glVertexAttribIPointer(flags_index, 1, GL_UNSIGNED_INT, sizeof(CanvasChunk::LineVertex),
                            (void *)offsetof(CanvasChunk::LineVertex, flags));
+    glEnableVertexAttribArray(axis_color_index);
+    glVertexAttribIPointer(axis_color_index, 1, GL_UNSIGNED_BYTE, sizeof(CanvasChunk::LineVertex),
+                           (void *)offsetof(CanvasChunk::LineVertex, axis_color));
 
     /* enable and set the color attribute */
     /* reset the state; we will re-enable the VAO when needed */

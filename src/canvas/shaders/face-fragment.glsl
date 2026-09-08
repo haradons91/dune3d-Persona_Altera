@@ -10,6 +10,7 @@ in vec3 pos_to_fragment;
 uniform vec3 cam_normal;
 uniform uint pick_base;
 uniform uint flags;
+uniform float override_alpha;
 uniform vec3 clipping_value;
 uniform ivec3 clipping_op;
 flat in float select_alpha_to_frag;
@@ -40,7 +41,7 @@ void main() {
   vec3 color = color_to_fragment;
   if(FLAG_IS_SET(flags, VERTEX_FLAG_HOVER | VERTEX_FLAG_SELECTED))
       color = mix(color, get_color(flags), .5);
-  outputColor = vec4(color*(shade), 1);
+  outputColor = vec4(color*(shade), override_alpha);
   select = outputColor*select_alpha_to_frag;
   pick = pick_base;
 }

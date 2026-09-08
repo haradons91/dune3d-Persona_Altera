@@ -18,6 +18,7 @@ class EnterDatumWindow;
 class RotateWindow;
 class EnterTextWindow;
 class EditorInterface;
+class RectangleDimensionsWindow;
 
 class Dialogs {
 public:

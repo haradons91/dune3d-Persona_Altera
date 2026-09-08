@@ -21,6 +21,7 @@ private:
     GLuint m_origin_loc;
     GLuint m_normal_mat_loc;
     GLuint m_override_color_loc;
+    GLuint m_override_alpha_loc;
 
     GLuint m_clipping_value_loc;
     GLuint m_clipping_op_loc;

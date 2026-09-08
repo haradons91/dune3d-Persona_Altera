@@ -16,6 +16,7 @@ private:
     Gtk::Switch *m_switch_xy = nullptr;
     Gtk::Switch *m_switch_yz = nullptr;
     Gtk::Switch *m_switch_zx = nullptr;
+    Gtk::Switch *m_switch_origin = nullptr;
 };
 
 } // namespace dune3d

@@ -23,10 +23,10 @@ bool SpinButtonDim::on_output()
     auto adj = get_adjustment();
     double value = adj->get_value();
 
-    int prec = 3;
+    int prec = m_decimal_places >= 0 ? m_decimal_places : 3;
     {
         int64_t ivalue = abs(round(value * 1e6));
-        if (ivalue % 1000)
+        if (m_decimal_places < 0 && ivalue % 1000)
             prec = 5;
     }
 
@@ -41,7 +41,10 @@ bool SpinButtonDim::on_output()
 
     stream << std::fixed << std::setprecision(prec) << std::abs(value) << " mm";
 
-    set_text(stream.str());
+    const auto text = stream.str();
+    if (m_fit_content)
+        set_width_chars(static_cast<int>(text.size()));
+    set_text(text);
     return true;
 }
 

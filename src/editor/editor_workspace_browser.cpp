@@ -3,6 +3,7 @@
 #include "dune3d_appwindow.hpp"
 #include "widgets/constraints_box.hpp"
 #include "document/group/all_groups.hpp"
+#include "widgets/sketch_plane_selector.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "util/selection_util.hpp"
 #include "canvas/canvas.hpp"
@@ -13,8 +14,10 @@
 #include "nlohmann/json.hpp"
 #include "action/action_id.hpp"
 #include "document/solid_model/solid_model.hpp"
+#include "document/group/igroup_solid_model.hpp"
 #include "widgets/select_groups_dialog.hpp"
 #include "core/tool_data_create_circular_sweep_group.hpp"
+#include "util/glm_util.hpp"
 
 namespace dune3d {
 using json = nlohmann::json;
@@ -29,6 +32,39 @@ void Editor::init_workspace_browser()
 
     m_workspace_browser->signal_group_selected().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_group_selected));
+    m_workspace_browser->signal_group_activated().connect([this](const UUID &uu_doc, const UUID &uu_group) {
+        if (uu_doc != m_core.get_current_idocument_info().get_uuid())
+            return;
+        const auto type = m_core.get_current_document().get_group(uu_group).get_type();
+        if (type == Group::Type::SKETCH) {
+            m_extrude_editing = false;
+            if (!m_sketch_editing)
+                m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+            m_sketch_editing = true;
+            const auto &sketch = m_core.get_current_document().get_group(uu_group);
+            if (sketch.m_active_wrkpl) {
+                const auto &workplane = m_core.get_current_document().get_entity<EntityWorkplane>(sketch.m_active_wrkpl);
+                auto camera_quat = workplane.m_normal;
+                const auto &reference = m_core.get_current_document().get_reference_group();
+                if (sketch.m_active_wrkpl == reference.get_workplane_yz_uuid())
+                    camera_quat = workplane.m_normal
+                                  * glm::angleAxis(-static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
+                else if (sketch.m_active_wrkpl == reference.get_workplane_zx_uuid())
+                    camera_quat = workplane.m_normal
+                                  * glm::angleAxis(static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
+                get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
+            }
+        }
+        else if (type == Group::Type::EXTRUDE) {
+            m_sketch_editing = false;
+            m_extrude_editing = true;
+        }
+        else {
+            return;
+        }
+        update_sketch_mode_ui();
+        canvas_update();
+    });
     m_workspace_browser->signal_add_group().connect(sigc::mem_fun(*this, &Editor::on_add_group));
     m_workspace_browser->signal_delete_current_group().connect(sigc::mem_fun(*this, &Editor::on_delete_current_group));
     m_workspace_browser->signal_move_group().connect(sigc::mem_fun(*this, &Editor::on_move_group));
@@ -77,6 +113,7 @@ void Editor::on_workspace_browser_group_selected(const UUID &uu_doc, const UUID 
 {
     if (m_core.tool_is_active())
         return;
+    m_sketch_editing = false;
     auto &idoc = m_core.get_current_idocument_info();
     if (idoc.get_uuid() == uu_doc && idoc.get_current_group() == uu_group)
         return;
@@ -96,8 +133,30 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
     Group *new_group = nullptr;
     static const std::string toast_prefix = "Couldn't create group\n";
     if (group_type == Group::Type::SKETCH) {
-        auto &group = doc.insert_group<GroupSketch>(UUID::random(), current_group.m_uuid);
-        new_group = &group;
+        // Keep the current view unchanged while the user chooses a plane.
+        m_selecting_sketch_plane = true;
+        m_sketch_plane_grid.reset();
+        m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+        m_restore_sketch_plane_cam_on_undo = false;
+        m_sketch_plane_created_group.reset();
+        m_sketch_plane_current_group = current_group.m_uuid;
+        m_sketch_plane_add_group_mode = add_group_mode;
+        get_canvas().grab_focus();
+
+        for (const auto &selection : get_canvas().get_selection()) {
+            if (selection.type == SelectableRef::Type::SOLID_MODEL_FACE) {
+                get_canvas().set_selection({}, false);
+                finish_sketch_face_selection(selection.item, selection.point);
+                return;
+            }
+        }
+
+        get_canvas().set_selection({}, false);
+        get_canvas().set_selection_mode(SelectionMode::HOVER_ONLY);
+        m_win.get_sketch_plane_selector().set_visible(false);
+        canvas_update();
+        m_workspace_browser->show_toast("Select a reference plane for the sketch");
+        return;
     }
     else if (group_type == Group::Type::EXTRUDE) {
         if (!current_group.m_active_wrkpl) {
@@ -109,6 +168,13 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         group.m_wrkpl = current_group.m_active_wrkpl;
         group.m_dvec = doc.get_entity<EntityWorkplane>(group.m_wrkpl).get_normal_vector();
         group.m_source_group = current_group.m_uuid;
+        for (const auto &selection : get_canvas().get_selection()) {
+            if (selection.type == SelectableRef::Type::SKETCH_PROFILE
+                && selection.item == current_group.m_uuid) {
+                group.m_source_path = selection.point;
+                break;
+            }
+        }
     }
     else if (group_type == Group::Type::REVOLVE) {
         if (!current_group.m_active_wrkpl) {
@@ -218,9 +284,154 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         group.m_wrkpl = current_group.m_active_wrkpl;
         group.m_source_group = current_group.m_uuid;
     }
+    if (new_group && group_type == Group::Type::EXTRUDE) {
+        m_extrude_editing = true;
+    }
     if (new_group && add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY)
         new_group->m_body.emplace();
     finish_add_group(new_group);
+}
+
+void Editor::finish_sketch_plane_selection(const UUID &plane)
+{
+    if (!m_selecting_sketch_plane)
+        return;
+
+    auto &doc = m_core.get_current_document();
+    if (!doc.m_entities.contains(plane))
+        return;
+    auto &plane_entity = doc.get_entity<EntityWorkplane>(plane);
+    if (plane_entity.m_group != doc.get_reference_group().m_uuid)
+        return;
+
+    auto &group = doc.insert_group<GroupSketch>(UUID::random(), m_sketch_plane_current_group);
+    m_sketch_plane_created_group = group.m_uuid;
+    group.m_active_wrkpl = plane;
+    get_current_document_view().m_group_views[group.m_uuid].m_visible = true;
+    if (m_sketch_plane_add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY)
+        group.m_body.emplace();
+
+    m_selecting_sketch_plane = false;
+    m_sketch_plane_grid = plane;
+    // Capture the view immediately before this plane selection so Undo can
+    // return here even when plane selection was re-entered by Undo.
+    m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+    m_restore_sketch_plane_cam_on_undo = true;
+    m_win.get_sketch_plane_selector().set_visible(false);
+    get_canvas().set_selection_mode(SelectionMode::NORMAL);
+    finish_add_group(&group);
+    m_sketch_editing = true;
+    update_sketch_mode_ui();
+    auto camera_quat = plane_entity.m_normal;
+    if (plane == doc.get_reference_group().get_workplane_yz_uuid()) {
+        camera_quat = plane_entity.m_normal
+                      * glm::angleAxis(-static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
+    }
+    else if (plane == doc.get_reference_group().get_workplane_zx_uuid()) {
+        camera_quat = plane_entity.m_normal
+                      * glm::angleAxis(static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
+    }
+    get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
+}
+
+void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned int face_idx)
+{
+    if (!m_selecting_sketch_plane)
+        return;
+
+    auto &doc = m_core.get_current_document();
+    if (!doc.get_groups().contains(solid_group_uuid))
+        return;
+    const auto &source_group = doc.get_group(solid_group_uuid);
+    const auto *solid_group = dynamic_cast<const IGroupSolidModel *>(&source_group);
+    if (!solid_group || !solid_group->get_solid_model())
+        return;
+
+    const auto &faces = solid_group->get_solid_model()->m_faces;
+    if (face_idx >= faces.size())
+        return;
+    const auto &face = faces.at(face_idx);
+    if (face.vertices.size() < 3 || face.normals.empty())
+        return;
+
+    const auto &vertex = face.vertices.front();
+    const glm::dvec3 origin{vertex.x, vertex.y, vertex.z};
+    const auto &face_normal = face.normals.front();
+    const glm::dvec3 raw_normal{face_normal.x, face_normal.y, face_normal.z};
+    if (glm::length(raw_normal) <= 1e-9)
+        return;
+    const glm::dvec3 normal = glm::normalize(raw_normal);
+
+    glm::dvec3 u;
+    for (size_t i = 1; i < face.vertices.size(); i++) {
+        const auto &candidate = face.vertices.at(i);
+        u = glm::dvec3{candidate.x, candidate.y, candidate.z} - origin;
+        if (glm::length(u) > 1e-9)
+            break;
+    }
+    if (glm::length(u) <= 1e-9)
+        return;
+    u = glm::normalize(u);
+    const auto v = glm::normalize(glm::cross(normal, u));
+    if (glm::length(v) <= 1e-9)
+        return;
+
+    auto &group = doc.insert_group<GroupSketch>(UUID::random(), m_sketch_plane_current_group);
+    m_sketch_plane_created_group = group.m_uuid;
+    bool added = false;
+    auto &workplane = doc.get_or_add_entity<EntityWorkplane>(UUID::random(), &added);
+    workplane.m_origin = origin;
+    workplane.m_normal = quat_from_uv(u, v);
+    workplane.m_group = group.m_uuid;
+    workplane.m_kind = ItemKind::USER;
+    group.m_active_wrkpl = workplane.m_uuid;
+    get_current_document_view().m_group_views[group.m_uuid].m_visible = true;
+    if (m_sketch_plane_add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY)
+        group.m_body.emplace();
+
+    m_selecting_sketch_plane = false;
+    m_sketch_plane_grid = workplane.m_uuid;
+    // Capture the view immediately before this face/plane selection so Undo
+    // can restore it on repeated plane-selection cycles.
+    m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+    m_restore_sketch_plane_cam_on_undo = true;
+    m_win.get_sketch_plane_selector().set_visible(false);
+    get_canvas().set_selection_mode(SelectionMode::NORMAL);
+    finish_add_group(&group);
+    m_sketch_editing = true;
+    update_sketch_mode_ui();
+    // View the selected face from its normal side. The workplane basis was
+    // built from the face normal, so an additional 180-degree flip would
+    // incorrectly show a top face from underneath.
+    get_canvas().animate_to_cam_quat(glm::quat(workplane.m_normal));
+}
+
+void Editor::finish_sketch()
+{
+    if (!m_core.has_documents() || !force_end_tool())
+        return;
+    auto &doc = m_core.get_current_document();
+    if (doc.get_group(m_core.get_current_group()).get_type() != Group::Type::SKETCH)
+        return;
+    m_sketch_editing = false;
+    update_sketch_mode_ui();
+    canvas_update();
+    if (m_sketch_plane_previous_cam_quat) {
+        get_canvas().animate_to_cam_quat(*m_sketch_plane_previous_cam_quat);
+        m_sketch_plane_previous_cam_quat.reset();
+    }
+}
+
+void Editor::finish_extrusion()
+{
+    if (!m_core.has_documents() || !force_end_tool())
+        return;
+    if (m_core.get_current_document().get_group(m_core.get_current_group()).get_type() != Group::Type::EXTRUDE)
+        return;
+    m_extrude_dragging = false;
+    m_extrude_editing = false;
+    update_sketch_mode_ui();
+    canvas_update();
 }
 
 void Editor::finish_add_group(Group *new_group)

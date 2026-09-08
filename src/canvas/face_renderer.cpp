@@ -69,6 +69,7 @@ void FaceRenderer::realize()
     GET_LOC(this, origin);
     GET_LOC(this, normal_mat);
     GET_LOC(this, override_color);
+    GET_LOC(this, override_alpha);
     GET_LOC(this, clipping_value);
     GET_LOC(this, clipping_op);
 }
@@ -171,12 +172,29 @@ void FaceRenderer::render()
             glUniform3fv(m_origin_loc, 1, glm::value_ptr(group.origin));
             if (group.color == ICanvas::FaceColor::AS_IS) {
                 glUniform3f(m_override_color_loc, NAN, NAN, NAN);
+                glUniform1f(m_override_alpha_loc, 1.0f);
             }
             else {
-                const auto colorp = (group.color == ICanvas::FaceColor::SOLID_MODEL) ? ColorP::SOLID_MODEL
-                                                                                     : ColorP::OTHER_BODY_SOLID_MODEL;
-                const auto color = m_ca.m_appearance.get_color(colorp);
-                gl_color_to_uniform_3f(m_override_color_loc, color);
+                if (group.color == ICanvas::FaceColor::SKETCH_PLANE
+                    || group.color == ICanvas::FaceColor::SKETCH_PLANE_HIGHLIGHT) {
+                    if (group.color == ICanvas::FaceColor::SKETCH_PLANE_HIGHLIGHT)
+                        glUniform3f(m_override_color_loc, 1.0f, 1.0f, 0.25f);
+                    else
+                        glUniform3f(m_override_color_loc, 1.0f, 0.78f, 0.05f);
+                    glUniform1f(m_override_alpha_loc, 0.38f);
+                }
+                else if (group.color == ICanvas::FaceColor::SKETCH_PROFILE) {
+                    glUniform3f(m_override_color_loc, 0.20f, 0.65f, 1.0f);
+                    glUniform1f(m_override_alpha_loc, 0.16f);
+                }
+                else {
+                    const auto colorp = (group.color == ICanvas::FaceColor::SOLID_MODEL)
+                                                ? ColorP::SOLID_MODEL
+                                                : ColorP::OTHER_BODY_SOLID_MODEL;
+                    const auto color = m_ca.m_appearance.get_color(colorp);
+                    gl_color_to_uniform_3f(m_override_color_loc, color);
+                    glUniform1f(m_override_alpha_loc, 1.0f);
+                }
             }
             glm::mat3 normal_mat = glm::transpose(glm::toMat3(group.normal));
 

@@ -268,7 +268,6 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
             source_groups = group_src->get_source_groups(doc);
         auto body = current_group.find_body(doc);
         UUID body_uu = body.group.m_uuid;
-        bool after_active = false;
         for (size_t i_body = 0; i_body < it_doc.m_body_store->get_n_items(); i_body++) {
             auto &it_body = *it_doc.m_body_store->get_item(i_body);
             const bool is_current_body = body_uu == it_body.m_uuid && is_current_doc;
@@ -291,18 +290,8 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
                 it_group.m_dof = gr.m_dof;
                 it_group.m_name = gr.m_name;
                 it_group.m_source_group = source_groups.contains(it_group.m_uuid);
-                if (is_current && is_current_doc) {
-                    it_group.m_check_active = true;
-                    it_group.m_check_sensitive = false;
-                }
-                else if (after_active) {
-                    it_group.m_check_active = false;
-                    it_group.m_check_sensitive = false;
-                }
-                else {
-                    it_group.m_check_sensitive = true;
-                    it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
-                }
+                it_group.m_check_sensitive = true;
+                it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
                 {
                     auto msgs = gr.get_messages();
                     it_group.m_status = GroupStatusMessage::summarize(msgs);
@@ -314,8 +303,6 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
                     }
                     it_group.m_status_message = txt;
                 }
-                if (is_current)
-                    after_active = true;
             }
         }
         select_group(doci.get_uuid(), doci.get_current_group());
@@ -528,6 +515,14 @@ public:
             m_browser.m_body_popover->popup();
         });
         add_controller(controller);
+
+        auto activate_controller = Gtk::GestureClick::create();
+        activate_controller->set_button(1);
+        activate_controller->signal_pressed().connect([this](int n_press, double, double) {
+            if (n_press == 2 && m_group)
+                m_browser.m_signal_group_activated.emit(m_group->m_doc, m_group->m_uuid);
+        });
+        add_controller(activate_controller);
     }
 
     void bind(DocumentItem &it)

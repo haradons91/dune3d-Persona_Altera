@@ -22,9 +22,10 @@ public:
 
     virtual void generate(Document &doc) override;
 
-    bool m_show_xy = true;
-    bool m_show_yz = true;
-    bool m_show_zx = true;
+    bool m_show_xy = false;
+    bool m_show_yz = false;
+    bool m_show_zx = false;
+    bool m_show_origin = true;
 
     glm::dvec2 m_xy_size = {EntityWorkplane::s_default_size, EntityWorkplane::s_default_size};
     glm::dvec2 m_yz_size = {EntityWorkplane::s_default_size, EntityWorkplane::s_default_size};

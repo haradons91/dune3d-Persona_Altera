@@ -47,6 +47,7 @@ RotateWindow *Dialogs::show_rotate_window(const std::string &label, const glm::d
     return win;
 }
 
+
 void Dialogs::close_nonmodal()
 {
     auto data = std::make_unique<ToolDataWindow>();

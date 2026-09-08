@@ -1,3 +1,4 @@
+#!/usr/bin/env xdg-open
 [Desktop Entry]
 Name=Dune 3D
 Comment=Parametric 3D CAD

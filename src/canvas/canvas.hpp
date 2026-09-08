@@ -50,6 +50,7 @@ public:
     void clear_chunks(unsigned int first_chunk);
     VertexRef draw_point(glm::vec3 p) override;
     VertexRef draw_line(glm::vec3 from, glm::vec3 to) override;
+    VertexRef draw_axis_line(glm::vec3 from, glm::vec3 to, Axis axis) override;
     VertexRef draw_screen_line(glm::vec3 origin, glm::vec3 direction) override;
     std::vector<VertexRef> draw_bitmap_text(glm::vec3 p, float size, const std::string &rtext) override;
     std::vector<VertexRef> draw_bitmap_text_3d(glm::vec3 p, const glm::quat &norm, float size,
@@ -88,8 +89,10 @@ public:
 
     glm::dvec3 get_cursor_pos() const;
     glm::dvec3 get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal) const;
-    glm::vec3 get_cam_normal() const;
+    glm::vec3 get_cam_normal() const override;
     glm::dvec2 get_cursor_pos_win() const;
+    void update_cursor_position(double x, double y);
+    glm::dvec2 project_to_window(glm::dvec3 point) const;
 
     void set_selection_mode(SelectionMode mode);
     SelectionMode get_selection_mode() const

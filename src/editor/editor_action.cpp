@@ -3,6 +3,7 @@
 #include "in_tool_action/in_tool_action.hpp"
 #include "workspace_browser.hpp"
 #include "dune3d_appwindow.hpp"
+#include "widgets/sketch_plane_selector.hpp"
 #include "dune3d_application.hpp"
 #include "preferences/preferences_window.hpp"
 #include "canvas/canvas.hpp"
@@ -20,6 +21,8 @@
 #include "util/paths.hpp"
 #include "core/tool_id.hpp"
 #include "buffer.hpp"
+#include "dialogs/rectangle_dimensions_window.hpp"
+#include <format>
 
 namespace dune3d {
 
@@ -124,12 +127,59 @@ void Editor::init_actions()
     }
 
     connect_action(ActionID::UNDO, [this](const auto &a) {
+        // While choosing a sketch plane, Undo has the same meaning as
+        // Escape. It must not also undo an unrelated document change.
+        if (m_selecting_sketch_plane) {
+            m_selecting_sketch_plane = false;
+            m_sketch_plane_grid.reset();
+            m_sketch_plane_previous_cam_quat.reset();
+            m_restore_sketch_plane_cam_on_undo = false;
+            m_sketch_plane_created_group.reset();
+            m_win.get_sketch_plane_selector().set_visible(false);
+            get_canvas().set_selection_mode(SelectionMode::NORMAL);
+            m_workspace_browser->show_toast("");
+            canvas_update();
+            update_action_sensitivity();
+            return;
+        }
+
         m_core.undo();
+
+        // A sketch's geometry is undone before the sketch group itself. Only
+        // when the sketch group disappears should we return to plane choice
+        // and restore the camera from before New Sketch.
+        const bool sketch_was_removed = m_sketch_plane_created_group.has_value() && m_core.has_documents()
+                                        && !m_core.get_current_document().get_groups().contains(
+                                                *m_sketch_plane_created_group);
+        if (sketch_was_removed && m_restore_sketch_plane_cam_on_undo
+            && m_sketch_plane_previous_cam_quat) {
+            m_sketch_editing = false;
+            m_selecting_sketch_plane = true;
+            m_sketch_plane_grid.reset();
+            m_win.get_sketch_plane_selector().set_visible(false);
+            get_canvas().set_selection({}, false);
+            get_canvas().set_selection_mode(SelectionMode::HOVER_ONLY);
+            m_workspace_browser->show_toast("Select a reference plane for the sketch");
+            get_canvas().animate_to_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
+            m_restore_sketch_plane_cam_on_undo = false;
+            m_sketch_plane_created_group.reset();
+        }
         m_win.hide_delete_items_popup();
-        CanvasUpdater canvas_updater{*this};
-        update_workplane_label();
-        update_selection_editor();
-        update_action_sensitivity();
+        if (m_core.has_documents()) {
+            const auto type = m_core.get_current_document().get_group(m_core.get_current_group()).get_type();
+            if (type != Group::Type::SKETCH)
+                m_sketch_editing = false;
+            if (type != Group::Type::EXTRUDE)
+                m_extrude_editing = false;
+            update_sketch_mode_ui();
+        }
+        {
+            CanvasUpdater canvas_updater{*this};
+            update_workplane_label();
+            update_selection_editor();
+            update_action_sensitivity();
+        }
+        canvas_update();
     });
     connect_action(ActionID::REDO, [this](const auto &a) {
         m_core.redo();
@@ -462,7 +512,9 @@ void Editor::update_action_sensitivity()
 
 void Editor::update_action_sensitivity(const std::set<SelectableRef> &sel)
 {
-    m_action_sensitivity[ActionID::UNDO] = m_core.can_undo();
+    // While the sketch-plane selector is active, Undo also acts as Escape so
+    // it must remain available even when the document has no history yet.
+    m_action_sensitivity[ActionID::UNDO] = m_core.can_undo() || m_selecting_sketch_plane;
     m_action_sensitivity[ActionID::REDO] = m_core.can_redo();
     m_action_sensitivity[ActionID::SAVE_ALL] = m_core.get_needs_save_any();
     m_action_sensitivity[ActionID::SAVE] = m_core.has_documents();
@@ -708,6 +760,11 @@ std::optional<ActionToolID> Editor::get_doubleclick_action(const SelectableRef &
 bool Editor::handle_action_key(Glib::RefPtr<Gtk::EventControllerKey> controller, unsigned int keyval,
                                Gdk::ModifierType state)
 {
+    if ((keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab)
+        && m_core.get_tool_id() == ToolID::DRAW_RECTANGLE) {
+        m_win.commit_and_focus_next_rectangle_dimension();
+        return true;
+    }
     auto ev = controller->get_current_event();
     if (ev->is_modifier())
         return false;
@@ -715,6 +772,16 @@ bool Editor::handle_action_key(Glib::RefPtr<Gtk::EventControllerKey> controller,
     remap_keys(keyval, state);
     state &= (Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::ALT_MASK);
     if (keyval == GDK_KEY_Escape) {
+        if (m_selecting_sketch_plane) {
+            m_sketch_plane_grid.reset();
+            m_selecting_sketch_plane = false;
+            m_win.get_sketch_plane_selector().set_visible(false);
+            get_canvas().set_selection({}, false);
+            get_canvas().set_selection_mode(SelectionMode::NORMAL);
+            canvas_update();
+            m_workspace_browser->show_toast("");
+            return true;
+        }
         if (!m_core.tool_is_active()) {
             get_canvas().set_selection_mode(SelectionMode::HOVER);
             {

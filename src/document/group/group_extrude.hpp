@@ -1,6 +1,7 @@
 #pragma once
 #include "group_sweep.hpp"
 #include <glm/glm.hpp>
+#include <optional>
 
 namespace dune3d {
 
@@ -21,6 +22,7 @@ public:
     Direction m_direction = Direction::NORMAL;
 
     glm::dvec3 m_dvec = {0, 0, 1};
+    std::optional<unsigned int> m_source_path;
     void update_solid_model(const Document &doc) override;
 
     enum class Side { TOP, BOTTOM };

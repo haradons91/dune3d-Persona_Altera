@@ -65,11 +65,6 @@ Document::Document() : m_version(app_version)
     grp.m_name = "Reference";
     grp.m_body.emplace();
 
-    auto &sketch = add_group<GroupSketch>(UUID::random());
-    sketch.set_index({}, 1);
-    sketch.m_name = "Sketch 1";
-    sketch.m_active_wrkpl = grp.get_workplane_xy_uuid();
-
     set_group_generate_pending(grp.m_uuid);
     update_pending();
     update_groups_sorted();

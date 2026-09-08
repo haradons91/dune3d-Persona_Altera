@@ -1,5 +1,6 @@
 #include "editor.hpp"
 #include "dune3d_appwindow.hpp"
+#include "widgets/sketch_plane_selector.hpp"
 #include "core/tool_id.hpp"
 #include "widgets/constraints_box.hpp"
 #include "action/action_id.hpp"
@@ -14,6 +15,8 @@
 #include "group_editor/group_editor.hpp"
 #include "render/renderer.hpp"
 #include "document/entity/entity_workplane.hpp"
+#include "document/group/group_reference.hpp"
+#include "document/group/group_extrude.hpp"
 #include "logger/logger.hpp"
 #include "document/constraint/constraint.hpp"
 #include "util/fs_util.hpp"
@@ -24,6 +27,7 @@
 #include "document/constraint/iconstraint_workplane.hpp"
 #include "widgets/clipping_plane_window.hpp"
 #include "widgets/selection_filter_window.hpp"
+#include "dialogs/rectangle_dimensions_window.hpp"
 #include "system/system.hpp"
 #include "logger/log_util.hpp"
 #include "nlohmann/json.hpp"
@@ -56,6 +60,33 @@ Editor::~Editor() = default;
 
 void Editor::init()
 {
+    m_win.init_rectangle_dimensions(*this);
+    m_win.get_sketch_plane_selector().signal_plane_selected().connect([this](SketchPlaneSelector::Plane plane) {
+        const auto &reference = m_core.get_current_document().get_reference_group();
+        UUID plane_uuid;
+        switch (plane) {
+        case SketchPlaneSelector::Plane::XY:
+            // The reference workplanes retain their historical internal
+            // names, but the workplane named XY is the actual top plane.
+            plane_uuid = reference.get_workplane_zx_uuid();
+            break;
+        case SketchPlaneSelector::Plane::YZ:
+            plane_uuid = reference.get_workplane_yz_uuid();
+            break;
+        case SketchPlaneSelector::Plane::ZX:
+            plane_uuid = reference.get_workplane_zx_uuid();
+            break;
+        }
+        finish_sketch_plane_selection(plane_uuid);
+    });
+    get_canvas().signal_hover_selection_changed().connect([this] {
+        if (m_selecting_sketch_plane) {
+            Glib::signal_idle().connect_once([this] {
+                if (m_selecting_sketch_plane)
+                    canvas_update();
+            });
+        }
+    });
     init_workspace_browser();
     init_properties_notebook();
     init_header_bar();
@@ -336,6 +367,31 @@ void Editor::update_action_bar_visibility()
     m_win.set_action_bar_visible(visible);
 }
 
+void Editor::update_sketch_mode_ui()
+{
+    const bool sketch_active = m_sketch_editing && m_core.has_documents()
+                               && m_core.get_current_document().get_group(m_core.get_current_group()).get_type()
+                                          == Group::Type::SKETCH;
+    const bool extrusion_active = m_extrude_editing && m_core.has_documents()
+                                  && m_core.get_current_document().get_group(m_core.get_current_group()).get_type()
+                                             == Group::Type::EXTRUDE;
+    m_win.get_ribbon_create_group().set_visible(!sketch_active && !extrusion_active);
+    m_win.get_ribbon_modify_group().set_visible(!sketch_active);
+    m_win.get_ribbon_sketch_group().set_visible(sketch_active);
+    m_win.get_ribbon_sketch_modify_group().set_visible(sketch_active);
+    m_win.get_ribbon_body_inspect_group().set_visible(!sketch_active);
+    m_win.get_ribbon_sketch_inspect_group().set_visible(sketch_active);
+    m_win.get_finish_sketch_group().set_visible(sketch_active || extrusion_active);
+    m_win.get_finish_sketch_button().set_visible(sketch_active || extrusion_active);
+    m_win.get_finish_sketch_label().set_text(sketch_active ? "SKETCH" : "EXTRUDE");
+    if (sketch_active)
+        m_win.get_fusion_ribbon_bar().reorder_child_after(m_win.get_ribbon_sketch_group(),
+                                                          m_win.get_ribbon_workspace_separator());
+    else
+        m_win.get_fusion_ribbon_bar().reorder_child_after(m_win.get_ribbon_sketch_group(),
+                                                          m_win.get_ribbon_modify_group());
+}
+
 static std::string action_tool_id_to_string(ActionToolID id)
 {
     if (auto tool = std::get_if<ToolID>(&id))
@@ -387,6 +443,12 @@ void Editor::init_canvas()
 
         controller->signal_released().connect([this, controller](int n_press, double x, double y) {
             m_drag_tool = ToolID::NONE;
+            if (m_extrude_dragging && m_extrude_drag_changed)
+                m_core.rebuild("extrusion handle moved");
+            if (m_extrude_dragging)
+                get_canvas().set_selection_mode(SelectionMode::NORMAL);
+            m_extrude_dragging = false;
+            m_extrude_drag_changed = false;
             const auto button = controller->get_current_button();
             if (button == 1 && n_press == 1) {
                 if (m_core.tool_is_active()) {
@@ -849,6 +911,37 @@ void Editor::init_header_bar()
     attach_action_button(m_win.get_save_button(), ActionID::SAVE);
     attach_action_button(m_win.get_save_as_button(), ActionID::SAVE_AS);
 
+    // Attach Top Ribbon Bar Buttons
+    attach_action_button(m_win.get_ribbon_btn_sketch(), ActionID::CREATE_GROUP_SKETCH);
+    attach_action_button(m_win.get_ribbon_btn_extrude(), ActionID::CREATE_GROUP_EXTRUDE);
+    attach_action_button(m_win.get_ribbon_btn_revolve(), ActionID::CREATE_GROUP_REVOLVE);
+    attach_action_button(m_win.get_ribbon_btn_sweep(), ActionID::CREATE_GROUP_PIPE);
+    attach_action_button(m_win.get_ribbon_btn_loft(), ActionID::CREATE_GROUP_LOFT);
+
+    attach_action_button(m_win.get_ribbon_btn_fillet(), ActionID::CREATE_GROUP_FILLET);
+    attach_action_button(m_win.get_ribbon_btn_chamfer(), ActionID::CREATE_GROUP_CHAMFER);
+    attach_action_button(m_win.get_ribbon_btn_combine(), ActionID::CREATE_GROUP_SOLID_MODEL_OPERATION);
+    attach_action_button(m_win.get_ribbon_btn_pattern(), ActionID::CREATE_GROUP_LINEAR_ARRAY);
+
+    attach_action_button(m_win.get_ribbon_btn_line(), ToolID::DRAW_CONTOUR);
+    attach_action_button(m_win.get_ribbon_btn_rect(), ToolID::DRAW_RECTANGLE);
+    attach_action_button(m_win.get_ribbon_btn_circle(), ToolID::DRAW_CIRCLE_2D);
+    attach_action_button(m_win.get_ribbon_btn_polygon(), ToolID::DRAW_REGULAR_POLYGON);
+    attach_action_button(m_win.get_ribbon_btn_text(), ToolID::DRAW_TEXT);
+
+    attach_action_button(m_win.get_ribbon_btn_dimension(), ToolID::CONSTRAIN_DISTANCE);
+    attach_action_button(m_win.get_ribbon_sketch_btn_fillet(), ActionID::CREATE_GROUP_FILLET);
+    attach_action_button(m_win.get_ribbon_sketch_btn_chamfer(), ActionID::CREATE_GROUP_CHAMFER);
+    attach_action_button(m_win.get_ribbon_body_btn_measure(), ToolID::MEASURE_DISTANCE);
+    attach_action_button(m_win.get_ribbon_sketch_btn_measure(), ToolID::MEASURE_DISTANCE);
+    m_win.get_finish_sketch_button().signal_clicked().connect([this] {
+        if (m_extrude_editing)
+            finish_extrusion();
+        else
+            finish_sketch();
+    });
+    update_sketch_mode_ui();
+
     {
         auto undo_redo_box = Gtk::manage(new Gtk::Box(Gtk::Orientation::HORIZONTAL, 0));
         undo_redo_box->add_css_class("linked");
@@ -1283,6 +1376,15 @@ void Editor::render_document(const IDocumentInfo &doc)
     renderer.m_solid_model_edge_select_mode = m_solid_model_edge_select_mode;
     renderer.m_connect_curvature_comb = m_preferences.canvas.connect_curvature_combs;
     renderer.m_first_group = m_update_groups_after;
+    renderer.m_render_sketch_plane_selector = m_selecting_sketch_plane
+                                               && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
+    renderer.m_render_extrusion_editor = m_extrude_editing
+                                         && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
+    renderer.m_sketch_plane_grid = m_sketch_plane_grid;
+    if (renderer.m_render_sketch_plane_selector) {
+        if (auto hover = get_canvas().get_hover_selection(); hover && hover->type == SelectableRef::Type::ENTITY)
+            renderer.m_sketch_plane_hovered = hover->item;
+    }
 
     if (doc.get_uuid() == m_core.get_current_idocument_info().get_uuid())
         renderer.add_constraint_icons(m_constraint_tip_pos, m_constraint_tip_vec, m_constraint_tip_icons);
@@ -1297,6 +1399,9 @@ void Editor::render_document(const IDocumentInfo &doc)
 }
 void Editor::canvas_update()
 {
+    if (m_rectangle_dimensions_origin)
+        m_win.position_rectangle_dimensions(get_canvas().project_to_window(*m_rectangle_dimensions_origin),
+                                            m_rectangle_dimensions_negative_x, m_rectangle_dimensions_negative_y);
     auto docs = m_core.get_documents();
     auto hover_sel = get_canvas().get_hover_selection();
     if (m_update_groups_after == UUID()) {
@@ -1359,6 +1464,39 @@ glm::dvec3 Editor::get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal
     return get_canvas().get_cursor_pos_for_plane(origin, normal);
 }
 
+void Editor::show_rectangle_dimensions(double width, double height)
+{
+    m_win.show_rectangle_dimensions(width, height);
+}
+void Editor::update_rectangle_dimensions(double width, double height)
+{
+    m_win.update_rectangle_dimensions(width, height);
+}
+void Editor::hide_rectangle_dimensions()
+{
+    m_win.hide_rectangle_dimensions();
+    m_rectangle_dimensions_origin.reset();
+}
+
+void Editor::position_rectangle_dimensions(glm::dvec3 origin, bool negative_x, bool negative_y)
+{
+    m_rectangle_dimensions_origin = origin;
+    m_rectangle_dimensions_negative_x = negative_x;
+    m_rectangle_dimensions_negative_y = negative_y;
+    m_win.position_rectangle_dimensions(get_canvas().project_to_window(origin), negative_x, negative_y);
+}
+
+void Editor::accept_rectangle_dimensions()
+{
+    if (m_core.get_tool_id() != ToolID::DRAW_RECTANGLE)
+        return;
+    ToolArgs args;
+    args.type = ToolEventType::ACTION;
+    args.action = InToolActionID::LMB;
+    ToolResponse response = m_core.tool_update(args);
+    tool_process(response);
+}
+
 void Editor::set_canvas_selection_mode(SelectionMode mode)
 {
     m_last_selection_mode = mode;
@@ -1366,6 +1504,20 @@ void Editor::set_canvas_selection_mode(SelectionMode mode)
 
 void Editor::handle_cursor_move()
 {
+    if (m_extrude_dragging) {
+        auto &doc = m_core.get_current_document();
+        auto &group = doc.get_group<GroupExtrude>(m_extrude_drag_group);
+        const auto &workplane = doc.get_entity<EntityWorkplane>(group.m_wrkpl);
+        const auto cursor_on_screen_plane = get_canvas().get_cursor_pos_for_plane(
+                workplane.m_origin, get_canvas().get_cam_normal());
+        const auto distance = glm::dot(cursor_on_screen_plane - workplane.m_origin, m_extrude_drag_direction);
+        group.m_dvec = m_extrude_drag_direction * (m_extrude_initial_length + distance - m_extrude_drag_start);
+        doc.set_group_generate_pending(group.m_uuid);
+        doc.update_pending();
+        m_extrude_drag_changed = true;
+        canvas_update_keep_selection();
+        return;
+    }
     if (m_core.tool_is_active()) {
         ToolArgs args;
         args.type = ToolEventType::MOVE;
@@ -1411,6 +1563,49 @@ void Editor::handle_view_changed()
 void Editor::handle_click(unsigned int button, unsigned int n)
 {
     const bool is_doubleclick = n == 2;
+
+    if (m_selecting_sketch_plane && button == 1) {
+        if (auto hover_sel = get_canvas().get_hover_selection()) {
+            if (hover_sel->type == SelectableRef::Type::ENTITY)
+                finish_sketch_plane_selection(hover_sel->item);
+            else if (hover_sel->type == SelectableRef::Type::SOLID_MODEL_FACE)
+                finish_sketch_face_selection(hover_sel->item, hover_sel->point);
+        }
+        return;
+    }
+
+    if (m_extrude_editing && button == 1) {
+        if (auto hover_sel = get_canvas().get_hover_selection(); hover_sel
+            && hover_sel->type == SelectableRef::Type::EXTRUSION_HANDLE) {
+            auto &doc = m_core.get_current_document();
+            auto &group = doc.get_group<GroupExtrude>(hover_sel->item);
+            const auto &workplane = doc.get_entity<EntityWorkplane>(group.m_wrkpl);
+            m_extrude_drag_group = group.m_uuid;
+            m_extrude_drag_direction = glm::normalize(group.m_dvec);
+            m_extrude_initial_length = glm::length(group.m_dvec);
+            const auto cursor_on_screen_plane = get_canvas().get_cursor_pos_for_plane(
+                    workplane.m_origin, get_canvas().get_cam_normal());
+            m_extrude_drag_start = glm::dot(cursor_on_screen_plane - workplane.m_origin,
+                                            m_extrude_drag_direction);
+            m_extrude_dragging = true;
+            m_extrude_drag_changed = false;
+            get_canvas().inhibit_drag_selection();
+        }
+        return;
+    }
+
+    // A viewed sketch is read-only. Keep its geometry available for the
+    // double-click action that enters edit mode, but do not start a move drag
+    // from its points or edges while it is not being edited.
+    if (button == 1 && n == 1 && !m_sketch_editing && m_core.has_documents()) {
+        if (auto hover_sel = get_canvas().get_hover_selection(); hover_sel
+            && hover_sel->type == SelectableRef::Type::ENTITY) {
+            auto &doc = m_core.get_current_document();
+            const auto *entity = doc.get_entity_ptr(hover_sel->item);
+            if (entity && doc.get_group(entity->m_group).get_type() == Group::Type::SKETCH)
+                return;
+        }
+    }
 
     if (m_core.tool_is_active()) {
         // nop
@@ -1659,6 +1854,7 @@ void Editor::set_current_group(const UUID &uu_group)
     update_group_editor();
     update_action_sensitivity();
     update_action_bar_buttons_sensitivity();
+    update_sketch_mode_ui();
     update_selection_editor();
 }
 

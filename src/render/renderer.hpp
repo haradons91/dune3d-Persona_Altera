@@ -33,6 +33,10 @@ public:
 
     bool m_solid_model_edge_select_mode = false;
     bool m_connect_curvature_comb = true;
+    bool m_render_sketch_plane_selector = false;
+    bool m_render_extrusion_editor = false;
+    std::optional<UUID> m_sketch_plane_hovered;
+    std::optional<UUID> m_sketch_plane_grid;
     UUID m_first_group;
 
     void add_constraint_icons(glm::vec3 p, glm::vec3 v, const std::vector<ConstraintType> &constraints);

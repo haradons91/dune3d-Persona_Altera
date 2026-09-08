@@ -31,18 +31,28 @@ public:
         THIN = (1 << 0),
     };
 
+    enum class Axis { NONE, X, Y, Z, PLANE, PLANE_HIGHLIGHT };
+
     virtual void set_chunk(unsigned int chunk) = 0;
 
     virtual void clear() = 0;
     virtual VertexRef draw_point(glm::vec3 p) = 0;
     virtual VertexRef draw_line(glm::vec3 from, glm::vec3 to) = 0;
+    virtual VertexRef draw_axis_line(glm::vec3 from, glm::vec3 to, Axis axis) = 0;
     virtual VertexRef draw_screen_line(glm::vec3 origin, glm::vec3 direction) = 0;
     virtual std::vector<VertexRef> draw_bitmap_text(glm::vec3 p, float size, const std::string &rtext) = 0;
     virtual std::vector<VertexRef> draw_bitmap_text_3d(glm::vec3 p, const glm::quat &norm, float size,
                                                        const std::string &rtext) = 0;
 
     // virtual void add_faces(const face::Faces &faces) = 0;
-    enum class FaceColor { AS_IS, SOLID_MODEL, OTHER_BODY_SOLID_MODEL };
+    enum class FaceColor {
+        AS_IS,
+        SOLID_MODEL,
+        OTHER_BODY_SOLID_MODEL,
+        SKETCH_PLANE,
+        SKETCH_PLANE_HIGHLIGHT,
+        SKETCH_PROFILE
+    };
     virtual VertexRef add_face_group(const face::Faces &faces, glm::vec3 origin, glm::quat normal,
                                      FaceColor face_color) = 0;
     virtual VertexRef draw_icon(IconTexture::IconTextureID id, glm::vec3 origin, glm::vec2 shift,
@@ -69,5 +79,6 @@ public:
     virtual void unset_override_selectable() = 0;
 
     virtual void update_bbox() = 0;
+    virtual glm::vec3 get_cam_normal() const = 0;
 };
 } // namespace dune3d

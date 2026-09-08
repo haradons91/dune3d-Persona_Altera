@@ -46,6 +46,11 @@ public:
     glm::vec3 get_cam_normal() const override;
     glm::quat get_cam_quat() const override;
     glm::dvec3 get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal) const override;
+    void show_rectangle_dimensions(double width, double height) override;
+    void update_rectangle_dimensions(double width, double height) override;
+    void hide_rectangle_dimensions() override;
+    void position_rectangle_dimensions(glm::dvec3 origin, bool negative_x, bool negative_y) override;
+    void accept_rectangle_dimensions() override;
     void tool_update_data(std::unique_ptr<ToolData> data) override;
     void enable_hover_selection(bool enable) override;
     std::optional<SelectableRef> get_hover_selection() const override;
@@ -159,6 +164,10 @@ private:
     double m_last_x = NAN;
     double m_last_y = NAN;
     void handle_click(unsigned int button, unsigned int n);
+    void finish_sketch_plane_selection(const UUID &plane);
+    void finish_sketch_face_selection(const UUID &solid_group, unsigned int face);
+    void finish_sketch();
+    void finish_extrusion();
 
     void apply_preferences();
 
@@ -170,7 +179,24 @@ private:
     std::map<ActionToolID, Gtk::Button *> m_action_bar_buttons;
     void update_action_bar_buttons_sensitivity();
     void update_action_bar_visibility();
+    void update_sketch_mode_ui();
     bool force_end_tool();
+
+    bool m_selecting_sketch_plane = false;
+    bool m_sketch_editing = false;
+    bool m_extrude_editing = false;
+    bool m_extrude_dragging = false;
+    bool m_extrude_drag_changed = false;
+    UUID m_extrude_drag_group;
+    glm::dvec3 m_extrude_drag_direction;
+    double m_extrude_drag_start = 0;
+    double m_extrude_initial_length = 0;
+    std::optional<glm::quat> m_sketch_plane_previous_cam_quat;
+    std::optional<UUID> m_sketch_plane_grid;
+    bool m_restore_sketch_plane_cam_on_undo = false;
+    std::optional<UUID> m_sketch_plane_created_group;
+    UUID m_sketch_plane_current_group;
+    WorkspaceBrowserAddGroupMode m_sketch_plane_add_group_mode;
 
     Glib::RefPtr<Gio::Menu> m_view_options_menu;
     Glib::RefPtr<Gio::SimpleAction> m_perspective_action;
@@ -218,6 +244,9 @@ private:
 
 
     bool m_no_canvas_update = false;
+    std::optional<glm::dvec3> m_rectangle_dimensions_origin;
+    bool m_rectangle_dimensions_negative_x = false;
+    bool m_rectangle_dimensions_negative_y = false;
     bool m_solid_model_edge_select_mode = false;
 
     ToolPopover *m_tool_popover = nullptr;

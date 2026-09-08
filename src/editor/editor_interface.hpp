@@ -23,6 +23,11 @@ public:
     virtual glm::vec3 get_cam_normal() const = 0;
     virtual glm::quat get_cam_quat() const = 0;
     virtual glm::dvec3 get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal) const = 0;
+    virtual void show_rectangle_dimensions(double width, double height) = 0;
+    virtual void update_rectangle_dimensions(double width, double height) = 0;
+    virtual void hide_rectangle_dimensions() = 0;
+    virtual void position_rectangle_dimensions(glm::dvec3 origin, bool negative_x, bool negative_y) = 0;
+    virtual void accept_rectangle_dimensions() = 0;
 
     virtual void tool_bar_set_actions(const std::vector<ActionLabelInfo> &labels) = 0;
     virtual void tool_bar_set_tool_tip(const std::string &s) = 0;

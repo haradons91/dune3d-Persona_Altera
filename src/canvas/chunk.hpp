@@ -63,6 +63,10 @@ public:
         LineVertex(glm::vec3 a1, glm::vec3 a2) : x1(a1.x), y1(a1.y), z1(a1.z), x2(a2.x), y2(a2.y), z2(a2.z)
         {
         }
+        LineVertex(glm::vec3 a1, glm::vec3 a2, ICanvas::Axis axis)
+            : x1(a1.x), y1(a1.y), z1(a1.z), x2(a2.x), y2(a2.y), z2(a2.z), axis_color(static_cast<uint8_t>(axis))
+        {
+        }
         float x1;
         float y1;
         float z1;
@@ -71,6 +75,7 @@ public:
         float z2;
 
         VertexFlags flags = VertexFlags::DEFAULT;
+        uint8_t axis_color = 0;
     };
 
     std::vector<LineVertex> m_lines;

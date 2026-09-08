@@ -10,8 +10,8 @@ GroupReference::GroupReference(const UUID &uu) : Group(uu)
 }
 
 GroupReference::GroupReference(const UUID &uu, const json &j)
-    : Group(uu, j), m_show_xy(j.value("show_xy", true)), m_show_yz(j.value("show_yz", true)),
-      m_show_zx(j.value("show_zx", true)),
+    : Group(uu, j), m_show_xy(j.value("show_xy", false)), m_show_yz(j.value("show_yz", false)),
+      m_show_zx(j.value("show_zx", false)), m_show_origin(j.value("show_origin", true)),
       m_xy_size(j.value("xy_size", glm::dvec2(EntityWorkplane::s_default_size, EntityWorkplane::s_default_size))),
       m_yz_size(j.value("yz_size", glm::dvec2(EntityWorkplane::s_default_size, EntityWorkplane::s_default_size))),
       m_zx_size(j.value("zx_size", glm::dvec2(EntityWorkplane::s_default_size, EntityWorkplane::s_default_size)))
@@ -24,6 +24,7 @@ json GroupReference::serialize(const Document &doc) const
     j["show_xy"] = m_show_xy;
     j["show_yz"] = m_show_yz;
     j["show_zx"] = m_show_zx;
+    j["show_origin"] = m_show_origin;
 
     j["xy_size"] = doc.get_entity<EntityWorkplane>(get_workplane_xy_uuid()).m_size;
     j["yz_size"] = doc.get_entity<EntityWorkplane>(get_workplane_yz_uuid()).m_size;
@@ -57,18 +58,18 @@ void GroupReference::generate(Document &doc)
     const auto ay = glm::dvec3(0, 1, 0);
     const auto az = glm::dvec3(0, 0, 1);
     {
-        auto &w = add_workplane(doc, get_workplane_xy_uuid(), quat_from_uv(ax, ay), m_xy_size);
-        w.m_name = "XY";
+        auto &w = add_workplane(doc, get_workplane_xy_uuid(), quat_from_uv(ay, az), m_xy_size);
+        w.m_name = "XZ";
         w.m_visible = m_show_xy;
     }
     {
-        auto &w = add_workplane(doc, get_workplane_yz_uuid(), quat_from_uv(ay, az), m_yz_size);
+        auto &w = add_workplane(doc, get_workplane_yz_uuid(), quat_from_uv(az, ax), m_yz_size);
         w.m_name = "YZ";
         w.m_visible = m_show_yz;
     }
     {
-        auto &w = add_workplane(doc, get_workplane_zx_uuid(), quat_from_uv(az, ax), m_zx_size);
-        w.m_name = "ZX";
+        auto &w = add_workplane(doc, get_workplane_zx_uuid(), quat_from_uv(ax, ay), m_zx_size);
+        w.m_name = "XY";
         w.m_visible = m_show_zx;
     }
 }

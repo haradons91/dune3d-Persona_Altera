@@ -3,6 +3,7 @@
 #include "document/document.hpp"
 #include "document/entity/all_entities.hpp"
 #include "document/group/group_extrude.hpp"
+#include "document/group/group_reference.hpp"
 #include "document/constraint/all_constraints.hpp"
 #include "document/solid_model/solid_model.hpp"
 #include "canvas/selectable_ref.hpp"
@@ -16,6 +17,7 @@
 #include "core/idocument_info.hpp"
 #include "util/fs_util.hpp"
 #include "util/arc_util.hpp"
+#include "util/paths.hpp"
 #include "util/template_util.hpp"
 #include "logger/logger.hpp"
 #include <array>
@@ -50,11 +52,7 @@ Renderer::Renderer(ICanvas &ca, IDocumentProvider &docprv) : m_ca(ca), m_doc_prv
 
 bool Renderer::group_is_visible(const UUID &uu) const
 {
-    if (m_current_group->m_uuid == uu)
-        return true;
     auto &group = m_doc->get_group(uu);
-    if (group.get_index() > m_current_group->get_index())
-        return false;
     if (!m_doc_view->group_is_visible(uu))
         return false;
     auto body = group.find_body(*m_doc);
@@ -110,6 +108,79 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
         if (!group_is_visible(group->m_uuid))
             continue;
         set_chunk_from_group(*group);
+        if (m_is_current_document && m_render_extrusion_editor && group->get_type() == Group::Type::EXTRUDE
+            && group->m_uuid == current_group) {
+            const auto &extrude = dynamic_cast<const GroupExtrude &>(*group);
+            const auto &workplane = doc.get_entity<EntityWorkplane>(extrude.m_wrkpl);
+            glm::dvec2 profile_min{std::numeric_limits<double>::max()};
+            glm::dvec2 profile_max{std::numeric_limits<double>::lowest()};
+            bool have_profile_point = false;
+            const auto sketch_paths = paths::Paths::from_document(doc, extrude.m_wrkpl, extrude.m_source_group);
+            for (size_t profile_idx = 0; profile_idx < sketch_paths.paths.size(); profile_idx++) {
+                if (extrude.m_source_path && profile_idx != *extrude.m_source_path)
+                    continue;
+                const auto &path = sketch_paths.paths.at(profile_idx);
+                if (path.size() == 1) {
+                    if (const auto *circle = dynamic_cast<const EntityCircle2D *>(&path.front().second.entity)) {
+                        profile_min = glm::min(profile_min, circle->m_center - glm::dvec2{circle->m_radius});
+                        profile_max = glm::max(profile_max, circle->m_center + glm::dvec2{circle->m_radius});
+                        have_profile_point = true;
+                    }
+                }
+                else {
+                    for (const auto &[node, edge] : path) {
+                        profile_min = glm::min(profile_min, node.p);
+                        profile_max = glm::max(profile_max, node.p);
+                        have_profile_point = true;
+                    }
+                }
+            }
+            const auto profile_center = have_profile_point ? (profile_min + profile_max) / 2. : glm::dvec2{0, 0};
+            const auto base = workplane.transform(profile_center) + glm::dvec3{m_ca.get_cam_normal()} * 0.25;
+            const auto tip = base + extrude.m_dvec;
+            const auto handle = SelectableRef{SelectableRef::Type::EXTRUSION_HANDLE, group->m_uuid, 0};
+            m_ca.add_selectable(m_ca.draw_line(base, tip), handle);
+            m_ca.add_selectable(m_ca.draw_point(tip, IconID::POINT_DIAMOND), handle);
+        }
+        if (m_is_current_document && group->get_type() == Group::Type::SKETCH && group->m_active_wrkpl) {
+            const auto &workplane = doc.get_entity<EntityWorkplane>(group->m_active_wrkpl);
+            const auto sketch_paths = paths::Paths::from_document(doc, workplane.m_uuid, group->m_uuid);
+            unsigned int profile_idx = 0;
+            for (const auto &path : sketch_paths.paths) {
+                face::Face profile;
+                profile.color = face::Color{0.2, 0.65, 1.0};
+                if (path.size() == 1) {
+                    if (const auto *circle = dynamic_cast<const EntityCircle2D *>(&path.front().second.entity)) {
+                        constexpr unsigned int n_segments = 48;
+                        for (unsigned int i = 0; i < n_segments; i++) {
+                            const auto a = 2 * M_PI * i / n_segments;
+                            const auto p = workplane.transform(circle->m_center
+                                                               + glm::dvec2{std::cos(a), std::sin(a)} * circle->m_radius);
+                            profile.vertices.emplace_back(p.x, p.y, p.z);
+                        }
+                    }
+                }
+                else {
+                    for (const auto &[node, edge] : path) {
+                        const auto p = workplane.transform(node.p);
+                        profile.vertices.emplace_back(p.x, p.y, p.z);
+                    }
+                }
+                if (profile.vertices.size() >= 3) {
+                    const auto normal = workplane.get_normal_vector();
+                    for (size_t i = 0; i < profile.vertices.size(); i++)
+                        profile.normals.emplace_back(normal.x, normal.y, normal.z);
+                    for (size_t i = 1; i + 1 < profile.vertices.size(); i++)
+                        profile.triangle_indices.emplace_back(0, i, i + 1);
+                    const auto vref = m_ca.add_face_group({profile}, {0, 0, 0},
+                                                          glm::quat_identity<float, glm::defaultp>(),
+                                                          ICanvas::FaceColor::SKETCH_PROFILE);
+                    m_ca.add_selectable(vref, SelectableRef{SelectableRef::Type::SKETCH_PROFILE,
+                                                            group->m_uuid, profile_idx});
+                }
+                profile_idx++;
+            }
+        }
         for (const auto &[uu, el] : doc.m_entities) {
             if (el->m_group == group->m_uuid)
                 render(*el);
@@ -143,10 +214,21 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             if (body_groups.body.m_color.has_value())
                 color = ICanvas::FaceColor::AS_IS;
             set_chunk_from_group(*last_solid_model_group);
-            const auto vref = m_ca.add_face_group(last_solid_model->m_faces, {0, 0, 0},
-                                                  glm::quat_identity<float, glm::defaultp>(), color);
-            if (sr)
-                m_ca.add_selectable(vref, *sr);
+            if (m_is_current_document) {
+                unsigned int face_idx = 0;
+                for (const auto &face : last_solid_model->m_faces) {
+                    const auto vref = m_ca.add_face_group({face}, {0, 0, 0},
+                                                          glm::quat_identity<float, glm::defaultp>(), color);
+                    m_ca.add_selectable(vref, SelectableRef{SelectableRef::Type::SOLID_MODEL_FACE,
+                                                            last_solid_model_group->m_uuid, face_idx++});
+                }
+            }
+            else {
+                const auto vref = m_ca.add_face_group(last_solid_model->m_faces, {0, 0, 0},
+                                                      glm::quat_identity<float, glm::defaultp>(), color);
+                if (sr)
+                    m_ca.add_selectable(vref, *sr);
+            }
         }
     }
 
@@ -179,8 +261,18 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
 
 void Renderer::render(const Entity &entity)
 {
-    if (!entity.m_visible)
-        return;
+    if (!entity.m_visible) {
+        if (entity.get_type() != Entity::Type::WORKPLANE)
+            return;
+        const auto &workplane = dynamic_cast<const EntityWorkplane &>(entity);
+        const auto &reference = m_doc->get_reference_group();
+        const bool selector_plane = m_render_sketch_plane_selector && workplane.m_group == reference.m_uuid;
+        const bool active_grid_plane = m_sketch_plane_grid && *m_sketch_plane_grid == workplane.m_uuid;
+        const bool default_grid_plane = workplane.m_uuid == reference.get_workplane_zx_uuid();
+        if ((!reference.m_show_origin || workplane.m_uuid != reference.get_workplane_xy_uuid()) && !selector_plane
+            && !active_grid_plane && !default_grid_plane)
+            return;
+    }
     if (m_workspace_view->show_only_solid_models() && entity.get_type() != Entity::Type::DOCUMENT
         && entity.get_type() != Entity::Type::STEP)
         return;
@@ -191,7 +283,10 @@ void Renderer::render(const Entity &entity)
         return;
 
     AutoSaveRestore asr{*this};
-    m_ca.set_vertex_inactive(entity.m_group != m_current_group->m_uuid);
+    const bool visible_sketch_group = entity.m_group != m_current_group->m_uuid
+                                      && m_doc->get_group(entity.m_group).get_type() == Group::Type::SKETCH
+                                      && group_is_visible(entity.m_group);
+    m_ca.set_vertex_inactive(entity.m_group != m_current_group->m_uuid && !visible_sketch_group);
     m_ca.set_selection_invisible(entity.m_selection_invisible);
     m_ca.set_vertex_construction(entity.m_construction);
     try {
@@ -205,6 +300,13 @@ void Renderer::render(const Entity &entity)
 
 void Renderer::visit(const EntityLine3D &line)
 {
+    const bool extrusion_view_only = m_current_group && !m_render_extrusion_editor
+                                      && m_current_group->get_type() == Group::Type::EXTRUDE
+                                      && line.m_group == m_current_group->m_uuid;
+    if (extrusion_view_only) {
+        m_ca.draw_line(line.m_p1, line.m_p2);
+        return;
+    }
     m_ca.add_selectable(m_ca.draw_line(line.m_p1, line.m_p2),
                         SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 0});
     if (line.m_no_points)
@@ -407,13 +509,80 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
     if (!m_is_current_document)
         return;
 
-    if (m_workspace_view->hide_irrelevant_workplanes()) {
+    if (m_workspace_view->hide_irrelevant_workplanes() && !m_render_sketch_plane_selector && !m_sketch_plane_grid
+        && wrkpl.m_uuid != m_doc->get_reference_group().get_workplane_zx_uuid()) {
         if (wrkpl.m_group != m_current_group->m_uuid && wrkpl.m_uuid != m_current_group->m_active_wrkpl)
             return;
     }
 
-    m_ca.add_selectable(m_ca.draw_point(wrkpl.m_origin, IconID::POINT_DIAMOND),
-                        SelectableRef{SelectableRef::Type::ENTITY, wrkpl.m_uuid, 1});
+    const auto &reference = m_doc->get_reference_group();
+    const bool is_reference_plane = wrkpl.m_group == reference.m_uuid;
+    const auto is_reference_plane_uuid = [&reference](const UUID &uuid) {
+        return uuid == reference.get_workplane_xy_uuid() || uuid == reference.get_workplane_yz_uuid()
+               || uuid == reference.get_workplane_zx_uuid();
+    };
+    if (m_render_sketch_plane_selector && is_reference_plane) {
+        constexpr double gap = 1.5;
+        constexpr double size = 5.5;
+        const bool move_yz_tile = wrkpl.m_uuid == reference.get_workplane_yz_uuid();
+        const bool move_xy_tile = wrkpl.m_uuid == reference.get_workplane_zx_uuid();
+        const double tile_x0 = move_xy_tile ? -(gap + size) : gap;
+        const double tile_x1 = move_xy_tile ? -gap : gap + size;
+        const double tile_y0 = move_yz_tile ? -(gap + size) : gap;
+        const double tile_y1 = move_yz_tile ? -gap : gap + size;
+        const std::array<glm::vec2, 4> tile = {
+                glm::vec2(tile_x0, tile_y0),
+                glm::vec2(tile_x1, tile_y0),
+                glm::vec2(tile_x1, tile_y1),
+                glm::vec2(tile_x0, tile_y1),
+        };
+        // Each tile is drawn on its corresponding reference workplane, so it
+        // must select that same workplane.
+        const auto sr = SelectableRef{SelectableRef::Type::ENTITY, wrkpl.m_uuid, 0};
+        const bool hover_is_other_reference_plane = m_sketch_plane_hovered
+                                                    && is_reference_plane_uuid(*m_sketch_plane_hovered)
+                                                    && *m_sketch_plane_hovered != wrkpl.m_uuid;
+        const bool highlight_default_xy = wrkpl.m_uuid == reference.get_workplane_zx_uuid()
+                                          && !hover_is_other_reference_plane;
+        face::Face selector_face;
+        const auto normal = glm::normalize(wrkpl.get_normal_vector());
+        for (const auto &point : tile) {
+            const auto p = wrkpl.transform(point);
+            selector_face.vertices.emplace_back(p.x, p.y, p.z);
+            selector_face.normals.emplace_back(normal.x, normal.y, normal.z);
+        }
+        selector_face.triangle_indices = {{0, 1, 2}, {0, 2, 3}};
+        m_ca.add_selectable(m_ca.add_face_group(
+                                    {selector_face}, {0, 0, 0}, glm::quat(1, 0, 0, 0),
+                                    highlight_default_xy ? ICanvas::FaceColor::SKETCH_PLANE_HIGHLIGHT
+                                                         : ICanvas::FaceColor::SKETCH_PLANE),
+                            sr);
+        for (size_t i = 0; i < tile.size(); i++) {
+            const auto p1 = wrkpl.transform(tile.at(i));
+            const auto p2 = wrkpl.transform(tile.at((i + 1) % tile.size()));
+            m_ca.add_selectable(m_ca.draw_axis_line(
+                                        p1, p2,
+                                        highlight_default_xy ? ICanvas::Axis::PLANE_HIGHLIGHT
+                                                             : ICanvas::Axis::PLANE),
+                                sr);
+        }
+    }
+    const bool show_origin = !is_reference_plane || reference.m_show_origin;
+    if (show_origin) {
+        m_ca.add_selectable(m_ca.draw_point(wrkpl.m_origin, IconID::POINT_DIAMOND),
+                            SelectableRef{SelectableRef::Type::ENTITY, wrkpl.m_uuid, 1});
+        if (is_reference_plane && wrkpl.m_uuid == reference.get_workplane_xy_uuid()) {
+            constexpr float axis_length = 10.0f;
+            m_ca.draw_axis_line(wrkpl.m_origin, wrkpl.m_origin + glm::dvec3(-axis_length, 0, 0), ICanvas::Axis::X);
+            m_ca.draw_axis_line(wrkpl.m_origin, wrkpl.m_origin + glm::dvec3(0, axis_length, 0), ICanvas::Axis::Y);
+            m_ca.draw_axis_line(wrkpl.m_origin, wrkpl.m_origin + glm::dvec3(0, 0, axis_length), ICanvas::Axis::Z);
+        }
+    }
+    if (m_render_sketch_plane_selector && is_reference_plane)
+        return;
+    if (!wrkpl.m_visible) {
+        return;
+    }
     glm::vec2 sz = wrkpl.m_size / 2.;
     std::array<glm::vec2, 4> pts = {
             glm::vec2(-sz),
@@ -447,8 +616,15 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
         auto p2 = wrkpl.transform(-sz + glm::vec2(0, s));
         m_ca.add_selectable(m_ca.draw_line(p1, p2), sr);
 
-        add_selectables(sr, m_ca.draw_bitmap_text_3d(wrkpl.transform(-sz + glm::vec2(s, s * .25)), wrkpl.m_normal,
-                                                     s / 2, wrkpl.m_name));
+        auto label_pos = -sz + glm::vec2(s, s * .25);
+        auto label_normal = wrkpl.m_normal;
+        if (wrkpl.m_name == "YZ") {
+            label_pos = -sz + glm::vec2(s * .25, s);
+            label_normal = wrkpl.m_normal
+                           * glm::angleAxis(-static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
+        }
+        add_selectables(sr, m_ca.draw_bitmap_text_3d(wrkpl.transform(label_pos), label_normal, s / 2,
+                                                     wrkpl.m_name));
     }
 }
 

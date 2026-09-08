@@ -6,6 +6,9 @@ namespace dune3d {
 
 class Dune3DApplication;
 class Canvas;
+class SketchPlaneSelector;
+class RectangleDimensionsWindow;
+class EditorInterface;
 
 class WorkspaceViewPage : public Gtk::Widget {
 public:
@@ -122,6 +125,51 @@ public:
         return *m_workspace_add_button;
     }
 
+    Gtk::Button &get_ribbon_btn_sketch() { return *m_ribbon_btn_sketch; }
+    Gtk::Box &get_ribbon_create_group() { return *m_ribbon_create_group; }
+    Gtk::Box &get_ribbon_modify_group() { return *m_ribbon_modify_group; }
+    Gtk::Box &get_ribbon_sketch_group() { return *m_ribbon_sketch_group; }
+    Gtk::Box &get_ribbon_sketch_modify_group() { return *m_ribbon_sketch_modify_group; }
+    Gtk::Box &get_ribbon_body_inspect_group() { return *m_ribbon_body_inspect_group; }
+    Gtk::Box &get_ribbon_sketch_inspect_group() { return *m_ribbon_sketch_inspect_group; }
+    Gtk::Separator &get_ribbon_workspace_separator() { return *m_ribbon_workspace_separator; }
+    Gtk::Box &get_fusion_ribbon_bar() { return *m_fusion_ribbon_bar; }
+    Gtk::Box &get_finish_sketch_group() { return *m_finish_sketch_group; }
+    Gtk::Button &get_finish_sketch_button() { return *m_finish_sketch_button; }
+    Gtk::Label &get_finish_sketch_label() { return *m_finish_sketch_label; }
+    Gtk::Button &get_ribbon_btn_extrude() { return *m_ribbon_btn_extrude; }
+    Gtk::Button &get_ribbon_btn_revolve() { return *m_ribbon_btn_revolve; }
+    Gtk::Button &get_ribbon_btn_sweep() { return *m_ribbon_btn_sweep; }
+    Gtk::Button &get_ribbon_btn_loft() { return *m_ribbon_btn_loft; }
+
+    Gtk::Button &get_ribbon_btn_fillet() { return *m_ribbon_btn_fillet; }
+    Gtk::Button &get_ribbon_btn_chamfer() { return *m_ribbon_btn_chamfer; }
+    Gtk::Button &get_ribbon_btn_combine() { return *m_ribbon_btn_combine; }
+    Gtk::Button &get_ribbon_btn_pattern() { return *m_ribbon_btn_pattern; }
+
+    Gtk::Button &get_ribbon_btn_line() { return *m_ribbon_btn_line; }
+    Gtk::Button &get_ribbon_btn_rect() { return *m_ribbon_btn_rect; }
+    Gtk::Button &get_ribbon_btn_circle() { return *m_ribbon_btn_circle; }
+    Gtk::Button &get_ribbon_btn_polygon() { return *m_ribbon_btn_polygon; }
+    Gtk::Button &get_ribbon_btn_text() { return *m_ribbon_btn_text; }
+
+    Gtk::Button &get_ribbon_btn_dimension() { return *m_ribbon_btn_dimension; }
+    Gtk::Button &get_ribbon_sketch_btn_fillet() { return *m_ribbon_sketch_btn_fillet; }
+    Gtk::Button &get_ribbon_sketch_btn_chamfer() { return *m_ribbon_sketch_btn_chamfer; }
+    Gtk::Button &get_ribbon_body_btn_measure() { return *m_ribbon_body_btn_measure; }
+    Gtk::Button &get_ribbon_sketch_btn_measure() { return *m_ribbon_sketch_btn_measure; }
+
+    SketchPlaneSelector &get_sketch_plane_selector() { return *m_sketch_plane_selector; }
+    void show_rectangle_dimensions(double width, double height);
+    void update_rectangle_dimensions(double width, double height);
+    void hide_rectangle_dimensions();
+    void position_rectangle_dimensions(glm::dvec2 pos, bool negative_x, bool negative_y);
+    void init_rectangle_dimensions(EditorInterface &intf);
+    void focus_next_rectangle_dimension();
+    void commit_rectangle_dimensions();
+    void commit_and_focus_next_rectangle_dimension();
+    bool rectangle_dimensions_visible() const;
+
     void set_key_hint_label_text(const std::string &s);
 
     void tool_bar_clear_actions();
@@ -206,6 +254,44 @@ private:
     Gtk::Button *m_save_button = nullptr;
     Gtk::Button *m_save_as_button = nullptr;
     Gtk::SearchEntry *m_open_recent_search_entry = nullptr;
+
+    Gtk::Button *m_ribbon_btn_sketch = nullptr;
+    Gtk::Box *m_ribbon_create_group = nullptr;
+    Gtk::Box *m_ribbon_modify_group = nullptr;
+    Gtk::Box *m_ribbon_sketch_group = nullptr;
+    Gtk::Box *m_ribbon_sketch_modify_group = nullptr;
+    Gtk::Box *m_ribbon_body_inspect_group = nullptr;
+    Gtk::Box *m_ribbon_sketch_inspect_group = nullptr;
+    Gtk::Separator *m_ribbon_workspace_separator = nullptr;
+    Gtk::Box *m_fusion_ribbon_bar = nullptr;
+    Gtk::Box *m_finish_sketch_group = nullptr;
+    Gtk::Button *m_finish_sketch_button = nullptr;
+    Gtk::Label *m_finish_sketch_label = nullptr;
+    Gtk::Button *m_ribbon_btn_extrude = nullptr;
+    Gtk::Button *m_ribbon_btn_revolve = nullptr;
+    Gtk::Button *m_ribbon_btn_sweep = nullptr;
+    Gtk::Button *m_ribbon_btn_loft = nullptr;
+
+    Gtk::Button *m_ribbon_btn_fillet = nullptr;
+    Gtk::Button *m_ribbon_btn_chamfer = nullptr;
+    Gtk::Button *m_ribbon_btn_combine = nullptr;
+    Gtk::Button *m_ribbon_btn_pattern = nullptr;
+
+    Gtk::Button *m_ribbon_btn_line = nullptr;
+    Gtk::Button *m_ribbon_btn_rect = nullptr;
+    Gtk::Button *m_ribbon_btn_circle = nullptr;
+    Gtk::Button *m_ribbon_btn_polygon = nullptr;
+    Gtk::Button *m_ribbon_btn_text = nullptr;
+
+    Gtk::Button *m_ribbon_btn_dimension = nullptr;
+    Gtk::Button *m_ribbon_sketch_btn_fillet = nullptr;
+    Gtk::Button *m_ribbon_sketch_btn_chamfer = nullptr;
+    Gtk::Button *m_ribbon_body_btn_measure = nullptr;
+    Gtk::Button *m_ribbon_sketch_btn_measure = nullptr;
+    SketchPlaneSelector *m_sketch_plane_selector = nullptr;
+    RectangleDimensionsWindow *m_rectangle_dimensions = nullptr;
+    Gtk::Box *m_rectangle_dimensions_box = nullptr;
+    bool m_rectangle_dimensions_active = false;
 
     Gtk::HeaderBar *m_header_bar = nullptr;
     Gtk::Label *m_title_label = nullptr;

@@ -357,6 +357,18 @@ std::string get_selectable_ref_description(IDocumentProvider &prv, const UUID &c
     case SelectableRef::Type::SOLID_MODEL_EDGE: {
         label = "Solid model edge";
     } break;
+
+    case SelectableRef::Type::SOLID_MODEL_FACE: {
+        label = "Solid model face";
+    } break;
+
+    case SelectableRef::Type::SKETCH_PROFILE: {
+        label = "Sketch profile";
+    } break;
+
+    case SelectableRef::Type::EXTRUSION_HANDLE: {
+        label = "Extrusion handle";
+    } break;
     }
     return label;
 }

@@ -218,6 +218,10 @@ void Canvas::setup_controllers()
         auto controller = Gtk::GestureClick::create();
         controller->set_button(1);
         controller->signal_pressed().connect([this, controller](int n_press, double x, double y) {
+            // A click in the viewport should restore keyboard focus to the
+            // canvas, but mouse motion must not steal focus from overlay
+            // controls such as the rectangle dimension entries.
+            grab_focus();
             if (m_selection_mode == SelectionMode::NORMAL || m_selection_mode == SelectionMode::HOVER) {
                 m_drag_selection_start = {x, y};
                 m_dragging = true;
@@ -282,7 +286,6 @@ void Canvas::setup_controllers()
         if (glm::length(m_long_click_start - glm::vec2(x, y)) > 16)
             m_long_click_connection.disconnect();
 
-        grab_focus();
         const bool moved = m_last_x != x || m_last_y != y;
         if (!moved)
             return;
@@ -837,6 +840,26 @@ glm::vec3 Canvas::get_cam_normal() const
 glm::dvec2 Canvas::get_cursor_pos_win() const
 {
     return {m_last_x, m_last_y};
+}
+
+void Canvas::update_cursor_position(double x, double y)
+{
+    if (m_last_x == x && m_last_y == y)
+        return;
+    m_last_x = x;
+    m_last_y = y;
+    m_cursor_pos.x = (x / m_width) * 2. - 1.;
+    m_cursor_pos.y = (y / m_height) * -2. + 1.;
+    update_hover_selection();
+    m_signal_cursor_moved.emit();
+    queue_draw();
+}
+
+glm::dvec2 Canvas::project_to_window(glm::dvec3 point) const
+{
+    const auto p = m_projmat * m_viewmat * glm::dvec4(point, 1.0);
+    const auto ndc = glm::dvec3(p) / static_cast<double>(p.w);
+    return {(ndc.x + 1.) * m_width / 2., (1. - ndc.y) * m_height / 2.};
 }
 
 float Canvas::get_magic_number() const
@@ -1448,6 +1471,17 @@ ICanvas::VertexRef Canvas::draw_line(glm::vec3 a, glm::vec3 b)
     apply_flags(li.flags);
     apply_line_flags(li.flags);
 
+    if (m_state.selection_invisible)
+        return {VertexType::SELECTION_INVISIBLE, 0};
+    return {VertexType::LINE, m_current_chunk->m_lines.size() - 1, m_current_chunk_id};
+}
+
+ICanvas::VertexRef Canvas::draw_axis_line(glm::vec3 a, glm::vec3 b, ICanvas::Axis axis)
+{
+    auto &lines = m_state.selection_invisible ? m_current_chunk->m_lines_selection_invisible : m_current_chunk->m_lines;
+    auto &li = lines.emplace_back(transform_point(a), transform_point(b), axis);
+    apply_flags(li.flags);
+    apply_line_flags(li.flags);
     if (m_state.selection_invisible)
         return {VertexType::SELECTION_INVISIBLE, 0};
     return {VertexType::LINE, m_current_chunk->m_lines.size() - 1, m_current_chunk_id};

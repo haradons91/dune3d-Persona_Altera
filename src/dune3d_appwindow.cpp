@@ -2,6 +2,8 @@
 #include "dune3d_appwindow.hpp"
 #include "canvas/canvas.hpp"
 #include "widgets/axes_cube.hpp"
+#include "widgets/sketch_plane_selector.hpp"
+#include "dialogs/rectangle_dimensions_window.hpp"
 #include "widgets/recent_item_box.hpp"
 #include "util/fs_util.hpp"
 #include "util/gtk_util.hpp"
@@ -106,6 +108,40 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_save_as_button = refBuilder->get_widget<Gtk::Button>("save_as_button");
     m_open_recent_listbox = refBuilder->get_widget<Gtk::ListBox>("open_recent_listbox");
     m_open_recent_search_entry = refBuilder->get_widget<Gtk::SearchEntry>("open_recent_search_entry");
+
+    m_ribbon_btn_sketch = refBuilder->get_widget<Gtk::Button>("ribbon_btn_sketch");
+    m_ribbon_create_group = refBuilder->get_widget<Gtk::Box>("ribbon_create_group");
+    m_ribbon_modify_group = refBuilder->get_widget<Gtk::Box>("ribbon_modify_group");
+    m_ribbon_sketch_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_group");
+    m_ribbon_sketch_modify_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_modify_group");
+    m_ribbon_body_inspect_group = refBuilder->get_widget<Gtk::Box>("ribbon_body_inspect_group");
+    m_ribbon_sketch_inspect_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_inspect_group");
+    m_ribbon_workspace_separator = refBuilder->get_widget<Gtk::Separator>("ribbon_workspace_separator");
+    m_fusion_ribbon_bar = refBuilder->get_widget<Gtk::Box>("fusion_ribbon_bar");
+    m_finish_sketch_group = refBuilder->get_widget<Gtk::Box>("finish_sketch_group");
+    m_finish_sketch_button = refBuilder->get_widget<Gtk::Button>("finish_sketch_button");
+    m_finish_sketch_label = refBuilder->get_widget<Gtk::Label>("finish_sketch_label");
+    m_ribbon_btn_extrude = refBuilder->get_widget<Gtk::Button>("ribbon_btn_extrude");
+    m_ribbon_btn_revolve = refBuilder->get_widget<Gtk::Button>("ribbon_btn_revolve");
+    m_ribbon_btn_sweep = refBuilder->get_widget<Gtk::Button>("ribbon_btn_sweep");
+    m_ribbon_btn_loft = refBuilder->get_widget<Gtk::Button>("ribbon_btn_loft");
+
+    m_ribbon_btn_fillet = refBuilder->get_widget<Gtk::Button>("ribbon_btn_fillet");
+    m_ribbon_btn_chamfer = refBuilder->get_widget<Gtk::Button>("ribbon_btn_chamfer");
+    m_ribbon_btn_combine = refBuilder->get_widget<Gtk::Button>("ribbon_btn_combine");
+    m_ribbon_btn_pattern = refBuilder->get_widget<Gtk::Button>("ribbon_btn_pattern");
+
+    m_ribbon_btn_line = refBuilder->get_widget<Gtk::Button>("ribbon_btn_line");
+    m_ribbon_btn_rect = refBuilder->get_widget<Gtk::Button>("ribbon_btn_rect");
+    m_ribbon_btn_circle = refBuilder->get_widget<Gtk::Button>("ribbon_btn_circle");
+    m_ribbon_btn_polygon = refBuilder->get_widget<Gtk::Button>("ribbon_btn_polygon");
+    m_ribbon_btn_text = refBuilder->get_widget<Gtk::Button>("ribbon_btn_text");
+
+    m_ribbon_btn_dimension = refBuilder->get_widget<Gtk::Button>("ribbon_btn_dimension");
+    m_ribbon_sketch_btn_fillet = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_fillet");
+    m_ribbon_sketch_btn_chamfer = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_chamfer");
+    m_ribbon_body_btn_measure = refBuilder->get_widget<Gtk::Button>("ribbon_body_btn_measure");
+    m_ribbon_sketch_btn_measure = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_measure");
     m_open_recent_listbox->set_header_func(sigc::ptr_fun(header_func_separator));
     m_open_recent_listbox->signal_row_activated().connect([this](Gtk::ListBoxRow *row) {
         auto &ch = dynamic_cast<RecentItemBox &>(*row->get_child());
@@ -152,6 +188,12 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
         Gtk::Box *cube_box = refBuilder->get_widget<Gtk::Box>("cube_box");
         auto axes_cube = Gtk::make_managed<AxesCube>();
         cube_box->append(*axes_cube);
+        m_sketch_plane_selector = Gtk::make_managed<SketchPlaneSelector>();
+        m_sketch_plane_selector->set_visible(false);
+        auto selector_box = refBuilder->get_widget<Gtk::Box>("sketch_plane_selector_box");
+        selector_box->append(*m_sketch_plane_selector);
+        m_rectangle_dimensions_box = refBuilder->get_widget<Gtk::Box>("rectangle_dimensions_box");
+        m_rectangle_dimensions_box->set_visible(false);
         get_canvas().signal_view_changed().connect(
                 sigc::track_obj([this, axes_cube] { axes_cube->set_quat(get_canvas().get_cam_quat()); }, *axes_cube));
         axes_cube->set_quat(get_canvas().get_cam_quat());
@@ -159,6 +201,10 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
         axes_cube->signal_quat_changed().connect([this](const glm::quat &q) {
             auto snapped_quat = get_canvas().get_tilt_snapped_quat(q);
             get_canvas().animate_to_cam_quat(snapped_quat);
+        });
+        axes_cube->signal_roll_changed().connect([this](float angle) {
+            const auto roll = glm::angleAxis(glm::radians(angle), glm::vec3(0, 0, 1));
+            get_canvas().animate_to_cam_quat(get_canvas().get_cam_quat() * roll);
         });
     }
 
@@ -225,6 +271,60 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     set_icon_name("dune3d");
 
     m_editor.init();
+}
+
+void Dune3DAppWindow::init_rectangle_dimensions(EditorInterface &intf)
+{
+    m_rectangle_dimensions = Gtk::make_managed<RectangleDimensionsWindow>(intf, 0, 0);
+    m_rectangle_dimensions_box->append(*m_rectangle_dimensions);
+}
+
+void Dune3DAppWindow::focus_next_rectangle_dimension()
+{
+    if (m_rectangle_dimensions)
+        m_rectangle_dimensions->focus_next_dimension();
+}
+
+void Dune3DAppWindow::commit_rectangle_dimensions()
+{
+    if (m_rectangle_dimensions)
+        m_rectangle_dimensions->commit_dimensions();
+}
+
+void Dune3DAppWindow::commit_and_focus_next_rectangle_dimension()
+{
+    if (m_rectangle_dimensions)
+        m_rectangle_dimensions->commit_and_focus_next_dimension();
+}
+
+bool Dune3DAppWindow::rectangle_dimensions_visible() const
+{
+    return m_rectangle_dimensions_active;
+}
+
+void Dune3DAppWindow::show_rectangle_dimensions(double width, double height)
+{
+    m_rectangle_dimensions->set_dimensions(width, height);
+    m_rectangle_dimensions_box->set_visible(true);
+    m_rectangle_dimensions_active = true;
+    m_rectangle_dimensions->focus_width();
+}
+void Dune3DAppWindow::update_rectangle_dimensions(double width, double height)
+{
+    m_rectangle_dimensions->set_dimensions(width, height);
+}
+void Dune3DAppWindow::hide_rectangle_dimensions()
+{
+    m_rectangle_dimensions_active = false;
+    m_rectangle_dimensions_box->set_visible(false);
+}
+void Dune3DAppWindow::position_rectangle_dimensions(glm::dvec2 pos, bool negative_x, bool negative_y)
+{
+    m_rectangle_dimensions_box->set_halign(Gtk::Align::START);
+    m_rectangle_dimensions_box->set_valign(Gtk::Align::START);
+    m_rectangle_dimensions_box->set_margin_start(std::max(0., pos.x - 150.));
+    m_rectangle_dimensions_box->set_margin_top(std::max(0., pos.y - 50.));
+    m_rectangle_dimensions->position_dimensions(negative_x, negative_y);
 }
 
 void Dune3DAppWindow::set_key_hint_label_text(const std::string &s)

@@ -42,5 +42,10 @@ private:
 
     glm::dvec2 get_cursor_pos_in_plane() const;
     bool m_constrain = true;
+    double m_width = 0;
+    double m_height = 0;
+    bool m_width_locked = false;
+    bool m_height_locked = false;
+    void update_from_dimensions();
 };
 } // namespace dune3d

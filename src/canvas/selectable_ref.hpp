@@ -5,7 +5,7 @@
 namespace dune3d {
 class SelectableRef {
 public:
-    enum class Type { ENTITY, CONSTRAINT, SOLID_MODEL_EDGE, DOCUMENT };
+    enum class Type { ENTITY, CONSTRAINT, SOLID_MODEL_EDGE, SOLID_MODEL_FACE, SKETCH_PROFILE, EXTRUSION_HANDLE, DOCUMENT };
     Type type;
     UUID item;
     unsigned int point;

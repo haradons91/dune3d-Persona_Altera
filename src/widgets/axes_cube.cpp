@@ -37,7 +37,7 @@ AxesCube::AxesCube()
         m_size = std::max(m_size, (float)ext.get_height());
     }
     set_content_height(100);
-    set_content_width(100);
+    set_content_width(140);
     set_draw_func(sigc::mem_fun(*this, &AxesCube::render));
     setup_controllers();
 }
@@ -60,6 +60,11 @@ void AxesCube::set_quat(const glm::quat &q)
 sigc::signal<void(const glm::quat &)> AxesCube::signal_quat_changed()
 {
     return m_signal_quat_changed;
+}
+
+sigc::signal<void(float)> AxesCube::signal_roll_changed()
+{
+    return m_signal_roll_changed;
 }
 
 namespace {
@@ -109,17 +114,17 @@ static Model generate_model()
     };
 
     // faces
-    add_face({1 * 3 + 0, 5 * 3 + 0, 7 * 3 + 0, 3 * 3 + 0}, "−X", get_color(0, 1.0f), "−X",
+    add_face({1 * 3 + 0, 5 * 3 + 0, 7 * 3 + 0, 3 * 3 + 0}, "−X", get_color(0, -1.0f), "Back",
              glm::quat(glm::vec3(0, -glm::pi<float>() / 2, 0)));
-    add_face({0 * 3 + 0, 2 * 3 + 0, 6 * 3 + 0, 4 * 3 + 0}, "+X", get_color(0, -1.0f), "X",
+    add_face({0 * 3 + 0, 2 * 3 + 0, 6 * 3 + 0, 4 * 3 + 0}, "+X", get_color(0, 1.0f), "Front",
              glm::quat(glm::vec3(0, glm::pi<float>() / 2, 0)));
-    add_face({2 * 3 + 1, 3 * 3 + 1, 7 * 3 + 1, 6 * 3 + 1}, "−Y", get_color(1, 1.0f), "−Y",
+    add_face({2 * 3 + 1, 3 * 3 + 1, 7 * 3 + 1, 6 * 3 + 1}, "−Y", get_color(1, -1.0f), "Left",
              glm::quat(glm::vec3(glm::pi<float>() / 2, 0, 0)));
-    add_face({0 * 3 + 1, 4 * 3 + 1, 5 * 3 + 1, 1 * 3 + 1}, "+Y", get_color(1, -1.0f), "Y",
+    add_face({0 * 3 + 1, 4 * 3 + 1, 5 * 3 + 1, 1 * 3 + 1}, "+Y", get_color(1, 1.0f), "Right",
              glm::quat(glm::vec3(-glm::pi<float>() / 2, 0, 0)));
-    add_face({4 * 3 + 2, 6 * 3 + 2, 7 * 3 + 2, 5 * 3 + 2}, "−Z", get_color(2, 1.0f), "−Z",
+    add_face({4 * 3 + 2, 6 * 3 + 2, 7 * 3 + 2, 5 * 3 + 2}, "−Z", get_color(2, -1.0f), "Bottom",
              glm::quat(glm::vec3(0, glm::pi<float>(), 0)));
-    add_face({0 * 3 + 2, 1 * 3 + 2, 3 * 3 + 2, 2 * 3 + 2}, "+Z", get_color(2, -1.0f), "Z", glm::quat(1, 0, 0, 0));
+    add_face({0 * 3 + 2, 1 * 3 + 2, 3 * 3 + 2, 2 * 3 + 2}, "+Z", get_color(2, 1.0f), "Top", glm::quat(1, 0, 0, 0));
 
     // corners
     for (int i = 0; i < 8; ++i) {
@@ -254,6 +259,14 @@ void AxesCube::setup_controllers()
     auto click_controller = Gtk::GestureClick::create();
     click_controller->set_button(1);
     click_controller->signal_pressed().connect([this](int n_press, double x, double y) {
+        if (x < 52 && y < 34) {
+            m_signal_roll_changed.emit(45.0f);
+            return;
+        }
+        if (x > m_width - 52 && y < 34) {
+            m_signal_roll_changed.emit(-45.0f);
+            return;
+        }
         int face_id = get_face_at_position(x, y);
         if (face_id >= 0) {
             const auto &faces = get_cached_model().faces;
@@ -448,6 +461,33 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
             cr->stroke();
         }
     }
+
+    auto draw_roll_arrow = [&cr](double cx, double cy, bool left) {
+        cr->save();
+        cr->set_line_width(2.0);
+        cr->set_source_rgba(0.1, 0.1, 0.1, 0.85);
+        const double rotation = left ? glm::half_pi<double>() + glm::pi<double>() : 0;
+        const double start = (left ? -0.8 : 2.35) + rotation;
+        const double end = (left ? 2.35 : 5.48) + rotation;
+        cr->arc(cx, cy, 8, start, end);
+        cr->stroke();
+
+        const double angle = left ? 2.35 : 5.48;
+        const double head_position_angle = (left ? -0.8 : angle) + rotation;
+        const double tx = cx + std::cos(head_position_angle) * 8;
+        const double ty = cy + std::sin(head_position_angle) * 8;
+        const double head_angle = left ? head_position_angle + glm::half_pi<double>() + glm::pi<double>()
+                                       + glm::half_pi<double>()
+                                     : angle;
+        cr->move_to(tx, ty);
+        cr->line_to(tx - std::cos(head_angle - 0.55) * 5, ty - std::sin(head_angle - 0.55) * 5);
+        cr->move_to(tx, ty);
+        cr->line_to(tx - std::cos(head_angle + 0.55) * 5, ty - std::sin(head_angle + 0.55) * 5);
+        cr->stroke();
+        cr->restore();
+    };
+    draw_roll_arrow(-34, -34, true);
+    draw_roll_arrow(34, -34, false);
 }
 
 } // namespace dune3d
