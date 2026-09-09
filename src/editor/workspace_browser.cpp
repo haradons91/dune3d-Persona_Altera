@@ -949,7 +949,14 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core) : Gtk::Box(Gtk::Orientation::VERT
             "reset_color", [this] { signal_reset_body_color().emit(m_body_menu_document, m_body_menu_body); });
     actions->add_action("rename", [this] { signal_rename_body().emit(m_body_menu_document, m_body_menu_body); });
     actions->add_action("set_color", [this] { signal_set_body_color().emit(m_body_menu_document, m_body_menu_body); });
+    actions->add_action(
+            "export_stl", [this] { signal_export_body_stl().emit(m_body_menu_document, m_body_menu_body); });
+    actions->add_action(
+            "export_step", [this] { signal_export_body_step().emit(m_body_menu_document, m_body_menu_body); });
     insert_action_group("body", actions);
+    m_body_menu->append("Export STL", "body.export_stl");
+    m_body_menu->append("Export STEP", "body.export_step");
+    m_body_menu->append_section("", Gio::Menu::create());
     m_body_menu->append("Set color", "body.set_color");
     m_body_menu->append("Reset color", "body.reset_color");
     m_body_menu->append("Rename", "body.rename");

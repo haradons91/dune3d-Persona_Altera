@@ -21,7 +21,9 @@
 #include "util/template_util.hpp"
 #include "logger/logger.hpp"
 #include <array>
+#include <iomanip>
 #include <ranges>
+#include <sstream>
 #include <glm/gtx/io.hpp>
 
 namespace dune3d {
@@ -48,6 +50,109 @@ private:
 
 Renderer::Renderer(ICanvas &ca, IDocumentProvider &docprv) : m_ca(ca), m_doc_prv(docprv)
 {
+}
+
+void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
+{
+    if (!m_render_sketch_grid || !m_current_group || m_current_group->m_active_wrkpl != wrkpl.m_uuid)
+        return;
+
+    // The default camera distance is 100 and corresponds to a 25-unit major
+    // interval. The grid follows the actual camera scale directly.
+    constexpr double default_camera_distance = 100.0;
+    constexpr double default_major_spacing = 25.0;
+    const double world_per_pixel = std::max<double>(m_ca.get_world_units_per_pixel(), 1e-9);
+    const double target_major = default_major_spacing * m_ca.get_cam_distance() / default_camera_distance;
+    const double exponent = std::floor(std::log10(target_major));
+    const double base = std::pow(10.0, exponent);
+    const double normalized = target_major / base;
+    const double major_multiplier = normalized <= 1.5   ? 1.0
+                                    : normalized <= 2.25 ? 2.0
+                                    : normalized <= 3.5  ? 2.5
+                                    : normalized <= 7.5  ? 5.0
+                                                         : 10.0;
+    const double label_spacing = base * major_multiplier;
+    const double major_spacing = label_spacing / 5.0;
+    const bool show_minor_grid = label_spacing <= 25.0;
+    const double minor_spacing = major_spacing / 5.0;
+
+    const auto viewport = m_ca.get_viewport_size();
+    const double half_x = viewport.x * world_per_pixel / 2.0;
+    const double half_y = viewport.y * world_per_pixel / 2.0;
+    const double visible_major_count = std::min(half_x, half_y) / label_spacing * 2.0;
+    const double half_extent = visible_major_count > 14.0
+                                       ? label_spacing * 5.0
+                                       : std::max(half_x, half_y) + label_spacing;
+
+    const auto to_world = [&wrkpl](double x, double y) { return wrkpl.transform({x, y}); };
+    const auto format_grid_value = [](double value) {
+        std::ostringstream stream;
+        if (std::abs(value - std::round(value)) < 1e-8) {
+            stream << static_cast<long long>(std::llround(value));
+        }
+        else {
+            stream << std::fixed << std::setprecision(2) << value;
+        }
+        return stream.str();
+    };
+    const auto draw_grid_line = [this, &to_world](double x1, double y1, double x2, double y2) {
+        m_ca.draw_line(to_world(x1, y1), to_world(x2, y2));
+    };
+
+    const int first = static_cast<int>(std::floor(-half_extent / minor_spacing));
+    const int last = static_cast<int>(std::ceil(half_extent / minor_spacing));
+    m_ca.save();
+    m_ca.set_vertex_inactive(true);
+    if (show_minor_grid) {
+        m_ca.set_line_style(ICanvas::LineStyle::THIN);
+        for (int i = first; i <= last; i++) {
+            if (i == 0)
+                continue;
+            const double position = i * minor_spacing;
+            draw_grid_line(position, -half_extent, position, half_extent);
+            draw_grid_line(-half_extent, position, half_extent, position);
+        }
+    }
+
+    // Re-draw the major lines with the normal line width so they remain
+    // visually distinct from the minor grid.
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
+    const int first_major_line = static_cast<int>(std::floor(-half_extent / major_spacing));
+    const int last_major_line = static_cast<int>(std::ceil(half_extent / major_spacing));
+    for (int i = first_major_line; i <= last_major_line; i++) {
+        if (i == 0)
+            continue;
+        const double position = i * major_spacing;
+        draw_grid_line(position, -half_extent, position, half_extent);
+        draw_grid_line(-half_extent, position, half_extent, position);
+    }
+
+    // Draw the sketch axes last so they remain visible over the light grid.
+    m_ca.set_vertex_inactive(false);
+    // Use dedicated sketch colors; the regular workplane Axis::X/Y colors
+    // follow a legacy convention and do not match sketch X/Y colors.
+    m_ca.draw_axis_line(to_world(-half_extent, 0), to_world(half_extent, 0), ICanvas::Axis::SKETCH_X);
+    m_ca.draw_axis_line(to_world(0, -half_extent), to_world(0, half_extent), ICanvas::Axis::SKETCH_Y);
+
+    // Put scale labels alongside the major grid lines. The text is drawn in
+    // the workplane so it follows the sketch when the plane is not XY.
+    m_ca.set_vertex_inactive(true);
+    const auto label_normal = glm::quat(wrkpl.m_normal)
+                              * glm::angleAxis(static_cast<float>(M_PI), glm::vec3(0, 0, 1));
+    const float label_size = static_cast<float>(label_spacing * 0.18);
+    const double label_offset = show_minor_grid ? minor_spacing * 0.9 : major_spacing * 0.12;
+    const int first_label = static_cast<int>(std::ceil(-half_extent / label_spacing));
+    const int last_label = static_cast<int>(std::floor(half_extent / label_spacing));
+    for (int i = first_label; i <= last_label; i++) {
+        if (i == 0)
+            continue;
+        const double value = i * label_spacing;
+        m_ca.draw_bitmap_text_3d(to_world(value, -label_offset), label_normal, label_size,
+                                 format_grid_value(value));
+        m_ca.draw_bitmap_text_3d(to_world(label_offset, value), label_normal, label_size,
+                                 format_grid_value(value));
+    }
+    m_ca.restore();
 }
 
 bool Renderer::group_is_visible(const UUID &uu) const
@@ -162,8 +267,33 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                 }
                 else {
                     for (const auto &[node, edge] : path) {
-                        const auto p = workplane.transform(node.p);
-                        profile.vertices.emplace_back(p.x, p.y, p.z);
+                        if (const auto *arc = dynamic_cast<const EntityArc2D *>(&edge.entity)) {
+                            const auto point = node.get_pt_for_edge(edge);
+                            const auto other_point = point == 1 ? 2u : 1u;
+                            const auto start = paths::Paths::get_pt(edge.entity, point, edge.transform_fn);
+                            const auto end = paths::Paths::get_pt(edge.entity, other_point, edge.transform_fn);
+                            const auto radius = glm::length(arc->m_center - arc->m_from);
+                            const auto start_angle = angle(start - edge.transform(arc->m_center));
+                            const auto end_angle = angle(end - edge.transform(arc->m_center));
+                            const unsigned int segments = 32;
+                            double delta = c2pi(end_angle - start_angle);
+                            if (point == 2) {
+                                delta = end_angle - start_angle;
+                                while (delta > 0)
+                                    delta -= 2 * M_PI;
+                            }
+                            if (std::abs(delta) < 1e-2)
+                                delta = 2 * M_PI;
+                            for (unsigned int i = 0; i < segments; i++) {
+                                const auto p = workplane.transform(edge.transform(
+                                        arc->m_center + euler(radius, start_angle + delta * i / segments)));
+                                profile.vertices.emplace_back(p.x, p.y, p.z);
+                            }
+                        }
+                        else {
+                            const auto p = workplane.transform(node.p);
+                            profile.vertices.emplace_back(p.x, p.y, p.z);
+                        }
                     }
                 }
                 if (profile.vertices.size() >= 3) {
@@ -300,6 +430,9 @@ void Renderer::render(const Entity &entity)
 
 void Renderer::visit(const EntityLine3D &line)
 {
+    // The extrusion leader is an editing aid, not part of the model.
+    if (line.m_name == "leader")
+        return;
     const bool extrusion_view_only = m_current_group && !m_render_extrusion_editor
                                       && m_current_group->get_type() == Group::Type::EXTRUDE
                                       && line.m_group == m_current_group->m_uuid;
@@ -580,6 +713,7 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
     }
     if (m_render_sketch_plane_selector && is_reference_plane)
         return;
+    draw_sketch_grid(wrkpl);
     if (!wrkpl.m_visible) {
         return;
     }

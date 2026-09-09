@@ -90,6 +90,14 @@ public:
     glm::dvec3 get_cursor_pos() const;
     glm::dvec3 get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal) const;
     glm::vec3 get_cam_normal() const override;
+    float get_world_units_per_pixel() const override
+    {
+        return 2 * get_magic_number();
+    }
+    glm::vec2 get_viewport_size() const override
+    {
+        return {m_width, m_height};
+    }
     glm::dvec2 get_cursor_pos_win() const;
     void update_cursor_position(double x, double y);
     glm::dvec2 project_to_window(glm::dvec3 point) const;
@@ -121,7 +129,7 @@ public:
         return m_cam_quat;
     }
 
-    float get_cam_distance() const
+    float get_cam_distance() const override
     {
         return m_cam_distance;
     }

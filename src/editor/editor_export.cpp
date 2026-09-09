@@ -191,6 +191,108 @@ void Editor::on_export_solid_model(const ActionConnection &conn)
     dialog->save(m_win, handle_response);
 }
 
+static void export_body_step(const IDocumentInfo &doc_info, const Group &body_group, const SolidModel *model,
+                             const std::filesystem::path &path)
+{
+    STEPExporter exporter(doc_info.get_stem().c_str());
+    model->add_to_step_exporter(exporter, body_group.find_body(doc_info.get_document()).body.m_name.c_str());
+    exporter.write(path);
+}
+
+static const SolidModel *get_body_solid_model(const Document &doc, const UUID &body_group_uuid)
+{
+    for (const auto &body_groups : doc.get_groups_by_body()) {
+        if (body_groups.get_group().m_uuid != body_group_uuid)
+            continue;
+
+        const SolidModel *model = nullptr;
+        for (const auto *group : body_groups.groups) {
+            if (auto solid_group = dynamic_cast<const IGroupSolidModel *>(group)) {
+                if (solid_group->get_solid_model())
+                    model = solid_group->get_solid_model();
+            }
+        }
+        return model;
+    }
+    return nullptr;
+}
+
+void Editor::on_workspace_browser_export_body_stl(const UUID &uu_doc, const UUID &uu_group)
+{
+    auto &doc_info = m_core.get_idocument_info(uu_doc);
+    auto &doc = doc_info.get_document();
+    auto model = get_body_solid_model(doc, uu_group);
+    if (!model)
+        return;
+
+    auto dialog = Gtk::FileDialog::create();
+    auto filters = Gio::ListStore<Gtk::FileFilter>::create();
+    auto filter = Gtk::FileFilter::create();
+    filter->set_name("STL");
+    filter->add_pattern("*.stl");
+    filters->append(filter);
+    if (auto initial_file = get_export_initial_filename(
+                m_win.get_app().m_user_config, doc_info, uu_group, ".stl",
+                &Dune3DApplication::UserConfig::ExportPaths::stl))
+        dialog->set_initial_file(initial_file);
+    dialog->set_filters(filters);
+    dialog->save(m_win, [this, dialog, &doc_info, uu_group](const Glib::RefPtr<Gio::AsyncResult> &result) {
+        try {
+            auto file = dialog->save_finish(result);
+            auto path = path_from_string(append_suffix_if_required(file->get_path(), ".stl"));
+            auto &doc = doc_info.get_document();
+            if (auto model = get_body_solid_model(doc, uu_group))
+                model->export_stl(path);
+            set_export_initial_filename(m_win.get_app().m_user_config, doc_info, uu_group,
+                                        &Dune3DApplication::UserConfig::ExportPaths::stl, path_to_string(path));
+        }
+        catch (const Gtk::DialogError &) {
+        }
+        catch (const Glib::Error &err) {
+            std::cout << "Unexpected exception. " << err.what() << std::endl;
+        }
+    });
+}
+
+void Editor::on_workspace_browser_export_body_step(const UUID &uu_doc, const UUID &uu_group)
+{
+    auto &doc_info = m_core.get_idocument_info(uu_doc);
+    auto &doc = doc_info.get_document();
+    auto model = get_body_solid_model(doc, uu_group);
+    if (!model)
+        return;
+
+    auto dialog = Gtk::FileDialog::create();
+    auto filters = Gio::ListStore<Gtk::FileFilter>::create();
+    auto filter = Gtk::FileFilter::create();
+    filter->set_name("STEP");
+    filter->add_pattern("*.step");
+    filter->add_pattern("*.stp");
+    filters->append(filter);
+    if (auto initial_file = get_export_initial_filename(
+                m_win.get_app().m_user_config, doc_info, uu_group, ".step",
+                &Dune3DApplication::UserConfig::ExportPaths::step))
+        dialog->set_initial_file(initial_file);
+    dialog->set_filters(filters);
+    dialog->save(m_win, [this, dialog, &doc_info, uu_group](const Glib::RefPtr<Gio::AsyncResult> &result) {
+        try {
+            auto file = dialog->save_finish(result);
+            auto path = path_from_string(append_suffix_if_required(file->get_path(), ".step"));
+            auto &doc = doc_info.get_document();
+            auto &body_group = doc.get_group(uu_group);
+            if (auto model = get_body_solid_model(doc, uu_group))
+                export_body_step(doc_info, body_group, model, path);
+            set_export_initial_filename(m_win.get_app().m_user_config, doc_info, uu_group,
+                                        &Dune3DApplication::UserConfig::ExportPaths::step, path_to_string(path));
+        }
+        catch (const Gtk::DialogError &) {
+        }
+        catch (const Glib::Error &err) {
+            std::cout << "Unexpected exception. " << err.what() << std::endl;
+        }
+    });
+}
+
 void Editor::on_export_paths(const ActionConnection &conn)
 {
     const auto action = std::get<ActionID>(conn.id);

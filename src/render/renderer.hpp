@@ -34,6 +34,7 @@ public:
     bool m_solid_model_edge_select_mode = false;
     bool m_connect_curvature_comb = true;
     bool m_render_sketch_plane_selector = false;
+    bool m_render_sketch_grid = false;
     bool m_render_extrusion_editor = false;
     std::optional<UUID> m_sketch_plane_hovered;
     std::optional<UUID> m_sketch_plane_grid;
@@ -51,6 +52,7 @@ private:
     void visit(const EntityCircle2D &en) override;
     void visit(const EntityCircle3D &en) override;
     void visit(const EntityWorkplane &en) override;
+    void draw_sketch_grid(const EntityWorkplane &wrkpl);
     void visit(const EntitySTEP &en) override;
     void visit(const EntityPoint2D &en) override;
     void visit(const EntityDocument &en) override;

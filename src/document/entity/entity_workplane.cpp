@@ -14,6 +14,7 @@ EntityWorkplane::EntityWorkplane(const UUID &uu, const json &j)
     : Base(uu, j), m_origin(j.at("origin").get<glm::dvec3>()), m_normal(j.at("normal").get<glm::dquat>()),
       m_size(j.at("size").get<glm::dvec2>())
 {
+    m_visible = j.value("visible", true);
 }
 
 
@@ -23,6 +24,7 @@ json EntityWorkplane::serialize() const
     j["origin"] = m_origin;
     j["normal"] = m_normal;
     j["size"] = m_size;
+    j["visible"] = m_visible;
     return j;
 }
 

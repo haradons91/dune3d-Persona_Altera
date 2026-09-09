@@ -110,6 +110,8 @@ private:
     void on_workspace_browser_rename_body(const UUID &uu_doc, const UUID &uu_group);
     void on_workspace_browser_set_body_color(const UUID &uu_doc, const UUID &uu_group);
     void on_workspace_browser_reset_body_color(const UUID &uu_doc, const UUID &uu_group);
+    void on_workspace_browser_export_body_stl(const UUID &uu_doc, const UUID &uu_group);
+    void on_workspace_browser_export_body_step(const UUID &uu_doc, const UUID &uu_group);
 
     void on_export_solid_model(const ActionConnection &conn);
     void on_export_paths(const ActionConnection &conn);

@@ -33,6 +33,10 @@ void main() {
 		color_to_frag = vec3(0.0, 0.0, 0.0);
 	else if (axis_color_to_geom[0] == 6u)
 		color_to_frag = vec3(1.0, 1.0, 0.25);
+	else if (axis_color_to_geom[0] == 7u)
+		color_to_frag = vec3(0.9, 0.1, 0.1);
+	else if (axis_color_to_geom[0] == 8u)
+		color_to_frag = vec3(0.1, 0.7, 0.15);
 	else
 		color_to_frag = get_color(flags_to_geom[0]);
 	alpha_to_frag = (axis_color_to_geom[0] == 4u || axis_color_to_geom[0] == 5u || axis_color_to_geom[0] == 6u)

@@ -94,6 +94,21 @@ button.osd:disabled:backdrop {background-image: image(rgba(53, 53, 53, 0.7));}
   letter-spacing: 0.5px;
 }
 
+.fusion-ribbon-create-menu {
+  min-height: 0;
+  min-width: 0;
+  padding: 0 3px;
+  margin-top: 2px;
+  margin-bottom: 0;
+}
+
+.fusion-ribbon-create-label {
+  font-size: 65%;
+  font-weight: bold;
+  opacity: 0.6;
+  letter-spacing: 0.5px;
+}
+
 .fusion-ribbon-btn {
   padding: 4px 6px;
   border-radius: 4px;

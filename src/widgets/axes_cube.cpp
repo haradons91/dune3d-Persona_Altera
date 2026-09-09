@@ -67,6 +67,11 @@ sigc::signal<void(float)> AxesCube::signal_roll_changed()
     return m_signal_roll_changed;
 }
 
+sigc::signal<void()> AxesCube::signal_home_clicked()
+{
+    return m_signal_home_clicked;
+}
+
 namespace {
 struct Face {
     std::vector<int> vertices;
@@ -246,9 +251,15 @@ void AxesCube::setup_controllers()
     motion_controller->signal_motion().connect([this](double x, double y) {
         m_last_x = x;
         m_last_y = y;
+        const bool home_hovered = x < 38 && y > m_height - 34;
+        if (home_hovered != m_home_hovered) {
+            m_home_hovered = home_hovered;
+            queue_draw();
+        }
         update_hover_effect();
     });
     motion_controller->signal_leave().connect([this] {
+        m_home_hovered = false;
         if (m_hovered_face != -1) {
             m_hovered_face = -1;
             queue_draw();
@@ -259,6 +270,10 @@ void AxesCube::setup_controllers()
     auto click_controller = Gtk::GestureClick::create();
     click_controller->set_button(1);
     click_controller->signal_pressed().connect([this](int n_press, double x, double y) {
+        if (x < 38 && y > m_height - 34) {
+            m_signal_home_clicked.emit();
+            return;
+        }
         if (x < 52 && y < 34) {
             m_signal_roll_changed.emit(45.0f);
             return;
@@ -488,6 +503,30 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
     };
     draw_roll_arrow(-34, -34, true);
     draw_roll_arrow(34, -34, false);
+
+    // Home/default-view control in the lower-left corner.
+    const double home_x = -w / 2.0 + 18;
+    const double home_y = h / 2.0 - 17;
+    const double house_width = 15;
+    const double house_height = 12;
+    const double roof_height = 7;
+    cr->save();
+    cr->set_line_width(1.2);
+    cr->set_line_join(Cairo::Context::LineJoin::ROUND);
+    cr->move_to(home_x - house_width / 2, home_y - house_height / 2 + roof_height);
+    cr->line_to(home_x, home_y - house_height / 2);
+    cr->line_to(home_x + house_width / 2, home_y - house_height / 2 + roof_height);
+    cr->line_to(home_x + house_width / 2, home_y + house_height / 2);
+    cr->line_to(home_x - house_width / 2, home_y + house_height / 2);
+    cr->close_path();
+    if (m_home_hovered)
+        cr->set_source_rgba(0.35, 0.35, 0.35, 0.95);
+    else
+        cr->set_source_rgba(0.1, 0.1, 0.1, 0.78);
+    cr->fill_preserve();
+    cr->set_source_rgb(0, 0, 0);
+    cr->stroke();
+    cr->restore();
 }
 
 } // namespace dune3d

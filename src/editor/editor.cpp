@@ -211,6 +211,8 @@ void Editor::init()
         wv.m_cam_quat = ca.get_cam_quat();
         wv.m_center = ca.get_center();
         wv.m_projection = ca.get_projection();
+        if (m_sketch_editing)
+            canvas_update_keep_selection();
     });
 
     m_win.get_workspace_notebook().signal_switch_page().connect([this](Gtk::Widget *page, guint index) {
@@ -905,6 +907,52 @@ void Editor::update_selection_editor()
 
 void Editor::init_header_bar()
 {
+    {
+        auto menu = Gio::Menu::create();
+        auto actions = Gio::SimpleActionGroup::create();
+        actions->add_action("line", [this] { trigger_action(ToolID::DRAW_CONTOUR); });
+        actions->add_action("rectangle", [this] { trigger_action(ToolID::DRAW_RECTANGLE); });
+        actions->add_action("circle", [this] { trigger_action(ToolID::DRAW_CIRCLE_2D); });
+        actions->add_action("arc", [this] { trigger_action(ToolID::DRAW_ARC_2D); });
+        actions->add_action("polygon", [this] { trigger_action(ToolID::DRAW_REGULAR_POLYGON); });
+        actions->add_action("spline", [this] { trigger_action(ToolID::DRAW_BEZIER_2D); });
+        actions->add_action("point", [this] { trigger_action(ToolID::DRAW_POINT_2D); });
+        actions->add_action("text", [this] { trigger_action(ToolID::DRAW_TEXT); });
+        actions->add_action("sketch_dimension", [this] { trigger_action(ToolID::CONSTRAIN_DISTANCE); });
+        auto ellipse = actions->add_action("ellipse", [] {});
+        auto slot = actions->add_action("slot", [] {});
+        auto conic_curve = actions->add_action("conic_curve", [] {});
+        auto mirror = actions->add_action("mirror", [] {});
+        auto circular_pattern = actions->add_action("circular_pattern", [] {});
+        auto rectangular_pattern = actions->add_action("rectangular_pattern", [] {});
+        auto project_include = actions->add_action("project_include", [] {});
+        ellipse->set_enabled(false);
+        slot->set_enabled(false);
+        conic_curve->set_enabled(false);
+        mirror->set_enabled(false);
+        circular_pattern->set_enabled(false);
+        rectangular_pattern->set_enabled(false);
+        project_include->set_enabled(false);
+        m_win.insert_action_group("ribbon_create", actions);
+        menu->append("Line / Contour", "ribbon_create.line");
+        menu->append("Rectangle", "ribbon_create.rectangle");
+        menu->append("Circle", "ribbon_create.circle");
+        menu->append("Arc", "ribbon_create.arc");
+        menu->append("Polygon", "ribbon_create.polygon");
+        menu->append("Ellipse", "ribbon_create.ellipse");
+        menu->append("Slot", "ribbon_create.slot");
+        menu->append("Spline", "ribbon_create.spline");
+        menu->append("Conic Curve", "ribbon_create.conic_curve");
+        menu->append("Point", "ribbon_create.point");
+        menu->append("Text", "ribbon_create.text");
+        menu->append("Mirror", "ribbon_create.mirror");
+        menu->append("Circular Pattern", "ribbon_create.circular_pattern");
+        menu->append("Rectangular Pattern", "ribbon_create.rectangular_pattern");
+        menu->append("Project/Include", "ribbon_create.project_include");
+        menu->append("Sketch Dimension", "ribbon_create.sketch_dimension");
+        m_win.get_ribbon_sketch_create_menu_button().set_menu_model(menu);
+    }
+
     attach_action_button(m_win.get_open_button(), ActionID::OPEN_DOCUMENT);
     attach_action_sensitive(m_win.get_open_menu_button(), ActionID::OPEN_DOCUMENT);
     attach_action_button(m_win.get_new_button(), ActionID::NEW_DOCUMENT);
@@ -930,8 +978,8 @@ void Editor::init_header_bar()
     attach_action_button(m_win.get_ribbon_btn_text(), ToolID::DRAW_TEXT);
 
     attach_action_button(m_win.get_ribbon_btn_dimension(), ToolID::CONSTRAIN_DISTANCE);
-    attach_action_button(m_win.get_ribbon_sketch_btn_fillet(), ActionID::CREATE_GROUP_FILLET);
-    attach_action_button(m_win.get_ribbon_sketch_btn_chamfer(), ActionID::CREATE_GROUP_CHAMFER);
+    attach_action_button(m_win.get_ribbon_sketch_btn_fillet(), ToolID::SKETCH_FILLET);
+    attach_action_button(m_win.get_ribbon_sketch_btn_chamfer(), ToolID::SKETCH_CHAMFER);
     attach_action_button(m_win.get_ribbon_body_btn_measure(), ToolID::MEASURE_DISTANCE);
     attach_action_button(m_win.get_ribbon_sketch_btn_measure(), ToolID::MEASURE_DISTANCE);
     m_win.get_finish_sketch_button().signal_clicked().connect([this] {
@@ -1378,6 +1426,8 @@ void Editor::render_document(const IDocumentInfo &doc)
     renderer.m_first_group = m_update_groups_after;
     renderer.m_render_sketch_plane_selector = m_selecting_sketch_plane
                                                && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
+    renderer.m_render_sketch_grid = m_sketch_editing
+                                    && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
     renderer.m_render_extrusion_editor = m_extrude_editing
                                          && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
     renderer.m_sketch_plane_grid = m_sketch_plane_grid;
@@ -1848,6 +1898,14 @@ void Editor::set_current_group(const UUID &uu_group)
     CanvasUpdater canvas_updater{*this};
 
     m_core.set_current_group(uu_group);
+    auto &group = m_core.get_current_document().get_group(uu_group);
+    if (group.get_type() == Group::Type::SKETCH && !m_sketch_editing && group.m_active_wrkpl) {
+        auto &workplane = m_core.get_current_document().get_entity<EntityWorkplane>(group.m_active_wrkpl);
+        if (workplane.m_visible) {
+            workplane.m_visible = false;
+            m_core.set_needs_save();
+        }
+    }
     m_workspace_browser->update_current_group(get_current_document_views());
     update_workplane_label();
     m_constraints_box->update();

@@ -243,6 +243,8 @@ src_gui = files(
   'src/core/tools/tool_draw_regular_polygon.cpp',
   'src/core/tools/tool_draw_rectangle.cpp',
   'src/core/tools/tool_flip_arc.cpp',
+  'src/core/tools/tool_sketch_fillet.cpp',
+  'src/core/tools/tool_sketch_chamfer.cpp',
   'src/core/tools/tool_link_document.cpp',
   'src/core/tools/tool_create_cluster.cpp',
   'src/core/tools/tool_enter_text.cpp',

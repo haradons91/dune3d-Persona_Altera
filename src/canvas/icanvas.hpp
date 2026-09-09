@@ -31,7 +31,7 @@ public:
         THIN = (1 << 0),
     };
 
-    enum class Axis { NONE, X, Y, Z, PLANE, PLANE_HIGHLIGHT };
+    enum class Axis { NONE, X, Y, Z, PLANE, PLANE_HIGHLIGHT, SKETCH_X, SKETCH_Y };
 
     virtual void set_chunk(unsigned int chunk) = 0;
 
@@ -80,5 +80,8 @@ public:
 
     virtual void update_bbox() = 0;
     virtual glm::vec3 get_cam_normal() const = 0;
+    virtual float get_cam_distance() const = 0;
+    virtual float get_world_units_per_pixel() const = 0;
+    virtual glm::vec2 get_viewport_size() const = 0;
 };
 } // namespace dune3d

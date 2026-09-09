@@ -11,12 +11,14 @@ public:
 
     sigc::signal<void(const glm::quat &)> signal_quat_changed();
     sigc::signal<void(float)> signal_roll_changed();
+    sigc::signal<void()> signal_home_clicked();
 
 private:
     glm::quat m_quat;
     Glib::RefPtr<Pango::Layout> m_layout;
     float m_size = 5;
     int m_hovered_face = -1;
+    bool m_home_hovered = false;
     double m_last_x = 0;
     double m_last_y = 0;
     int m_width = 0;
@@ -29,6 +31,7 @@ private:
 
     sigc::signal<void(const glm::quat &)> m_signal_quat_changed;
     sigc::signal<void(float)> m_signal_roll_changed;
+    sigc::signal<void()> m_signal_home_clicked;
 
     void render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h);
     void create_layout();

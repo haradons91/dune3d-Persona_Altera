@@ -83,6 +83,8 @@ enum class ToolID {
     IMPORT_DXF,
     CREATE_CLUSTER,
     DRAW_TEXT,
+    SKETCH_FILLET,
+    SKETCH_CHAMFER,
     ENTER_TEXT,
     PASTE,
     CUT,

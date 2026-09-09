@@ -46,6 +46,16 @@ public:
         return m_signal_reset_body_color;
     }
 
+    type_signal_group_selected signal_export_body_stl()
+    {
+        return m_signal_export_body_stl;
+    }
+
+    type_signal_group_selected signal_export_body_step()
+    {
+        return m_signal_export_body_step;
+    }
+
     using type_signal_group_checked = sigc::signal<void(UUID, UUID, bool)>;
     using type_signal_document_checked = sigc::signal<void(UUID, bool)>;
     type_signal_group_checked signal_group_checked()
@@ -151,6 +161,8 @@ private:
     type_signal_group_selected m_signal_rename_body;
     type_signal_group_selected m_signal_set_body_color;
     type_signal_group_selected m_signal_reset_body_color;
+    type_signal_group_selected m_signal_export_body_stl;
+    type_signal_group_selected m_signal_export_body_step;
 
     type_signal_item_expanded m_signal_body_expanded;
 

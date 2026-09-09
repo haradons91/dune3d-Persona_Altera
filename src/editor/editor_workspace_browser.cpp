@@ -41,9 +41,10 @@ void Editor::init_workspace_browser()
             if (!m_sketch_editing)
                 m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
             m_sketch_editing = true;
-            const auto &sketch = m_core.get_current_document().get_group(uu_group);
+            auto &sketch = m_core.get_current_document().get_group(uu_group);
             if (sketch.m_active_wrkpl) {
-                const auto &workplane = m_core.get_current_document().get_entity<EntityWorkplane>(sketch.m_active_wrkpl);
+                auto &workplane = m_core.get_current_document().get_entity<EntityWorkplane>(sketch.m_active_wrkpl);
+                workplane.m_visible = true;
                 auto camera_quat = workplane.m_normal;
                 const auto &reference = m_core.get_current_document().get_reference_group();
                 if (sketch.m_active_wrkpl == reference.get_workplane_yz_uuid())
@@ -57,7 +58,7 @@ void Editor::init_workspace_browser()
         }
         else if (type == Group::Type::EXTRUDE) {
             m_sketch_editing = false;
-            m_extrude_editing = true;
+            m_extrude_editing = false;
         }
         else {
             return;
@@ -83,6 +84,10 @@ void Editor::init_workspace_browser()
             sigc::mem_fun(*this, &Editor::on_workspace_browser_reset_body_color));
     m_workspace_browser->signal_set_body_color().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_set_body_color));
+    m_workspace_browser->signal_export_body_stl().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_export_body_stl));
+    m_workspace_browser->signal_export_body_step().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_export_body_step));
     m_workspace_browser->signal_body_expanded().connect([this](const UUID &body_uu, bool expanded) {
         if (m_core.get_current_document()
                             .get_group(m_core.get_current_group())
@@ -332,6 +337,7 @@ void Editor::finish_sketch_plane_selection(const UUID &plane)
                       * glm::angleAxis(static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
     }
     get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
+    canvas_update();
 }
 
 void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned int face_idx)
@@ -381,7 +387,11 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     bool added = false;
     auto &workplane = doc.get_or_add_entity<EntityWorkplane>(UUID::random(), &added);
     workplane.m_origin = origin;
-    workplane.m_normal = quat_from_uv(u, v);
+    // Face normals are used for viewing the selected face, but the sketch
+    // workplane normal is the default extrusion direction.  Reverse its
+    // in-plane Y axis so a new extrusion grows away from the supporting
+    // solid instead of into it.
+    workplane.m_normal = quat_from_uv(u, -v);
     workplane.m_group = group.m_uuid;
     workplane.m_kind = ItemKind::USER;
     group.m_active_wrkpl = workplane.m_uuid;
@@ -403,7 +413,48 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     // View the selected face from its normal side. The workplane basis was
     // built from the face normal, so an additional 180-degree flip would
     // incorrectly show a top face from underneath.
-    get_canvas().animate_to_cam_quat(glm::quat(workplane.m_normal));
+    // Build the camera directly from the face normal.  Its local +Z axis is
+    // the camera position direction, while local +Y is chosen from world up
+    // so the object's physical bottom stays at the bottom of the view.
+    const auto face_direction = glm::normalize(glm::vec3(normal));
+    glm::vec3 camera_normal;
+    if (std::abs(face_direction.z) > 0.999f) {
+        double face_z = 0;
+        for (const auto &v : face.vertices)
+            face_z += v.z;
+        face_z /= face.vertices.size();
+
+        double model_min_z = std::numeric_limits<double>::max();
+        double model_max_z = std::numeric_limits<double>::lowest();
+        for (const auto &other_face : faces) {
+            for (const auto &v : other_face.vertices) {
+                model_min_z = std::min(model_min_z, static_cast<double>(v.z));
+                model_max_z = std::max(model_max_z, static_cast<double>(v.z));
+            }
+        }
+        camera_normal = face_z >= (model_min_z + model_max_z) / 2. ? glm::vec3(0, 0, 1)
+                                                                  : glm::vec3(0, 0, -1);
+    }
+    else {
+        // Side-face normals are oriented toward the opposite side for this
+        // view convention.
+        camera_normal = -face_direction;
+    }
+    const glm::vec3 world_up{0, 0, 1};
+    glm::vec3 camera_up;
+    if (std::abs(camera_normal.z) > 0.999f)
+        // Keep Front (+X) at the bottom of both horizontal views.
+        camera_up = {-1, 0, 0};
+    else
+        camera_up = world_up - camera_normal * glm::dot(world_up, camera_normal);
+    if (glm::length(camera_up) < 1e-6f)
+        camera_up = {0, 1, 0};
+    else
+        camera_up = glm::normalize(camera_up);
+    const auto camera_right = glm::normalize(glm::cross(camera_up, camera_normal));
+    const auto camera_quat = glm::quat_cast(glm::mat3(camera_right, camera_up, camera_normal));
+    get_canvas().animate_to_cam_quat(camera_quat);
+    canvas_update();
 }
 
 void Editor::finish_sketch()
@@ -411,8 +462,16 @@ void Editor::finish_sketch()
     if (!m_core.has_documents() || !force_end_tool())
         return;
     auto &doc = m_core.get_current_document();
-    if (doc.get_group(m_core.get_current_group()).get_type() != Group::Type::SKETCH)
+    auto &sketch = doc.get_group(m_core.get_current_group());
+    if (sketch.get_type() != Group::Type::SKETCH)
         return;
+    if (sketch.m_active_wrkpl) {
+        auto &workplane = doc.get_entity<EntityWorkplane>(sketch.m_active_wrkpl);
+        if (workplane.m_visible) {
+            workplane.m_visible = false;
+            m_core.set_needs_save();
+        }
+    }
     m_sketch_editing = false;
     update_sketch_mode_ui();
     canvas_update();

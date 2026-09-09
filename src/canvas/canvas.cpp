@@ -587,7 +587,9 @@ void Canvas::animate_zoom(float factor, ZoomCenter zoom_center)
 
 void Canvas::animate_zoom_internal(float factor, ZoomCenter zoom_center)
 {
-    const float zoom_base = 1.5;
+    // Make one wheel step a small increment. Ten steps now produce the
+    // approximately twofold zoom change that the previous single step used.
+    const float zoom_base = 1.0717734625f; // pow(2, 1 / 10)
     if (m_enable_animations) {
         if (factor == 0)
             return;
@@ -1793,7 +1795,7 @@ void Canvas::set_projection(Projection proj)
     m_signal_view_changed.emit();
 }
 
-static const float zoom_base = 1.5;
+static const float zoom_base = 1.0717734625f; // pow(2, 1 / 10)
 
 static float cam_dist_to_anim(float d)
 {

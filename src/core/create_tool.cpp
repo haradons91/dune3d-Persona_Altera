@@ -30,6 +30,8 @@
 #include "tools/tool_draw_rectangle.hpp"
 #include "tools/tool_constrain_lock_rotation.hpp"
 #include "tools/tool_flip_arc.hpp"
+#include "tools/tool_sketch_fillet.hpp"
+#include "tools/tool_sketch_chamfer.hpp"
 #include "tools/tool_constrain_point_in_workplane.hpp"
 #include "tools/tool_constrain_symmetric_hv.hpp"
 #include "tools/tool_constrain_symmetric_line.hpp"
@@ -86,6 +88,12 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
     case ToolID::DRAW_LINE_2D:
     case ToolID::DRAW_BEZIER_2D:
         return std::make_unique<ToolDrawContour>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_FILLET:
+        return std::make_unique<ToolSketchFillet>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_CHAMFER:
+        return std::make_unique<ToolSketchChamfer>(tool_id, *this, m_intf, flags);
 
     case ToolID::DELETE:
     case ToolID::CUT:
