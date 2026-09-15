@@ -33,10 +33,6 @@ void main() {
 		color_to_frag = vec3(0.0, 0.0, 0.0);
 	else if (axis_color_to_geom[0] == 6u)
 		color_to_frag = vec3(1.0, 1.0, 0.25);
-	else if (axis_color_to_geom[0] == 7u)
-		color_to_frag = vec3(0.9, 0.1, 0.1);
-	else if (axis_color_to_geom[0] == 8u)
-		color_to_frag = vec3(0.1, 0.7, 0.15);
 	else
 		color_to_frag = get_color(flags_to_geom[0]);
 	alpha_to_frag = (axis_color_to_geom[0] == 4u || axis_color_to_geom[0] == 5u || axis_color_to_geom[0] == 6u)
@@ -57,7 +53,9 @@ void main() {
 	vec2 o2 = vec2(-v.y, -v.x);
 	o2 /= length(o2);
 	o2 *= line_width/2;
-	if(FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_LINE_THIN))
+	if(FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_LINE_THINNER))
+		o2 *= .25;
+	else if(FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_LINE_THIN))
 		o2 *= .5;
 	
 	vec4 o = vec4((screen*vec3(o2,0)).xy, 0, 0);

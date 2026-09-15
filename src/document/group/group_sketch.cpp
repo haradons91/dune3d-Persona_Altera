@@ -9,7 +9,8 @@ GroupSketch::GroupSketch(const UUID &uu) : Group(uu)
 }
 
 GroupSketch::GroupSketch(const UUID &uu, const json &j)
-    : Group(uu, j), m_operation(j.value("operation", Operation::UNION))
+    : Group(uu, j), m_attached_to_face(j.value("attached_to_face", false)),
+      m_operation(j.value("operation", Operation::UNION))
 {
 }
 
@@ -17,6 +18,8 @@ json GroupSketch::serialize() const
 {
     auto j = Group::serialize();
     j["operation"] = m_operation;
+    if (m_attached_to_face)
+        j["attached_to_face"] = true;
     return j;
 }
 

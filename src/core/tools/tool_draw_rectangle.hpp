@@ -33,8 +33,10 @@ private:
     const class EntityWorkplane *m_wrkpl = nullptr;
 
     glm::dvec2 m_first_point;
-    enum class Mode { CENTER, CORNER };
+    enum class Mode { CENTER, CORNER, THREE_POINT };
     Mode m_mode = Mode::CORNER;
+    bool m_three_point_edge_set = false;
+    glm::dvec2 m_second_point;
     std::optional<ConstraintType> m_first_constraint;
     EntityAndPoint m_first_enp;
 

@@ -20,6 +20,7 @@
 #include "util/paths.hpp"
 #include "util/template_util.hpp"
 #include "logger/logger.hpp"
+#include "canvas/bitmap_font_util.hpp"
 #include <array>
 #include <iomanip>
 #include <ranges>
@@ -60,18 +61,31 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
     // The default camera distance is 100 and corresponds to a 25-unit major
     // interval. The grid follows the actual camera scale directly.
     constexpr double default_camera_distance = 100.0;
-    constexpr double default_major_spacing = 25.0;
     const double world_per_pixel = std::max<double>(m_ca.get_world_units_per_pixel(), 1e-9);
-    const double target_major = default_major_spacing * m_ca.get_cam_distance() / default_camera_distance;
-    const double exponent = std::floor(std::log10(target_major));
-    const double base = std::pow(10.0, exponent);
-    const double normalized = target_major / base;
-    const double major_multiplier = normalized <= 1.5   ? 1.0
-                                    : normalized <= 2.25 ? 2.0
-                                    : normalized <= 3.5  ? 2.5
-                                    : normalized <= 7.5  ? 5.0
-                                                         : 10.0;
-    const double label_spacing = base * major_multiplier;
+    // Canvas zoom changes the camera distance by 2^(1/10) per wheel step.
+    // Use explicit cumulative wheel-step thresholds because the requested
+    // grid intervals include both 2x and 5x changes.
+    const double zoom_ratio = std::max(m_ca.get_cam_distance() / default_camera_distance, 1e-12);
+    const int zoom_steps = static_cast<int>(std::llround(std::log2(zoom_ratio) * 10.0));
+    int grid_index = 10; // 25-unit interval at the default zoom.
+    constexpr std::array<int, 8> zoom_out_thresholds = {10, 20, 33, 43, 53, 66, 76, 86};
+    constexpr std::array<int, 10> zoom_in_thresholds = {23, 46, 56, 66, 89, 112, 122, 132, 155, 178};
+    if (zoom_steps >= 0) {
+        for (const auto threshold : zoom_out_thresholds) {
+            if (zoom_steps >= threshold)
+                grid_index++;
+        }
+    }
+    else {
+        for (const auto threshold : zoom_in_thresholds) {
+            if (-zoom_steps >= threshold)
+                grid_index--;
+        }
+    }
+    constexpr std::array<double, 19> grid_intervals = {
+            0.0001, 0.0005, 0.0025, 0.005, 0.01, 0.05, 0.25, 0.5, 1.0, 5.0,
+            25.0,   50.0,   100.0,  250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0};
+    const double label_spacing = grid_intervals.at(static_cast<size_t>(grid_index));
     const double major_spacing = label_spacing / 5.0;
     const bool show_minor_grid = label_spacing <= 25.0;
     const double minor_spacing = major_spacing / 5.0;
@@ -79,19 +93,38 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
     const auto viewport = m_ca.get_viewport_size();
     const double half_x = viewport.x * world_per_pixel / 2.0;
     const double half_y = viewport.y * world_per_pixel / 2.0;
-    const double visible_major_count = std::min(half_x, half_y) / label_spacing * 2.0;
-    const double half_extent = visible_major_count > 14.0
-                                       ? label_spacing * 5.0
-                                       : std::max(half_x, half_y) + label_spacing;
+    // Treat the grid as infinite, but generate only the square that can be
+    // visible around the current camera center, with one interval of margin.
+    // The diagonal radius also covers the viewport when the view is rolled.
+    const auto camera_center = wrkpl.project(glm::dvec3(m_ca.get_cam_center()));
+    const double half_extent = std::hypot(half_x, half_y) + label_spacing;
+    const double min_x = camera_center.x - half_extent;
+    const double max_x = camera_center.x + half_extent;
+    const double min_y = camera_center.y - half_extent;
+    const double max_y = camera_center.y + half_extent;
 
-    const auto to_world = [&wrkpl](double x, double y) { return wrkpl.transform({x, y}); };
-    const auto format_grid_value = [](double value) {
+    // Keep the grid just behind a supporting solid face.  This preserves the
+    // solid's depth occlusion while avoiding coplanar depth flicker.
+    const auto grid_offset = m_sketch_grid_offset.value_or(-wrkpl.get_normal_vector() * 1e-4);
+    const auto to_world = [&wrkpl, &grid_offset](double x, double y) {
+        return wrkpl.transform({x, y}) + grid_offset;
+    };
+    int label_precision = 0;
+    double precision_scale = 1.0;
+    while (label_precision < 8) {
+        const double scaled_interval = label_spacing * precision_scale;
+        if (std::abs(scaled_interval - std::round(scaled_interval)) < 1e-8)
+            break;
+        label_precision++;
+        precision_scale *= 10.0;
+    }
+    const auto format_grid_value = [label_precision](double value) {
         std::ostringstream stream;
-        if (std::abs(value - std::round(value)) < 1e-8) {
+        if (label_precision == 0) {
             stream << static_cast<long long>(std::llround(value));
         }
         else {
-            stream << std::fixed << std::setprecision(2) << value;
+            stream << std::fixed << std::setprecision(label_precision) << value;
         }
         return stream.str();
     };
@@ -99,58 +132,95 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
         m_ca.draw_line(to_world(x1, y1), to_world(x2, y2));
     };
 
-    const int first = static_cast<int>(std::floor(-half_extent / minor_spacing));
-    const int last = static_cast<int>(std::ceil(half_extent / minor_spacing));
+    const int first_x = static_cast<int>(std::floor(min_x / minor_spacing));
+    const int last_x = static_cast<int>(std::ceil(max_x / minor_spacing));
+    const int first_y = static_cast<int>(std::floor(min_y / minor_spacing));
+    const int last_y = static_cast<int>(std::ceil(max_y / minor_spacing));
     m_ca.save();
     m_ca.set_vertex_inactive(true);
     if (show_minor_grid) {
-        m_ca.set_line_style(ICanvas::LineStyle::THIN);
-        for (int i = first; i <= last; i++) {
-            if (i == 0)
-                continue;
+        m_ca.set_line_style(ICanvas::LineStyle::THINNER);
+        for (int i = first_x; i <= last_x; i++) {
             const double position = i * minor_spacing;
-            draw_grid_line(position, -half_extent, position, half_extent);
-            draw_grid_line(-half_extent, position, half_extent, position);
+            draw_grid_line(position, min_y, position, max_y);
+        }
+        for (int i = first_y; i <= last_y; i++) {
+            const double position = i * minor_spacing;
+            draw_grid_line(min_x, position, max_x, position);
         }
     }
 
     // Re-draw the major lines with the normal line width so they remain
     // visually distinct from the minor grid.
-    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
-    const int first_major_line = static_cast<int>(std::floor(-half_extent / major_spacing));
-    const int last_major_line = static_cast<int>(std::ceil(half_extent / major_spacing));
-    for (int i = first_major_line; i <= last_major_line; i++) {
-        if (i == 0)
-            continue;
+    m_ca.set_line_style(ICanvas::LineStyle::THIN);
+    const int first_major_x = static_cast<int>(std::floor(min_x / major_spacing));
+    const int last_major_x = static_cast<int>(std::ceil(max_x / major_spacing));
+    const int first_major_y = static_cast<int>(std::floor(min_y / major_spacing));
+    const int last_major_y = static_cast<int>(std::ceil(max_y / major_spacing));
+    for (int i = first_major_x; i <= last_major_x; i++) {
         const double position = i * major_spacing;
-        draw_grid_line(position, -half_extent, position, half_extent);
-        draw_grid_line(-half_extent, position, half_extent, position);
+        draw_grid_line(position, min_y, position, max_y);
+    }
+    for (int i = first_major_y; i <= last_major_y; i++) {
+        const double position = i * major_spacing;
+        draw_grid_line(min_x, position, max_x, position);
     }
 
     // Draw the sketch axes last so they remain visible over the light grid.
     m_ca.set_vertex_inactive(false);
-    // Use dedicated sketch colors; the regular workplane Axis::X/Y colors
-    // follow a legacy convention and do not match sketch X/Y colors.
-    m_ca.draw_axis_line(to_world(-half_extent, 0), to_world(half_extent, 0), ICanvas::Axis::SKETCH_X);
-    m_ca.draw_axis_line(to_world(0, -half_extent), to_world(0, half_extent), ICanvas::Axis::SKETCH_Y);
+    m_ca.draw_axis_line(to_world(min_x, 0), to_world(max_x, 0), ICanvas::Axis::X);
+    m_ca.draw_axis_line(to_world(0, min_y), to_world(0, max_y), ICanvas::Axis::Y);
 
     // Put scale labels alongside the major grid lines. The text is drawn in
     // the workplane so it follows the sketch when the plane is not XY.
-    m_ca.set_vertex_inactive(true);
+    m_ca.set_vertex_inactive(false);
     const auto label_normal = glm::quat(wrkpl.m_normal)
-                              * glm::angleAxis(static_cast<float>(M_PI), glm::vec3(0, 0, 1));
-    const float label_size = static_cast<float>(label_spacing * 0.18);
-    const double label_offset = show_minor_grid ? minor_spacing * 0.9 : major_spacing * 0.12;
-    const int first_label = static_cast<int>(std::ceil(-half_extent / label_spacing));
-    const int last_label = static_cast<int>(std::floor(half_extent / label_spacing));
-    for (int i = first_label; i <= last_label; i++) {
+                              * glm::angleAxis(static_cast<float>(M_PI) / 2, glm::vec3(0, 0, 1));
+    // Keep labels at a constant screen size while the grid interval changes.
+    // At the default camera distance, the previous 25-unit grid used 5% of
+    // the interval as its label size; scale that world size with zoom.
+    constexpr double default_label_size = 25.0 * 0.05;
+    const float label_size = static_cast<float>(default_label_size
+                                                * m_ca.get_cam_distance() / default_camera_distance);
+    const double label_offset = show_minor_grid ? minor_spacing * 0.25 : major_spacing * 0.05;
+    const double x_label_offset = show_minor_grid ? minor_spacing * 0.25 : major_spacing * 0.05;
+    const int first_label_x = static_cast<int>(std::ceil(min_x / label_spacing));
+    const int last_label_x = static_cast<int>(std::floor(max_x / label_spacing));
+    const int first_label_y = static_cast<int>(std::ceil(min_y / label_spacing));
+    const int last_label_y = static_cast<int>(std::floor(max_y / label_spacing));
+    for (int i = first_label_x; i <= last_label_x; i++) {
         if (i == 0)
             continue;
         const double value = i * label_spacing;
-        m_ca.draw_bitmap_text_3d(to_world(value, -label_offset), label_normal, label_size,
-                                 format_grid_value(value));
-        m_ca.draw_bitmap_text_3d(to_world(label_offset, value), label_normal, label_size,
-                                 format_grid_value(value));
+        const auto label = format_grid_value(value);
+        const float glyph_scale = label_size * .0546f;
+        float label_width = 0;
+        for (const auto codepoint : label) {
+            auto info = bitmap_font::get_glyph_info(codepoint);
+            if (!info.is_valid())
+                info = bitmap_font::get_glyph_info('?');
+            label_width += static_cast<float>(info.advance) * glyph_scale;
+        }
+        const auto x_label_origin = to_world(value, -x_label_offset)
+                                    + glm::dvec3(glm::rotate(label_normal, glm::vec3(-label_width, 0, 0)));
+        m_ca.draw_bitmap_text_3d(x_label_origin, label_normal, label_size, label);
+    }
+    for (int i = first_label_y; i <= last_label_y; i++) {
+        if (i == 0)
+            continue;
+        const double value = i * label_spacing;
+        const auto label = format_grid_value(value);
+        float label_width = 0;
+        const float glyph_scale = label_size * .0546f;
+        for (const auto codepoint : label) {
+            auto info = bitmap_font::get_glyph_info(codepoint);
+            if (!info.is_valid())
+                info = bitmap_font::get_glyph_info('?');
+            label_width += static_cast<float>(info.advance) * glyph_scale;
+        }
+        const auto y_label_origin = to_world(label_offset + label_size, value)
+                                    + glm::dvec3(glm::rotate(label_normal, glm::vec3(-label_width, 0, 0)));
+        m_ca.draw_bitmap_text_3d(y_label_origin, label_normal, label_size, label);
     }
     m_ca.restore();
 }
@@ -164,6 +234,13 @@ bool Renderer::group_is_visible(const UUID &uu) const
     if (m_current_body_group != &body.group && !m_doc_view->body_is_visible(body.group.m_uuid))
         return false;
     return true;
+}
+
+glm::dvec3 Renderer::get_sketch_geometry_offset() const
+{
+    if (m_is_current_document && m_current_group && m_current_group->get_type() == Group::Type::SKETCH)
+        return glm::dvec3(m_ca.get_cam_normal()) * 1e-4;
+    return {};
 }
 
 void Renderer::render(const Document &doc, const UUID &current_group, const IDocumentView &doc_view,
@@ -297,6 +374,9 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                     }
                 }
                 if (profile.vertices.size() >= 3) {
+                    const auto offset = glm::vec3(get_sketch_geometry_offset());
+                    for (auto &vertex : profile.vertices)
+                        vertex += face::Vertex{offset.x, offset.y, offset.z};
                     const auto normal = workplane.get_normal_vector();
                     for (size_t i = 0; i < profile.vertices.size(); i++)
                         profile.normals.emplace_back(normal.x, normal.y, normal.z);
@@ -398,7 +478,7 @@ void Renderer::render(const Entity &entity)
         const auto &reference = m_doc->get_reference_group();
         const bool selector_plane = m_render_sketch_plane_selector && workplane.m_group == reference.m_uuid;
         const bool active_grid_plane = m_sketch_plane_grid && *m_sketch_plane_grid == workplane.m_uuid;
-        const bool default_grid_plane = workplane.m_uuid == reference.get_workplane_zx_uuid();
+        const bool default_grid_plane = workplane.m_uuid == reference.get_workplane_xy_uuid();
         if ((!reference.m_show_origin || workplane.m_uuid != reference.get_workplane_xy_uuid()) && !selector_plane
             && !active_grid_plane && !default_grid_plane)
             return;
@@ -452,8 +532,9 @@ void Renderer::visit(const EntityLine3D &line)
 void Renderer::visit(const EntityLine2D &line)
 {
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(line.m_wrkpl));
-    const auto p1 = wrkpl.transform(line.m_p1);
-    const auto p2 = wrkpl.transform(line.m_p2);
+    const auto offset = get_sketch_geometry_offset();
+    const auto p1 = wrkpl.transform(line.m_p1) + offset;
+    const auto p2 = wrkpl.transform(line.m_p2) + offset;
     m_ca.add_selectable(m_ca.draw_line(p1, p2), SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 0});
     m_ca.add_selectable(m_ca.draw_point(p1), SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 1});
     m_ca.add_selectable(m_ca.draw_point(p2), SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 2});
@@ -462,7 +543,7 @@ void Renderer::visit(const EntityLine2D &line)
 void Renderer::visit(const EntityPoint2D &point)
 {
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(point.m_wrkpl));
-    const auto p = wrkpl.transform(point.m_p);
+    const auto p = wrkpl.transform(point.m_p) + get_sketch_geometry_offset();
     m_ca.add_selectable(m_ca.draw_point(p), SelectableRef{SelectableRef::Type::ENTITY, point.m_uuid, 0});
 }
 
@@ -513,13 +594,14 @@ private:
 void Renderer::visit(const EntityArc2D &arc)
 {
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(arc.m_wrkpl));
+    const auto offset = get_sketch_geometry_offset();
 
     {
         ArcDiscretizer ad{arc};
 
         glm ::dvec2 p0, p1;
         while (ad.next(p0, p1)) {
-            m_ca.add_selectable(m_ca.draw_line(wrkpl.transform(p0), wrkpl.transform(p1)),
+            m_ca.add_selectable(m_ca.draw_line(wrkpl.transform(p0) + offset, wrkpl.transform(p1) + offset),
                                 SelectableRef{SelectableRef::Type::ENTITY, arc.m_uuid, 0});
         }
     }
@@ -545,17 +627,18 @@ void Renderer::visit(const EntityArc2D &arc)
         }
     }
 
-    m_ca.add_selectable(m_ca.draw_point(wrkpl.transform(arc.m_from)),
+    m_ca.add_selectable(m_ca.draw_point(wrkpl.transform(arc.m_from) + offset),
                         SelectableRef{SelectableRef::Type::ENTITY, arc.m_uuid, 1});
-    m_ca.add_selectable(m_ca.draw_point(wrkpl.transform(arc.m_to)),
+    m_ca.add_selectable(m_ca.draw_point(wrkpl.transform(arc.m_to) + offset),
                         SelectableRef{SelectableRef::Type::ENTITY, arc.m_uuid, 2});
-    m_ca.add_selectable(m_ca.draw_point(wrkpl.transform(arc.m_center), IconID::POINT_CROSS),
+    m_ca.add_selectable(m_ca.draw_point(wrkpl.transform(arc.m_center) + offset, IconID::POINT_CROSS),
                         SelectableRef{SelectableRef::Type::ENTITY, arc.m_uuid, 3});
 }
 
 void Renderer::visit(const EntityCircle2D &circle)
 {
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(circle.m_wrkpl));
+    const auto offset = get_sketch_geometry_offset();
 
     {
         unsigned int segments = 64;
@@ -566,13 +649,13 @@ void Renderer::visit(const EntityCircle2D &circle)
         while (segments--) {
             const auto p0 = circle.m_center + euler(circle.m_radius, a);
             const auto p1 = circle.m_center + euler(circle.m_radius, a + dphi);
-            m_ca.add_selectable(m_ca.draw_line(wrkpl.transform(p0), wrkpl.transform(p1)),
+            m_ca.add_selectable(m_ca.draw_line(wrkpl.transform(p0) + offset, wrkpl.transform(p1) + offset),
                                 SelectableRef{SelectableRef::Type::ENTITY, circle.m_uuid, 0});
             a += dphi;
         }
     }
 
-    m_ca.add_selectable(m_ca.draw_point(wrkpl.transform(circle.m_center), IconID::POINT_CROSS),
+    m_ca.add_selectable(m_ca.draw_point(wrkpl.transform(circle.m_center) + offset, IconID::POINT_CROSS),
                         SelectableRef{SelectableRef::Type::ENTITY, circle.m_uuid, 1});
 }
 void Renderer::visit(const EntityCircle3D &circle)
@@ -643,7 +726,7 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
         return;
 
     if (m_workspace_view->hide_irrelevant_workplanes() && !m_render_sketch_plane_selector && !m_sketch_plane_grid
-        && wrkpl.m_uuid != m_doc->get_reference_group().get_workplane_zx_uuid()) {
+        && wrkpl.m_uuid != m_doc->get_reference_group().get_workplane_xy_uuid()) {
         if (wrkpl.m_group != m_current_group->m_uuid && wrkpl.m_uuid != m_current_group->m_active_wrkpl)
             return;
     }
@@ -657,12 +740,12 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
     if (m_render_sketch_plane_selector && is_reference_plane) {
         constexpr double gap = 1.5;
         constexpr double size = 5.5;
-        const bool move_yz_tile = wrkpl.m_uuid == reference.get_workplane_yz_uuid();
-        const bool move_xy_tile = wrkpl.m_uuid == reference.get_workplane_zx_uuid();
-        const double tile_x0 = move_xy_tile ? -(gap + size) : gap;
-        const double tile_x1 = move_xy_tile ? -gap : gap + size;
-        const double tile_y0 = move_yz_tile ? -(gap + size) : gap;
-        const double tile_y1 = move_yz_tile ? -gap : gap + size;
+        // Keep the selector tiles in their positive local quadrants:
+        // XY toward +X/+Y, YZ toward +Y/+Z, and XZ toward +Z/+X.
+        const double tile_x0 = gap;
+        const double tile_x1 = gap + size;
+        const double tile_y0 = gap;
+        const double tile_y1 = gap + size;
         const std::array<glm::vec2, 4> tile = {
                 glm::vec2(tile_x0, tile_y0),
                 glm::vec2(tile_x1, tile_y0),
@@ -675,7 +758,7 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
         const bool hover_is_other_reference_plane = m_sketch_plane_hovered
                                                     && is_reference_plane_uuid(*m_sketch_plane_hovered)
                                                     && *m_sketch_plane_hovered != wrkpl.m_uuid;
-        const bool highlight_default_xy = wrkpl.m_uuid == reference.get_workplane_zx_uuid()
+        const bool highlight_default_xy = wrkpl.m_uuid == reference.get_workplane_xy_uuid()
                                           && !hover_is_other_reference_plane;
         face::Face selector_face;
         const auto normal = glm::normalize(wrkpl.get_normal_vector());
@@ -706,7 +789,7 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
                             SelectableRef{SelectableRef::Type::ENTITY, wrkpl.m_uuid, 1});
         if (is_reference_plane && wrkpl.m_uuid == reference.get_workplane_xy_uuid()) {
             constexpr float axis_length = 10.0f;
-            m_ca.draw_axis_line(wrkpl.m_origin, wrkpl.m_origin + glm::dvec3(-axis_length, 0, 0), ICanvas::Axis::X);
+            m_ca.draw_axis_line(wrkpl.m_origin, wrkpl.m_origin + glm::dvec3(axis_length, 0, 0), ICanvas::Axis::X);
             m_ca.draw_axis_line(wrkpl.m_origin, wrkpl.m_origin + glm::dvec3(0, axis_length, 0), ICanvas::Axis::Y);
             m_ca.draw_axis_line(wrkpl.m_origin, wrkpl.m_origin + glm::dvec3(0, 0, axis_length), ICanvas::Axis::Z);
         }

@@ -2,6 +2,12 @@
 #include "tools/tool_draw_line_3d.hpp"
 #include "tools/tool_draw_point_2d.hpp"
 #include "tools/tool_draw_circle_2d.hpp"
+#include "tools/tool_draw_tangent_circle.hpp"
+#include "tools/tool_draw_three_tangent_circle.hpp"
+#include "tools/tool_draw_slot.hpp"
+#include "tools/tool_project_sketch_geometry.hpp"
+#include "tools/tool_draw_ellipse.hpp"
+#include "tools/tool_draw_conic.hpp"
 #include "tools/tool_draw_point_2d.hpp"
 #include "tools/tool_draw_contour.hpp"
 #include "tools/tool_delete.hpp"
@@ -77,7 +83,31 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
         return std::make_unique<ToolDrawLine3D>(tool_id, *this, m_intf, flags);
 
     case ToolID::DRAW_CIRCLE_2D:
+    case ToolID::DRAW_CIRCLE_2_POINT:
+    case ToolID::DRAW_CIRCLE_3_POINT:
         return std::make_unique<ToolDrawCircle2D>(tool_id, *this, m_intf, flags);
+
+    case ToolID::DRAW_CIRCLE_2_TANGENT:
+        return std::make_unique<ToolDrawTangentCircle>(tool_id, *this, m_intf, flags);
+
+    case ToolID::DRAW_CIRCLE_3_TANGENT:
+        return std::make_unique<ToolDrawThreeTangentCircle>(tool_id, *this, m_intf, flags);
+
+    case ToolID::DRAW_SLOT_CENTER_TO_CENTER:
+    case ToolID::DRAW_SLOT_OVERALL:
+    case ToolID::DRAW_SLOT_CENTER_POINT:
+    case ToolID::DRAW_SLOT_3_POINT_ARC:
+    case ToolID::DRAW_SLOT_CENTER_POINT_ARC:
+        return std::make_unique<ToolDrawSlot>(tool_id, *this, m_intf, flags);
+
+    case ToolID::PROJECT_SKETCH_GEOMETRY:
+        return std::make_unique<ToolProjectSketchGeometry>(tool_id, *this, m_intf, flags);
+
+    case ToolID::DRAW_ELLIPSE:
+        return std::make_unique<ToolDrawEllipse>(tool_id, *this, m_intf, flags);
+
+    case ToolID::DRAW_CONIC_CURVE:
+        return std::make_unique<ToolDrawConic>(tool_id, *this, m_intf, flags);
 
     case ToolID::DRAW_POINT_2D:
         return std::make_unique<ToolDrawPoint2D>(tool_id, *this, m_intf, flags);
@@ -85,6 +115,9 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
     case ToolID::DRAW_CONTOUR:
     case ToolID::DRAW_CONTOUR_FROM_POINT:
     case ToolID::DRAW_ARC_2D:
+    case ToolID::DRAW_ARC_3_POINT:
+    case ToolID::DRAW_ARC_CENTER_POINT:
+    case ToolID::DRAW_ARC_TANGENT:
     case ToolID::DRAW_LINE_2D:
     case ToolID::DRAW_BEZIER_2D:
         return std::make_unique<ToolDrawContour>(tool_id, *this, m_intf, flags);
@@ -186,6 +219,8 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
         return std::make_unique<ToolDrawRegularPolygon>(tool_id, *this, m_intf, flags);
 
     case ToolID::DRAW_RECTANGLE:
+    case ToolID::DRAW_RECTANGLE_CENTER:
+    case ToolID::DRAW_RECTANGLE_3_POINT:
         return std::make_unique<ToolDrawRectangle>(tool_id, *this, m_intf, flags);
 
     case ToolID::CONSTRAIN_POINT_IN_PLANE:

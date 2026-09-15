@@ -127,6 +127,7 @@ public:
 
     Gtk::Button &get_ribbon_btn_sketch() { return *m_ribbon_btn_sketch; }
     Gtk::Box &get_ribbon_create_group() { return *m_ribbon_create_group; }
+    Gtk::MenuButton &get_ribbon_create_menu_button() { return *m_ribbon_create_menu_button; }
     Gtk::Box &get_ribbon_modify_group() { return *m_ribbon_modify_group; }
     Gtk::Box &get_ribbon_sketch_group() { return *m_ribbon_sketch_group; }
     Gtk::MenuButton &get_ribbon_sketch_create_menu_button() { return *m_ribbon_sketch_create_menu_button; }
@@ -258,6 +259,7 @@ private:
 
     Gtk::Button *m_ribbon_btn_sketch = nullptr;
     Gtk::Box *m_ribbon_create_group = nullptr;
+    Gtk::MenuButton *m_ribbon_create_menu_button = nullptr;
     Gtk::Box *m_ribbon_modify_group = nullptr;
     Gtk::Box *m_ribbon_sketch_group = nullptr;
     Gtk::MenuButton *m_ribbon_sketch_create_menu_button = nullptr;

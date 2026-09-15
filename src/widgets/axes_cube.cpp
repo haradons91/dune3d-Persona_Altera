@@ -119,13 +119,13 @@ static Model generate_model()
     };
 
     // faces
-    add_face({1 * 3 + 0, 5 * 3 + 0, 7 * 3 + 0, 3 * 3 + 0}, "−X", get_color(0, -1.0f), "Back",
+    add_face({1 * 3 + 0, 5 * 3 + 0, 7 * 3 + 0, 3 * 3 + 0}, "−X", get_color(0, -1.0f), "Left",
              glm::quat(glm::vec3(0, -glm::pi<float>() / 2, 0)));
-    add_face({0 * 3 + 0, 2 * 3 + 0, 6 * 3 + 0, 4 * 3 + 0}, "+X", get_color(0, 1.0f), "Front",
+    add_face({0 * 3 + 0, 2 * 3 + 0, 6 * 3 + 0, 4 * 3 + 0}, "+X", get_color(0, 1.0f), "Right",
              glm::quat(glm::vec3(0, glm::pi<float>() / 2, 0)));
-    add_face({2 * 3 + 1, 3 * 3 + 1, 7 * 3 + 1, 6 * 3 + 1}, "−Y", get_color(1, -1.0f), "Left",
+    add_face({2 * 3 + 1, 3 * 3 + 1, 7 * 3 + 1, 6 * 3 + 1}, "−Y", get_color(1, -1.0f), "Front",
              glm::quat(glm::vec3(glm::pi<float>() / 2, 0, 0)));
-    add_face({0 * 3 + 1, 4 * 3 + 1, 5 * 3 + 1, 1 * 3 + 1}, "+Y", get_color(1, 1.0f), "Right",
+    add_face({0 * 3 + 1, 4 * 3 + 1, 5 * 3 + 1, 1 * 3 + 1}, "+Y", get_color(1, 1.0f), "Back",
              glm::quat(glm::vec3(-glm::pi<float>() / 2, 0, 0)));
     add_face({4 * 3 + 2, 6 * 3 + 2, 7 * 3 + 2, 5 * 3 + 2}, "−Z", get_color(2, -1.0f), "Bottom",
              glm::quat(glm::vec3(0, glm::pi<float>(), 0)));

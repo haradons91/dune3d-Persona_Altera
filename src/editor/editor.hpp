@@ -197,6 +197,7 @@ private:
     std::optional<UUID> m_sketch_plane_grid;
     bool m_restore_sketch_plane_cam_on_undo = false;
     std::optional<UUID> m_sketch_plane_created_group;
+    std::optional<glm::dvec3> m_sketch_grid_offset;
     UUID m_sketch_plane_current_group;
     WorkspaceBrowserAddGroupMode m_sketch_plane_add_group_mode;
 

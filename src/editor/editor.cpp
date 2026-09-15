@@ -17,6 +17,7 @@
 #include "document/entity/entity_workplane.hpp"
 #include "document/group/group_reference.hpp"
 #include "document/group/group_extrude.hpp"
+#include "document/group/group_sketch.hpp"
 #include "logger/logger.hpp"
 #include "document/constraint/constraint.hpp"
 #include "util/fs_util.hpp"
@@ -66,9 +67,7 @@ void Editor::init()
         UUID plane_uuid;
         switch (plane) {
         case SketchPlaneSelector::Plane::XY:
-            // The reference workplanes retain their historical internal
-            // names, but the workplane named XY is the actual top plane.
-            plane_uuid = reference.get_workplane_zx_uuid();
+            plane_uuid = reference.get_workplane_xy_uuid();
             break;
         case SketchPlaneSelector::Plane::YZ:
             plane_uuid = reference.get_workplane_yz_uuid();
@@ -910,47 +909,128 @@ void Editor::init_header_bar()
     {
         auto menu = Gio::Menu::create();
         auto actions = Gio::SimpleActionGroup::create();
+        actions->add_action("sketch", [this] { trigger_action(ActionID::CREATE_GROUP_SKETCH); });
+        actions->add_action("extrude", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
+        actions->add_action("revolve", [this] { trigger_action(ActionID::CREATE_GROUP_REVOLVE); });
+        actions->add_action("sweep", [this] { trigger_action(ActionID::CREATE_GROUP_PIPE); });
+        actions->add_action("loft", [this] { trigger_action(ActionID::CREATE_GROUP_LOFT); });
+        actions->add_action("rectangular_pattern", [this] { trigger_action(ActionID::CREATE_GROUP_LINEAR_ARRAY); });
+        actions->add_action("circular_pattern", [this] { trigger_action(ActionID::CREATE_GROUP_POLAR_ARRAY); });
+        actions->add_action("mirror", [this] { trigger_action(ActionID::CREATE_GROUP_MIRROR_HORIZONTAL); });
+        actions->add_action("rib", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
+        actions->add_action("web", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
+        actions->add_action("hole", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
+        actions->add_action("thread", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
+        actions->add_action("emboss", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
+        m_win.insert_action_group("ribbon_create_features", actions);
+        menu->append("Sketch", "ribbon_create_features.sketch");
+        menu->append("Extrude", "ribbon_create_features.extrude");
+        menu->append("Revolve", "ribbon_create_features.revolve");
+        menu->append("Sweep", "ribbon_create_features.sweep");
+        menu->append("Loft", "ribbon_create_features.loft");
+        menu->append("Rib", "ribbon_create_features.rib");
+        menu->append("Web", "ribbon_create_features.web");
+        menu->append("Hole", "ribbon_create_features.hole");
+        menu->append("Thread", "ribbon_create_features.thread");
+        menu->append("Emboss", "ribbon_create_features.emboss");
+        menu->append("Rectangular Pattern", "ribbon_create_features.rectangular_pattern");
+        menu->append("Circular Pattern", "ribbon_create_features.circular_pattern");
+        menu->append("Mirror", "ribbon_create_features.mirror");
+        auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_create_menu_button().set_popover(*popover);
+    }
+    {
+        auto menu = Gio::Menu::create();
+        auto actions = Gio::SimpleActionGroup::create();
         actions->add_action("line", [this] { trigger_action(ToolID::DRAW_CONTOUR); });
-        actions->add_action("rectangle", [this] { trigger_action(ToolID::DRAW_RECTANGLE); });
+        actions->add_action("rectangle_2_point", [this] { trigger_action(ToolID::DRAW_RECTANGLE); });
         actions->add_action("circle", [this] { trigger_action(ToolID::DRAW_CIRCLE_2D); });
-        actions->add_action("arc", [this] { trigger_action(ToolID::DRAW_ARC_2D); });
+        actions->add_action("arc", [this] { trigger_action(ToolID::DRAW_ARC_3_POINT); });
         actions->add_action("polygon", [this] { trigger_action(ToolID::DRAW_REGULAR_POLYGON); });
         actions->add_action("spline", [this] { trigger_action(ToolID::DRAW_BEZIER_2D); });
         actions->add_action("point", [this] { trigger_action(ToolID::DRAW_POINT_2D); });
         actions->add_action("text", [this] { trigger_action(ToolID::DRAW_TEXT); });
         actions->add_action("sketch_dimension", [this] { trigger_action(ToolID::CONSTRAIN_DISTANCE); });
-        auto ellipse = actions->add_action("ellipse", [] {});
-        auto slot = actions->add_action("slot", [] {});
-        auto conic_curve = actions->add_action("conic_curve", [] {});
-        auto mirror = actions->add_action("mirror", [] {});
-        auto circular_pattern = actions->add_action("circular_pattern", [] {});
-        auto rectangular_pattern = actions->add_action("rectangular_pattern", [] {});
-        auto project_include = actions->add_action("project_include", [] {});
-        ellipse->set_enabled(false);
-        slot->set_enabled(false);
-        conic_curve->set_enabled(false);
-        mirror->set_enabled(false);
-        circular_pattern->set_enabled(false);
-        rectangular_pattern->set_enabled(false);
-        project_include->set_enabled(false);
+        actions->add_action("rectangle_3_point", [this] { trigger_action(ToolID::DRAW_RECTANGLE_3_POINT); });
+        actions->add_action("rectangle_center", [this] { trigger_action(ToolID::DRAW_RECTANGLE_CENTER); });
+        actions->add_action("slot", [this] { trigger_action(ToolID::DRAW_SLOT_CENTER_TO_CENTER); });
+        actions->add_action("circle_2_point", [this] { trigger_action(ToolID::DRAW_CIRCLE_2_POINT); });
+        actions->add_action("circle_3_point", [this] { trigger_action(ToolID::DRAW_CIRCLE_3_POINT); });
+        actions->add_action("circle_2_tangent", [this] { trigger_action(ToolID::DRAW_CIRCLE_2_TANGENT); });
+        actions->add_action("circle_3_tangent", [this] { trigger_action(ToolID::DRAW_CIRCLE_3_TANGENT); });
+        actions->add_action("arc_center_point", [this] { trigger_action(ToolID::DRAW_ARC_CENTER_POINT); });
+        actions->add_action("arc_tangent", [this] { trigger_action(ToolID::DRAW_ARC_TANGENT); });
+        actions->add_action("polygon_inscribed", [this] { trigger_action(ToolID::DRAW_REGULAR_POLYGON); });
+        actions->add_action("polygon_edge", [this] { trigger_action(ToolID::DRAW_REGULAR_POLYGON); });
+        actions->add_action("slot_overall", [this] { trigger_action(ToolID::DRAW_SLOT_OVERALL); });
+        actions->add_action("slot_center_point", [this] { trigger_action(ToolID::DRAW_SLOT_CENTER_POINT); });
+        actions->add_action("slot_3_point_arc", [this] { trigger_action(ToolID::DRAW_SLOT_3_POINT_ARC); });
+        actions->add_action("slot_center_point_arc", [this] { trigger_action(ToolID::DRAW_SLOT_CENTER_POINT_ARC); });
+        actions->add_action("spline_control_point", [this] { trigger_action(ToolID::DRAW_BEZIER_2D); });
+        actions->add_action("project", [this] { trigger_action(ToolID::PROJECT_SKETCH_GEOMETRY); });
+        actions->add_action("intersect", [this] { trigger_action(ToolID::PROJECT_SKETCH_GEOMETRY); });
+        actions->add_action("include_3d_geometry", [this] { trigger_action(ToolID::PROJECT_SKETCH_GEOMETRY); });
+        actions->add_action("project_to_surface", [this] { trigger_action(ToolID::PROJECT_SKETCH_GEOMETRY); });
+        actions->add_action("intersection_curve", [this] { trigger_action(ToolID::PROJECT_SKETCH_GEOMETRY); });
+        actions->add_action("ellipse", [this] { trigger_action(ToolID::DRAW_ELLIPSE); });
+        auto conic_curve = actions->add_action("conic_curve", [this] { trigger_action(ToolID::DRAW_CONIC_CURVE); });
+        auto mirror = actions->add_action("mirror", [this] { trigger_action(ActionID::CREATE_GROUP_MIRROR_HORIZONTAL); });
+        auto circular_pattern =
+                actions->add_action("circular_pattern", [this] { trigger_action(ActionID::CREATE_GROUP_POLAR_ARRAY); });
+        auto rectangular_pattern = actions->add_action(
+                "rectangular_pattern", [this] { trigger_action(ActionID::CREATE_GROUP_LINEAR_ARRAY); });
         m_win.insert_action_group("ribbon_create", actions);
         menu->append("Line / Contour", "ribbon_create.line");
-        menu->append("Rectangle", "ribbon_create.rectangle");
-        menu->append("Circle", "ribbon_create.circle");
-        menu->append("Arc", "ribbon_create.arc");
-        menu->append("Polygon", "ribbon_create.polygon");
+        auto rectangle_menu = Gio::Menu::create();
+        rectangle_menu->append("2-Point Rectangle", "ribbon_create.rectangle_2_point");
+        rectangle_menu->append("3-Point Rectangle", "ribbon_create.rectangle_3_point");
+        rectangle_menu->append("Center Rectangle", "ribbon_create.rectangle_center");
+        menu->append_submenu("Rectangle", rectangle_menu);
+        auto circle_menu = Gio::Menu::create();
+        circle_menu->append("Center Diameter Circle", "ribbon_create.circle");
+        circle_menu->append("2-Point Circle", "ribbon_create.circle_2_point");
+        circle_menu->append("3-Point Circle", "ribbon_create.circle_3_point");
+        circle_menu->append("2-Tangent Circle", "ribbon_create.circle_2_tangent");
+        circle_menu->append("3-Tangent Circle", "ribbon_create.circle_3_tangent");
+        menu->append_submenu("Circle", circle_menu);
+        auto arc_menu = Gio::Menu::create();
+        arc_menu->append("3-Point Arc", "ribbon_create.arc");
+        arc_menu->append("Center Point Arc", "ribbon_create.arc_center_point");
+        arc_menu->append("Tangent Arc", "ribbon_create.arc_tangent");
+        menu->append_submenu("Arc", arc_menu);
+        auto polygon_menu = Gio::Menu::create();
+        polygon_menu->append("Circumscribed Polygon", "ribbon_create.polygon");
+        polygon_menu->append("Inscribed Polygon", "ribbon_create.polygon_inscribed");
+        polygon_menu->append("Edge Polygon", "ribbon_create.polygon_edge");
+        menu->append_submenu("Polygon", polygon_menu);
         menu->append("Ellipse", "ribbon_create.ellipse");
-        menu->append("Slot", "ribbon_create.slot");
-        menu->append("Spline", "ribbon_create.spline");
+        auto slot_menu = Gio::Menu::create();
+        slot_menu->append("Center to Center Slot", "ribbon_create.slot");
+        slot_menu->append("Overall Slot", "ribbon_create.slot_overall");
+        slot_menu->append("Center Point Slot", "ribbon_create.slot_center_point");
+        slot_menu->append("3 Point Arc Slot", "ribbon_create.slot_3_point_arc");
+        slot_menu->append("Center Point Arc Slot", "ribbon_create.slot_center_point_arc");
+        menu->append_submenu("Slot", slot_menu);
+        auto spline_menu = Gio::Menu::create();
+        spline_menu->append("Fit Point Spline", "ribbon_create.spline");
+        spline_menu->append("Control Point Spline", "ribbon_create.spline_control_point");
+        menu->append_submenu("Spline", spline_menu);
         menu->append("Conic Curve", "ribbon_create.conic_curve");
         menu->append("Point", "ribbon_create.point");
         menu->append("Text", "ribbon_create.text");
         menu->append("Mirror", "ribbon_create.mirror");
         menu->append("Circular Pattern", "ribbon_create.circular_pattern");
         menu->append("Rectangular Pattern", "ribbon_create.rectangular_pattern");
-        menu->append("Project/Include", "ribbon_create.project_include");
+        auto project_include_menu = Gio::Menu::create();
+        project_include_menu->append("Project", "ribbon_create.project");
+        project_include_menu->append("Intersect", "ribbon_create.intersect");
+        project_include_menu->append("Include 3D Geometry", "ribbon_create.include_3d_geometry");
+        project_include_menu->append("Project To Surface", "ribbon_create.project_to_surface");
+        project_include_menu->append("Intersection Curve", "ribbon_create.intersection_curve");
+        menu->append_submenu("Project/Include", project_include_menu);
         menu->append("Sketch Dimension", "ribbon_create.sketch_dimension");
-        m_win.get_ribbon_sketch_create_menu_button().set_menu_model(menu);
+        auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_sketch_create_menu_button().set_popover(*popover);
     }
 
     attach_action_button(m_win.get_open_button(), ActionID::OPEN_DOCUMENT);
@@ -1431,6 +1511,7 @@ void Editor::render_document(const IDocumentInfo &doc)
     renderer.m_render_extrusion_editor = m_extrude_editing
                                          && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
     renderer.m_sketch_plane_grid = m_sketch_plane_grid;
+    renderer.m_sketch_grid_offset = m_sketch_grid_offset;
     if (renderer.m_render_sketch_plane_selector) {
         if (auto hover = get_canvas().get_hover_selection(); hover && hover->type == SelectableRef::Type::ENTITY)
             renderer.m_sketch_plane_hovered = hover->item;
@@ -1562,6 +1643,15 @@ void Editor::handle_cursor_move()
                 workplane.m_origin, get_canvas().get_cam_normal());
         const auto distance = glm::dot(cursor_on_screen_plane - workplane.m_origin, m_extrude_drag_direction);
         group.m_dvec = m_extrude_drag_direction * (m_extrude_initial_length + distance - m_extrude_drag_start);
+        if (doc.get_groups().contains(group.m_source_group)) {
+            if (const auto *sketch = dynamic_cast<const GroupSketch *>(&doc.get_group(group.m_source_group));
+                sketch && sketch->m_attached_to_face) {
+                const auto normal = workplane.get_normal_vector();
+                group.m_operation = glm::dot(group.m_dvec, normal) < 0
+                                             ? IGroupSolidModel::Operation::DIFFERENCE
+                                             : IGroupSolidModel::Operation::UNION;
+            }
+        }
         doc.set_group_generate_pending(group.m_uuid);
         doc.update_pending();
         m_extrude_drag_changed = true;

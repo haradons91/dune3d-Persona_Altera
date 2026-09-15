@@ -1,4 +1,5 @@
 #include "tool_draw_circle_2d.hpp"
+#include "core/tool_id.hpp"
 #include "document/document.hpp"
 #include "document/entity/entity_circle2d.hpp"
 #include "document/entity/entity_workplane.hpp"
@@ -29,11 +30,42 @@ glm::dvec2 ToolDrawCircle2D::get_cursor_pos_in_plane() const
     return m_wrkpl->project(get_cursor_pos_for_workplane(*m_wrkpl));
 }
 
+bool ToolDrawCircle2D::update_three_point_circle(const glm::dvec2 &third_point)
+{
+    const auto a = m_first_point;
+    const auto b = m_second_point;
+    const auto d = 2. * (a.x * (b.y - third_point.y) + b.x * (third_point.y - a.y)
+                          + third_point.x * (a.y - b.y));
+    if (std::abs(d) <= 1e-12) {
+        m_temp_circle->m_radius = 0;
+        return false;
+    }
+
+    m_temp_circle->m_center = {
+            (glm::dot(a, a) * (b.y - third_point.y) + glm::dot(b, b) * (third_point.y - a.y)
+             + glm::dot(third_point, third_point) * (a.y - b.y))
+                    / d,
+            (glm::dot(a, a) * (third_point.x - b.x) + glm::dot(b, b) * (a.x - third_point.x)
+             + glm::dot(third_point, third_point) * (b.x - a.x))
+                    / d};
+    m_temp_circle->m_radius = glm::length(third_point - m_temp_circle->m_center);
+    return true;
+}
+
 ToolResponse ToolDrawCircle2D::update(const ToolArgs &args)
 {
     if (args.type == ToolEventType::MOVE) {
         if (m_temp_circle) {
-            m_temp_circle->m_radius = glm::length(get_cursor_pos_in_plane() - m_temp_circle->m_center);
+            const auto p = get_cursor_pos_in_plane();
+            if (m_tool_id == ToolID::DRAW_CIRCLE_2_POINT && m_points_placed == 1) {
+                m_temp_circle->m_center = (m_first_point + p) / 2.;
+                m_temp_circle->m_radius = glm::length(p - m_first_point) / 2.;
+            }
+            else if (m_tool_id == ToolID::DRAW_CIRCLE_3_POINT && m_points_placed == 2) {
+                update_three_point_circle(p);
+            }
+            else
+                m_temp_circle->m_radius = glm::length(p - m_temp_circle->m_center);
         }
         update_tip();
         set_first_update_group_current();
@@ -42,7 +74,22 @@ ToolResponse ToolDrawCircle2D::update(const ToolArgs &args)
     else if (args.type == ToolEventType::ACTION) {
         switch (args.action) {
         case InToolActionID::LMB: {
-            if (m_temp_circle) {
+            if (m_temp_circle && m_tool_id == ToolID::DRAW_CIRCLE_3_POINT && m_points_placed == 1) {
+                m_second_point = get_cursor_pos_in_plane();
+                m_points_placed = 2;
+                return ToolResponse();
+            }
+            else if (m_temp_circle) {
+                if (m_tool_id == ToolID::DRAW_CIRCLE_2_POINT && m_points_placed == 1) {
+                    const auto p = get_cursor_pos_in_plane();
+                    m_temp_circle->m_center = (m_first_point + p) / 2.;
+                    m_temp_circle->m_radius = glm::length(p - m_first_point) / 2.;
+                }
+                else if (m_tool_id == ToolID::DRAW_CIRCLE_3_POINT && m_points_placed == 2) {
+                    const auto p = get_cursor_pos_in_plane();
+                    if (!update_three_point_circle(p))
+                        return ToolResponse();
+                }
                 m_temp_circle->m_selection_invisible = false;
                 if (m_constrain) {
                     if (auto hsel = m_intf.get_hover_selection()) {
@@ -65,8 +112,10 @@ ToolResponse ToolDrawCircle2D::update(const ToolArgs &args)
                 m_temp_circle->m_radius = 0;
                 m_temp_circle->m_center = get_cursor_pos_in_plane();
                 m_temp_circle->m_wrkpl = m_wrkpl->m_uuid;
+                m_first_point = m_temp_circle->m_center;
+                m_points_placed = 1;
 
-                if (m_constrain) {
+                if (m_constrain && m_tool_id == ToolID::DRAW_CIRCLE_2D) {
                     const EntityAndPoint circle_center{m_temp_circle->m_uuid, 1};
                     constrain_point(m_wrkpl->m_uuid, circle_center);
                 }
@@ -100,8 +149,16 @@ void ToolDrawCircle2D::update_tip()
 {
     std::vector<ActionLabelInfo> actions;
 
-    if (m_temp_circle)
-        actions.emplace_back(InToolActionID::LMB, "place radius");
+    if (m_temp_circle) {
+        if (m_tool_id == ToolID::DRAW_CIRCLE_3_POINT) {
+            if (m_points_placed == 1)
+                actions.emplace_back(InToolActionID::LMB, "place second point");
+            else
+                actions.emplace_back(InToolActionID::LMB, "place third point");
+        }
+        else
+            actions.emplace_back(InToolActionID::LMB, "place radius");
+    }
     else
         actions.emplace_back(InToolActionID::LMB, "place center");
 

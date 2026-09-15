@@ -1516,6 +1516,8 @@ void Canvas::apply_line_flags(VertexFlags &flags)
 {
     if (m_state.line_style == LineStyle::THIN)
         flags |= VertexFlags::LINE_THIN;
+    else if (m_state.line_style == LineStyle::THINNER)
+        flags |= VertexFlags::LINE_THINNER;
 }
 
 static const float char_space = 1;

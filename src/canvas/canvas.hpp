@@ -134,6 +134,11 @@ public:
         return m_cam_distance;
     }
 
+    glm::vec3 get_cam_center() const override
+    {
+        return m_center;
+    }
+
     enum class ZoomCenter { SCREEN, CURSOR };
     void set_cam_distance(float dist, ZoomCenter zoom_center);
     void animate_zoom(float factor, ZoomCenter zoom_center);

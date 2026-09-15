@@ -5,6 +5,7 @@
 #include "document/group/all_groups.hpp"
 #include "widgets/sketch_plane_selector.hpp"
 #include "document/entity/entity_workplane.hpp"
+#include "document/constraint/constraint_lock_rotation.hpp"
 #include "util/selection_util.hpp"
 #include "canvas/canvas.hpp"
 #include "workspace_browser.hpp"
@@ -47,12 +48,11 @@ void Editor::init_workspace_browser()
                 workplane.m_visible = true;
                 auto camera_quat = workplane.m_normal;
                 const auto &reference = m_core.get_current_document().get_reference_group();
-                if (sketch.m_active_wrkpl == reference.get_workplane_yz_uuid())
-                    camera_quat = workplane.m_normal
-                                  * glm::angleAxis(-static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
-                else if (sketch.m_active_wrkpl == reference.get_workplane_zx_uuid())
-                    camera_quat = workplane.m_normal
-                                  * glm::angleAxis(static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
+                if (sketch.m_active_wrkpl == reference.get_workplane_zx_uuid()) {
+                    // XZ has +Y as its positive normal, but open the sketch
+                    // from the Front (-Y) side so X is right and Z is up.
+                    camera_quat = glm::quatLookAt(glm::dvec3(0, 1, 0), glm::dvec3(0, 0, 1));
+                }
                 get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
             }
         }
@@ -141,6 +141,7 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         // Keep the current view unchanged while the user chooses a plane.
         m_selecting_sketch_plane = true;
         m_sketch_plane_grid.reset();
+        m_sketch_grid_offset.reset();
         m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
         m_restore_sketch_plane_cam_on_undo = false;
         m_sketch_plane_created_group.reset();
@@ -148,12 +149,22 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         m_sketch_plane_add_group_mode = add_group_mode;
         get_canvas().grab_focus();
 
+        std::optional<SelectableRef> face_selection;
         for (const auto &selection : get_canvas().get_selection()) {
             if (selection.type == SelectableRef::Type::SOLID_MODEL_FACE) {
-                get_canvas().set_selection({}, false);
-                finish_sketch_face_selection(selection.item, selection.point);
-                return;
+                face_selection = selection;
+                break;
             }
+        }
+        if (!face_selection) {
+            if (auto hover = get_canvas().get_hover_selection(); hover
+                && hover->type == SelectableRef::Type::SOLID_MODEL_FACE)
+                face_selection = hover;
+        }
+        if (face_selection) {
+            get_canvas().set_selection({}, false);
+            finish_sketch_face_selection(face_selection->item, face_selection->point);
+            return;
         }
 
         get_canvas().set_selection({}, false);
@@ -312,6 +323,7 @@ void Editor::finish_sketch_plane_selection(const UUID &plane)
     auto &group = doc.insert_group<GroupSketch>(UUID::random(), m_sketch_plane_current_group);
     m_sketch_plane_created_group = group.m_uuid;
     group.m_active_wrkpl = plane;
+    m_sketch_grid_offset.reset();
     get_current_document_view().m_group_views[group.m_uuid].m_visible = true;
     if (m_sketch_plane_add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY)
         group.m_body.emplace();
@@ -328,13 +340,9 @@ void Editor::finish_sketch_plane_selection(const UUID &plane)
     m_sketch_editing = true;
     update_sketch_mode_ui();
     auto camera_quat = plane_entity.m_normal;
-    if (plane == doc.get_reference_group().get_workplane_yz_uuid()) {
-        camera_quat = plane_entity.m_normal
-                      * glm::angleAxis(-static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
-    }
-    else if (plane == doc.get_reference_group().get_workplane_zx_uuid()) {
-        camera_quat = plane_entity.m_normal
-                      * glm::angleAxis(static_cast<double>(M_PI) / 2, glm::dvec3(0, 0, 1));
+    if (plane == doc.get_reference_group().get_workplane_zx_uuid()) {
+        // XZ has +Y as its positive normal, but open the sketch from Front.
+        camera_quat = glm::quatLookAt(glm::dvec3(0, 1, 0), glm::dvec3(0, 0, 1));
     }
     get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
     canvas_update();
@@ -366,41 +374,71 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     const glm::dvec3 raw_normal{face_normal.x, face_normal.y, face_normal.z};
     if (glm::length(raw_normal) <= 1e-9)
         return;
-    const glm::dvec3 normal = glm::normalize(raw_normal);
 
-    glm::dvec3 u;
-    for (size_t i = 1; i < face.vertices.size(); i++) {
-        const auto &candidate = face.vertices.at(i);
-        u = glm::dvec3{candidate.x, candidate.y, candidate.z} - origin;
-        if (glm::length(u) > 1e-9)
-            break;
-    }
-    if (glm::length(u) <= 1e-9)
-        return;
-    u = glm::normalize(u);
-    const auto v = glm::normalize(glm::cross(normal, u));
-    if (glm::length(v) <= 1e-9)
-        return;
+    // The tessellator has already applied the OCC face orientation.  Do not
+    // infer this from the model bounding-box center: that fails for faces
+    // exposed by cuts and for faces on cavities.
+    auto normal = glm::normalize(raw_normal);
+    // Select the side of the face that is currently being viewed.  This is
+    // important for boolean results: a cut can expose a face whose normal is
+    // opposite to the side from which the user selected it, and the model
+    // center is not a reliable way to resolve that (especially for cavities).
+    const auto camera_normal = glm::dvec3(get_canvas().get_cam_normal());
+    if (glm::dot(normal, camera_normal) < 0)
+        normal = -normal;
+
+    // Build one canonical view/basis for the selected face.  Using the first
+    // polygon edge here makes the sketch orientation depend on OCC's vertex
+    // ordering, which can make otherwise identical faces open differently.
+    const glm::vec3 face_direction = glm::normalize(glm::vec3(normal));
+    const glm::vec3 world_up{0, 0, 1};
+    glm::vec3 camera_up;
+    if (std::abs(face_direction.z) > 0.999f)
+        // Keep Front (-Y) at the bottom of top and bottom views.
+        camera_up = {0, 1, 0};
+    else
+        camera_up = world_up - face_direction * glm::dot(world_up, face_direction);
+    if (glm::length(camera_up) < 1e-6f)
+        camera_up = {0, 1, 0};
+    else
+        camera_up = glm::normalize(camera_up);
+    const auto camera_right = glm::normalize(glm::cross(camera_up, face_direction));
+    const auto camera_quat = glm::quat_cast(glm::mat3(camera_right, camera_up, face_direction));
 
     auto &group = doc.insert_group<GroupSketch>(UUID::random(), m_sketch_plane_current_group);
     m_sketch_plane_created_group = group.m_uuid;
+    group.m_attached_to_face = true;
     bool added = false;
     auto &workplane = doc.get_or_add_entity<EntityWorkplane>(UUID::random(), &added);
     workplane.m_origin = origin;
-    // Face normals are used for viewing the selected face, but the sketch
-    // workplane normal is the default extrusion direction.  Reverse its
-    // in-plane Y axis so a new extrusion grows away from the supporting
-    // solid instead of into it.
-    workplane.m_normal = quat_from_uv(u, -v);
+    // The outward face normal is also the default sketch/extrusion direction,
+    // so a new extrusion grows away from the supporting solid.  Match the
+    // workplane's local X/Y axes to the camera's right/up axes so the sketch
+    // grid has the same orientation as the face view.
+    workplane.m_normal = quat_from_uv(glm::dvec3(camera_right), glm::dvec3(camera_up));
     workplane.m_group = group.m_uuid;
     workplane.m_kind = ItemKind::USER;
     group.m_active_wrkpl = workplane.m_uuid;
+    {
+        auto &lock_rotation = doc.add_constraint<ConstraintLockRotation>(UUID::random());
+        lock_rotation.m_group = group.m_uuid;
+        lock_rotation.m_entity = workplane.m_uuid;
+    }
     get_current_document_view().m_group_views[group.m_uuid].m_visible = true;
     if (m_sketch_plane_add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY)
         group.m_body.emplace();
 
     m_selecting_sketch_plane = false;
     m_sketch_plane_grid = workplane.m_uuid;
+    double face_projection = glm::dot(normal, origin);
+    double far_projection = face_projection;
+    for (const auto &other_face : faces) {
+        for (const auto &v : other_face.vertices)
+            far_projection = std::min(far_projection, glm::dot(normal, glm::dvec3{v.x, v.y, v.z}));
+    }
+    // Render the grid just beyond the far side of the solid.  For example,
+    // a face at 0 with 20 mm of material behind it gets a grid at 20.0001.
+    m_sketch_grid_offset = normal * (far_projection - face_projection) - normal * 1e-4;
     // Capture the view immediately before this face/plane selection so Undo
     // can restore it on repeated plane-selection cycles.
     m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
@@ -410,49 +448,6 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     finish_add_group(&group);
     m_sketch_editing = true;
     update_sketch_mode_ui();
-    // View the selected face from its normal side. The workplane basis was
-    // built from the face normal, so an additional 180-degree flip would
-    // incorrectly show a top face from underneath.
-    // Build the camera directly from the face normal.  Its local +Z axis is
-    // the camera position direction, while local +Y is chosen from world up
-    // so the object's physical bottom stays at the bottom of the view.
-    const auto face_direction = glm::normalize(glm::vec3(normal));
-    glm::vec3 camera_normal;
-    if (std::abs(face_direction.z) > 0.999f) {
-        double face_z = 0;
-        for (const auto &v : face.vertices)
-            face_z += v.z;
-        face_z /= face.vertices.size();
-
-        double model_min_z = std::numeric_limits<double>::max();
-        double model_max_z = std::numeric_limits<double>::lowest();
-        for (const auto &other_face : faces) {
-            for (const auto &v : other_face.vertices) {
-                model_min_z = std::min(model_min_z, static_cast<double>(v.z));
-                model_max_z = std::max(model_max_z, static_cast<double>(v.z));
-            }
-        }
-        camera_normal = face_z >= (model_min_z + model_max_z) / 2. ? glm::vec3(0, 0, 1)
-                                                                  : glm::vec3(0, 0, -1);
-    }
-    else {
-        // Side-face normals are oriented toward the opposite side for this
-        // view convention.
-        camera_normal = -face_direction;
-    }
-    const glm::vec3 world_up{0, 0, 1};
-    glm::vec3 camera_up;
-    if (std::abs(camera_normal.z) > 0.999f)
-        // Keep Front (+X) at the bottom of both horizontal views.
-        camera_up = {-1, 0, 0};
-    else
-        camera_up = world_up - camera_normal * glm::dot(world_up, camera_normal);
-    if (glm::length(camera_up) < 1e-6f)
-        camera_up = {0, 1, 0};
-    else
-        camera_up = glm::normalize(camera_up);
-    const auto camera_right = glm::normalize(glm::cross(camera_up, camera_normal));
-    const auto camera_quat = glm::quat_cast(glm::mat3(camera_right, camera_up, camera_normal));
     get_canvas().animate_to_cam_quat(camera_quat);
     canvas_update();
 }

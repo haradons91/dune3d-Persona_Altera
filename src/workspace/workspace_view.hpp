@@ -28,9 +28,10 @@ public:
     glm::vec3 m_center = glm::vec3(0, 0, 0);
     float m_cam_distance = 100;
     CanvasProjection m_projection = CanvasProjection::ORTHO;
-    // Fusion-style default isometric view: front, right, and top are visible.
+    // Fusion-style default isometric view: Front (-Y), Right (+X), and Top
+    // (+Z) are visible, with Front toward the lower-left/Home side.
     glm::quat m_cam_quat = glm::quatLookAt(
-            glm::normalize(glm::vec3(-1, -1, -1)), glm::vec3(0, 0, 1));
+            glm::normalize(glm::vec3(-1, 1, -1)), glm::vec3(0, 0, 1));
     float m_curvature_comb_scale = 0;
     bool m_show_construction_entities_from_previous_groups = false;
     bool construction_entities_from_previous_groups_are_visible() const override

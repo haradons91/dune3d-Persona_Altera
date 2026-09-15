@@ -58,18 +58,21 @@ void GroupReference::generate(Document &doc)
     const auto ay = glm::dvec3(0, 1, 0);
     const auto az = glm::dvec3(0, 0, 1);
     {
-        auto &w = add_workplane(doc, get_workplane_xy_uuid(), quat_from_uv(ay, az), m_xy_size);
-        w.m_name = "XZ";
+        // Keep the historical UUIDs stable, but give each workplane its
+        // actual geometric meaning.  quat_from_uv maps local X/Y to the
+        // supplied vectors and local Z to their cross product.
+        auto &w = add_workplane(doc, get_workplane_xy_uuid(), quat_from_uv(ax, ay), m_xy_size);
+        w.m_name = "XY";
         w.m_visible = m_show_xy;
     }
     {
-        auto &w = add_workplane(doc, get_workplane_yz_uuid(), quat_from_uv(az, ax), m_yz_size);
+        auto &w = add_workplane(doc, get_workplane_yz_uuid(), quat_from_uv(ay, az), m_yz_size);
         w.m_name = "YZ";
         w.m_visible = m_show_yz;
     }
     {
-        auto &w = add_workplane(doc, get_workplane_zx_uuid(), quat_from_uv(ax, ay), m_zx_size);
-        w.m_name = "XY";
+        auto &w = add_workplane(doc, get_workplane_zx_uuid(), quat_from_uv(az, ax), m_zx_size);
+        w.m_name = "ZX";
         w.m_visible = m_show_zx;
     }
 }

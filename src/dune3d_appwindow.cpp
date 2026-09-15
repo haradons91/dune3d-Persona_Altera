@@ -111,6 +111,7 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
 
     m_ribbon_btn_sketch = refBuilder->get_widget<Gtk::Button>("ribbon_btn_sketch");
     m_ribbon_create_group = refBuilder->get_widget<Gtk::Box>("ribbon_create_group");
+    m_ribbon_create_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_create_menu_button");
     m_ribbon_modify_group = refBuilder->get_widget<Gtk::Box>("ribbon_modify_group");
     m_ribbon_sketch_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_group");
     m_ribbon_sketch_create_menu_button =
@@ -210,7 +211,7 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
         });
         axes_cube->signal_home_clicked().connect([this] {
             const auto default_quat = glm::quatLookAt(
-                    glm::normalize(glm::vec3(-1, -1, -1)), glm::vec3(0, 0, 1));
+                    glm::normalize(glm::vec3(-1, 1, -1)), glm::vec3(0, 0, 1));
             get_canvas().animate_to_cam_quat(default_quat);
         });
     }

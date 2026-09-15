@@ -31,5 +31,10 @@ private:
 
     glm::dvec2 get_cursor_pos_in_plane() const;
     bool m_constrain = true;
+    glm::dvec2 m_first_point;
+    glm::dvec2 m_second_point;
+    unsigned int m_points_placed = 0;
+
+    bool update_three_point_circle(const glm::dvec2 &third_point);
 };
 } // namespace dune3d

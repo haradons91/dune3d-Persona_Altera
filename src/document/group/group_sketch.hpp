@@ -17,6 +17,7 @@ public:
 
 
     std::shared_ptr<const SolidModel> m_solid_model;
+    bool m_attached_to_face = false;
 
     Operation m_operation = Operation::UNION;
     Operation get_operation() const override

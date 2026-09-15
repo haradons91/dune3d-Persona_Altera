@@ -22,11 +22,25 @@
 
 namespace dune3d {
 
+static std::optional<glm::dvec2> get_circle_center_from_three_points(const glm::dvec2 &a,
+                                                                      const glm::dvec2 &b,
+                                                                      const glm::dvec2 &c)
+{
+    const auto d = 2.0 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+    if (std::abs(d) < 1e-12)
+        return std::nullopt;
+    const auto aa = glm::dot(a, a);
+    const auto bb = glm::dot(b, b);
+    const auto cc = glm::dot(c, c);
+    return glm::dvec2((aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
+                      (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d);
+}
+
 ToolResponse ToolDrawContour::begin(const ToolArgs &args)
 {
     m_wrkpl = get_workplane();
     m_intf.enable_hover_selection();
-    if (m_tool_id == ToolID::DRAW_CONTOUR_FROM_POINT) {
+    if (m_tool_id == ToolID::DRAW_CONTOUR_FROM_POINT || m_tool_id == ToolID::DRAW_ARC_TANGENT) {
         if (m_selection.size() != 1)
             return ToolResponse();
         auto &sr = *m_selection.begin();
@@ -38,22 +52,36 @@ ToolResponse ToolDrawContour::begin(const ToolArgs &args)
         if (sr.point == 0)
             return ToolResponse();
         auto enp = sr.get_entity_and_point();
-        if (is_valid_tangent_point(enp))
+        if (m_tool_id == ToolID::DRAW_ARC_TANGENT) {
+            m_temp_arc = &add_entity<EntityArc2D>();
+            m_temp_arc->m_selection_invisible = true;
+            m_temp_arc->m_wrkpl = m_wrkpl->m_uuid;
+            m_temp_arc->m_from = m_wrkpl->project(get_doc().get_point(enp));
+            m_temp_arc->m_to = get_cursor_pos_in_plane();
+            m_temp_arc->m_center = m_temp_arc->m_from + glm::dvec2(1, 0);
+            m_entities.push_back(m_temp_arc);
             m_last_tangent_point = enp;
-        m_temp_line = &add_entity<EntityLine2D>();
-        m_temp_line->m_selection_invisible = true;
-        m_temp_line->m_wrkpl = m_wrkpl->m_uuid;
-        m_temp_line->m_p1 = m_wrkpl->project(get_doc().get_point(enp));
-        m_temp_line->m_p2 = get_cursor_pos_in_plane();
-        m_entities.push_back(m_temp_line);
+            m_constrain_tangent = true;
+        }
+        else {
+            if (is_valid_tangent_point(enp))
+                m_last_tangent_point = enp;
+            m_temp_line = &add_entity<EntityLine2D>();
+            m_temp_line->m_selection_invisible = true;
+            m_temp_line->m_wrkpl = m_wrkpl->m_uuid;
+            m_temp_line->m_p1 = m_wrkpl->project(get_doc().get_point(enp));
+            m_temp_line->m_p2 = get_cursor_pos_in_plane();
+            m_entities.push_back(m_temp_line);
+        }
         {
             auto &constraint = add_constraint<ConstraintPointsCoincident>();
             constraint.m_wrkpl = m_wrkpl->m_uuid;
             constraint.m_entity1 = enp;
-            constraint.m_entity2 = {m_temp_line->m_uuid, 1};
+            constraint.m_entity2 = {get_temp_entity()->m_uuid, 1};
             m_constraints.insert(&constraint);
         }
-        update_constrain_tangent();
+        if (m_tool_id != ToolID::DRAW_ARC_TANGENT)
+            update_constrain_tangent();
     }
     update_tip();
 
@@ -67,7 +95,13 @@ ToolBase::CanBegin ToolDrawContour::can_begin()
 
 bool ToolDrawContour::is_draw_contour() const
 {
-    return any_of(m_tool_id, ToolID::DRAW_CONTOUR, ToolID::DRAW_CONTOUR_FROM_POINT);
+    return any_of(m_tool_id,
+                  ToolID::DRAW_CONTOUR,
+                  ToolID::DRAW_CONTOUR_FROM_POINT,
+                  ToolID::DRAW_ARC_2D,
+                  ToolID::DRAW_ARC_3_POINT,
+                  ToolID::DRAW_ARC_CENTER_POINT,
+                  ToolID::DRAW_ARC_TANGENT);
 }
 
 glm::dvec2 ToolDrawContour::get_cursor_pos_in_plane() const
@@ -330,9 +364,28 @@ ToolResponse ToolDrawContour::update(const ToolArgs &args)
             }
         }
         else if (m_temp_arc) {
-            if (is_placing_center()) {
-                m_temp_arc->m_center =
-                        project_onto_perp_bisector(m_temp_arc->m_from, m_temp_arc->m_to, get_cursor_pos_in_plane());
+            if (m_state == State::ARC_CENTER_POINT_RADIUS) {
+                m_temp_arc->m_from = get_cursor_pos_in_plane();
+                m_temp_arc->m_to = m_temp_arc->m_from;
+                update_arc_center();
+            }
+            else if (m_state == State::ARC_CENTER_POINT_END) {
+                if (m_flip_arc)
+                    m_temp_arc->m_from = get_cursor_pos_in_plane();
+                else
+                    m_temp_arc->m_to = get_cursor_pos_in_plane();
+                update_arc_center();
+            }
+            else if (is_placing_center()) {
+                if (m_tool_id == ToolID::DRAW_ARC_3_POINT) {
+                    if (auto center = get_circle_center_from_three_points(
+                                m_temp_arc->m_from, m_temp_arc->m_to, get_cursor_pos_in_plane()))
+                        m_temp_arc->m_center = *center;
+                }
+                else {
+                    m_temp_arc->m_center = project_onto_perp_bisector(
+                            m_temp_arc->m_from, m_temp_arc->m_to, get_cursor_pos_in_plane());
+                }
             }
             else {
                 if (m_flip_arc)
@@ -378,7 +431,57 @@ ToolResponse ToolDrawContour::update(const ToolArgs &args)
     else if (args.type == ToolEventType::ACTION) {
         switch (args.action) {
         case InToolActionID::LMB: {
-            if (m_temp_arc && !is_placing_center() && !(m_constrain_tangent && m_last_tangent_point)) {
+            if (m_tool_id == ToolID::DRAW_ARC_TANGENT && m_entities.empty()) {
+                auto hsel = m_intf.get_hover_selection();
+                if (!hsel || hsel->type != SelectableRef::Type::ENTITY || hsel->point == 0)
+                    return ToolResponse();
+                auto enp = hsel->get_entity_and_point();
+                auto &en = get_entity(enp.entity);
+                if (!en.of_type(Entity::Type::LINE_2D, Entity::Type::ARC_2D, Entity::Type::BEZIER_2D)
+                    || !is_valid_tangent_point(enp))
+                    return ToolResponse();
+
+                m_temp_line = nullptr;
+                m_temp_bezier = nullptr;
+                m_temp_arc = &add_entity<EntityArc2D>();
+                m_temp_arc->m_selection_invisible = true;
+                m_temp_arc->m_wrkpl = m_wrkpl->m_uuid;
+                m_temp_arc->m_from = m_wrkpl->project(get_doc().get_point(enp));
+                m_temp_arc->m_to = m_temp_arc->m_from;
+                m_temp_arc->m_center = m_temp_arc->m_from + glm::dvec2(1, 0);
+                m_entities.push_back(m_temp_arc);
+                m_last_tangent_point = enp;
+                m_constrain_tangent = true;
+
+                auto &constraint = add_constraint<ConstraintPointsCoincident>();
+                constraint.m_wrkpl = m_wrkpl->m_uuid;
+                constraint.m_entity1 = enp;
+                constraint.m_entity2 = {m_temp_arc->m_uuid, 1};
+                m_constraints.insert(&constraint);
+                update_tip();
+                return ToolResponse();
+            }
+            if (m_temp_arc && m_tool_id == ToolID::DRAW_ARC_3_POINT && m_state == State::CENTER) {
+                m_temp_arc->m_selection_invisible = false;
+                return ToolResponse::commit();
+            }
+            if (m_temp_arc && m_tool_id == ToolID::DRAW_ARC_CENTER_POINT
+                && m_state == State::ARC_CENTER_POINT_END) {
+                m_temp_arc->m_selection_invisible = false;
+                return ToolResponse::commit();
+            }
+            if (m_temp_arc && m_tool_id == ToolID::DRAW_ARC_TANGENT && !m_entities.empty()) {
+                m_temp_arc->m_selection_invisible = false;
+                return ToolResponse::commit();
+            }
+            if (m_temp_arc && m_tool_id == ToolID::DRAW_ARC_CENTER_POINT
+                && m_state == State::ARC_CENTER_POINT_RADIUS) {
+                m_state = State::ARC_CENTER_POINT_END;
+                update_tip();
+                return ToolResponse();
+            }
+            if (m_temp_arc && m_tool_id != ToolID::DRAW_ARC_CENTER_POINT && !is_placing_center()
+                && !(m_constrain_tangent && m_last_tangent_point)) {
                 if (m_constrain) {
                     if (constrain_point_and_add_head_tangent_constraint(m_wrkpl->m_uuid,
                                                                         {m_temp_arc->m_uuid, get_last_point()}))
@@ -581,7 +684,7 @@ ToolResponse ToolDrawContour::update(const ToolArgs &args)
                 }
             }
 
-            if (m_tool_id == ToolID::DRAW_ARC_2D) {
+            if (m_tool_id == ToolID::DRAW_ARC_3_POINT || m_tool_id == ToolID::DRAW_ARC_2D) {
                 m_temp_line = nullptr;
                 m_temp_bezier = nullptr;
                 m_temp_arc = &add_entity<EntityArc2D>();
@@ -602,6 +705,17 @@ ToolResponse ToolDrawContour::update(const ToolArgs &args)
                 m_temp_arc->m_center = m_temp_arc->m_from + glm::dvec2(1, 0);
                 m_temp_arc->m_to = m_temp_arc->m_from + glm::dvec2(2, 0);
                 m_temp_arc->m_wrkpl = m_wrkpl->m_uuid;
+            }
+            else if (m_tool_id == ToolID::DRAW_ARC_CENTER_POINT) {
+                m_temp_line = nullptr;
+                m_temp_bezier = nullptr;
+                m_temp_arc = &add_entity<EntityArc2D>();
+                m_temp_arc->m_selection_invisible = true;
+                m_temp_arc->m_wrkpl = m_wrkpl->m_uuid;
+                m_temp_arc->m_center = get_cursor_pos_in_plane();
+                m_temp_arc->m_from = m_temp_arc->m_center;
+                m_temp_arc->m_to = m_temp_arc->m_center;
+                m_state = State::ARC_CENTER_POINT_RADIUS;
             }
             else if (m_tool_id == ToolID::DRAW_BEZIER_2D) {
                 m_temp_line = nullptr;
@@ -921,32 +1035,37 @@ void ToolDrawContour::update_tip()
         default:;
         }
 
-        constraint_tip = get_constrain_tip(what);
-        if (auto ct = get_constraint_type()) {
-            constraint_icons.push_back(*ct);
-            if (*ct == ConstraintType::POINTS_COINCIDENT) {
-                if (auto en_a = dynamic_cast<const IEntityTangent *>(get_temp_entity())) {
-                    auto enp = m_intf.get_hover_selection().value().get_entity_and_point();
-                    if (auto en_t = dynamic_cast<const IEntityTangent *>(&get_entity(enp.entity))) {
-                        if (en_t->is_valid_tangent_point(enp.point)) {
-                            auto arc_tangent = glm::normalize(en_a->get_tangent_at_point(get_head_point()));
-                            auto target_tanget = glm::normalize(en_t->get_tangent_at_point(enp.point));
-                            auto angle = glm::degrees(acos(glm::dot(arc_tangent, target_tanget)));
-                            if (std::abs(angle - 180) < 45)
-                                m_has_tangent_head = true;
+            constraint_tip = get_constrain_tip(what);
+            if (auto ct = get_constraint_type()) {
+                constraint_icons.push_back(*ct);
+                if (*ct == ConstraintType::POINTS_COINCIDENT) {
+                    if (auto en_a = dynamic_cast<const IEntityTangent *>(get_temp_entity())) {
+                        if (auto hsel = m_intf.get_hover_selection()) {
+                            auto enp = hsel->get_entity_and_point();
+                            if (auto en_t = dynamic_cast<const IEntityTangent *>(&get_entity(enp.entity))) {
+                                if (en_t->is_valid_tangent_point(enp.point)) {
+                                    auto arc_tangent = glm::normalize(en_a->get_tangent_at_point(get_head_point()));
+                                    auto target_tanget = glm::normalize(en_t->get_tangent_at_point(enp.point));
+                                    auto dot = glm::clamp(glm::dot(arc_tangent, target_tanget), -1.0, 1.0);
+                                    auto angle = glm::degrees(acos(dot));
+                                    if (std::abs(angle - 180) < 45)
+                                        m_has_tangent_head = true;
+                                }
+                            }
                         }
                     }
-                }
             }
         }
     }
 
     if (m_has_tangent_head && m_constrain_tangent_head) {
         auto &en_head = *get_temp_entity();
-        auto &en_target = get_entity(m_intf.get_hover_selection().value().get_entity_and_point().entity);
-        const auto constraint_type = get_head_constraint(en_head, en_target);
-        if (constraint_type) {
-            constraint_icons.push_back(*constraint_type);
+        if (auto hsel = m_intf.get_hover_selection()) {
+            auto &en_target = get_entity(hsel->get_entity_and_point().entity);
+            const auto constraint_type = get_head_constraint(en_head, en_target);
+            if (constraint_type) {
+                constraint_icons.push_back(*constraint_type);
+            }
         }
     }
 

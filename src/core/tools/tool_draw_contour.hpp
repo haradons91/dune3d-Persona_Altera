@@ -74,7 +74,14 @@ private:
     std::optional<EntityAndPoint> m_last_tangent_point;
     std::optional<EntityAndPoint> m_bezier_head_tangent_point;
 
-    enum class State { NORMAL, CENTER, BEZIER_C1, BEZIER_C2 };
+    enum class State {
+        NORMAL,
+        CENTER,
+        ARC_CENTER_POINT_RADIUS,
+        ARC_CENTER_POINT_END,
+        BEZIER_C1,
+        BEZIER_C2
+    };
     State m_state = State::NORMAL;
     bool is_placing_center() const
     {

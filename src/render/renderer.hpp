@@ -38,6 +38,7 @@ public:
     bool m_render_extrusion_editor = false;
     std::optional<UUID> m_sketch_plane_hovered;
     std::optional<UUID> m_sketch_plane_grid;
+    std::optional<glm::dvec3> m_sketch_grid_offset;
     UUID m_first_group;
 
     void add_constraint_icons(glm::vec3 p, glm::vec3 v, const std::vector<ConstraintType> &constraints);
@@ -144,6 +145,7 @@ private:
     void restore(Badge<AutoSaveRestore>);
 
     void set_chunk_from_group(const Group &group);
+    glm::dvec3 get_sketch_geometry_offset() const;
 
     float m_curvature_comb_scale = 0;
 };
