@@ -114,18 +114,20 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
     if (!m_render_sketch_grid || !m_current_group || m_current_group->m_active_wrkpl != wrkpl.m_uuid)
         return;
 
-    // The default camera distance is 100 and corresponds to a 25-unit major
+    // The default camera distance is 100 and corresponds to a 50-unit major
     // interval. The grid follows the actual camera scale directly.
-    constexpr double default_camera_distance = 100.0;
-    const double world_per_pixel = std::max<double>(m_ca.get_world_units_per_pixel(), 1e-9);
-    // Canvas zoom changes the camera distance by 2^(1/10) per wheel step.
+    constexpr double default_camera_distance = 200.0;
+    // Canvas zoom changes the camera distance by 15% per wheel step.
     // Use explicit cumulative wheel-step thresholds because the requested
     // grid intervals include both 2x and 5x changes.
     const double zoom_ratio = std::max(m_ca.get_cam_distance() / default_camera_distance, 1e-12);
-    const int zoom_steps = static_cast<int>(std::llround(std::log2(zoom_ratio) * 10.0));
-    int grid_index = 10; // 25-unit interval at the default zoom.
+    const int zoom_steps = static_cast<int>(std::llround(std::log(zoom_ratio) / std::log(1.15)));
+    int grid_index = 13; // 50-unit interval at the default zoom.
     constexpr std::array<int, 8> zoom_out_thresholds = {10, 20, 33, 43, 53, 66, 76, 86};
-    constexpr std::array<int, 10> zoom_in_thresholds = {23, 46, 56, 66, 89, 112, 122, 132, 155, 178};
+    // Reach 12.5 units at cumulative step 19, then reach the 2.5-unit
+    // minimum nine steps later. Further zoom-in steps leave the interval
+    // unchanged.
+    constexpr std::array<int, 10> zoom_in_thresholds = {1, 19, 28, 28, 100, 100, 100, 100, 100, 100};
     if (zoom_steps >= 0) {
         for (const auto threshold : zoom_out_thresholds) {
             if (zoom_steps >= threshold)
@@ -138,26 +140,30 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
                 grid_index--;
         }
     }
-    constexpr std::array<double, 19> grid_intervals = {
-            0.0001, 0.0005, 0.0025, 0.005, 0.01, 0.05, 0.25, 0.5, 1.0, 5.0,
-            25.0,   50.0,   100.0,  250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0};
+    constexpr std::array<double, 21> grid_intervals = {
+            0.0001, 0.0005, 0.0025, 0.005, 0.01, 0.05, 0.25, 0.5, 1.0, 2.5, 5.0,
+            12.5,   25.0,    50.0,   100.0,  250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0};
+    grid_index = std::max(grid_index, 9); // 2.5-unit intervals are the minimum.
     const double label_spacing = grid_intervals.at(static_cast<size_t>(grid_index));
-    const double major_spacing = label_spacing / 5.0;
-    const bool show_minor_grid = label_spacing <= 25.0;
+    // Fusion-style sketch grid: the labeled interval is 50 units at the
+    // default zoom, with five equal subdivisions between major lines. After
+    // the 50-to-25 transition, promote the 5-unit subdivisions to major
+    // lines five zoom steps later and introduce 1-unit minor lines.
+    double major_spacing = label_spacing;
+    if (label_spacing == 25.0 && -zoom_steps >= 6)
+        major_spacing = 5.0;
+    else if (label_spacing == 12.5)
+        major_spacing = 2.5;
+    const bool show_minor_grid = label_spacing <= 100.0;
     const double minor_spacing = major_spacing / 5.0;
 
-    const auto viewport = m_ca.get_viewport_size();
-    const double half_x = viewport.x * world_per_pixel / 2.0;
-    const double half_y = viewport.y * world_per_pixel / 2.0;
-    // Treat the grid as infinite, but generate only the square that can be
-    // visible around the current camera center, with one interval of margin.
-    // The diagonal radius also covers the viewport when the view is rolled.
-    const auto camera_center = wrkpl.project(glm::dvec3(m_ca.get_cam_center()));
-    const double half_extent = std::hypot(half_x, half_y) + label_spacing;
-    const double min_x = camera_center.x - half_extent;
-    const double max_x = camera_center.x + half_extent;
-    const double min_y = camera_center.y - half_extent;
-    const double max_y = camera_center.y + half_extent;
+    // Keep the sketch grid as a finite square centered on the workplane
+    // origin. Its maximum boundary is fixed at +/-300 for every interval.
+    constexpr double grid_half_extent = 300.0;
+    const double min_x = -grid_half_extent;
+    const double max_x = grid_half_extent;
+    const double min_y = -grid_half_extent;
+    const double max_y = grid_half_extent;
 
     // Keep the grid just behind a supporting solid face.  This preserves the
     // solid's depth occlusion while avoiding coplanar depth flicker.
@@ -252,18 +258,22 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
     m_ca.set_vertex_inactive(false);
     const auto label_normal = glm::quat(wrkpl.m_normal)
                               * glm::angleAxis(static_cast<float>(M_PI) / 2, glm::vec3(0, 0, 1));
-    // Keep labels at a constant screen size while the grid interval changes.
-    // At the default camera distance, the previous 25-unit grid used 5% of
-    // the interval as its label size; scale that world size with zoom.
+    // Keep labels at a constant screen size while the grid interval and
+    // sketch camera distance change.  This text reference is deliberately
+    // independent from the grid reference distance above.
     constexpr double default_label_size = 25.0 * 0.05;
+    constexpr double default_text_camera_distance = 100.0;
     const float label_size = static_cast<float>(default_label_size
-                                                * m_ca.get_cam_distance() / default_camera_distance);
+                                                * m_ca.get_cam_distance() / default_text_camera_distance);
     const double label_offset = show_minor_grid ? minor_spacing * 0.25 : major_spacing * 0.05;
     const double x_label_offset = show_minor_grid ? minor_spacing * 0.25 : major_spacing * 0.05;
-    const int first_label_x = static_cast<int>(std::ceil(min_x / label_spacing));
-    const int last_label_x = static_cast<int>(std::floor(max_x / label_spacing));
-    const int first_label_y = static_cast<int>(std::ceil(min_y / label_spacing));
-    const int last_label_y = static_cast<int>(std::floor(max_y / label_spacing));
+    // Keep displayed grid values within five labeled intervals of the origin.
+    // This caps the visible values at 12.5, 62.5, and 125 for 2.5, 12.5,
+    // and 25-unit intervals respectively.
+    const int first_label_x = std::max(-5, static_cast<int>(std::ceil(min_x / label_spacing)));
+    const int last_label_x = std::min(5, static_cast<int>(std::floor(max_x / label_spacing)));
+    const int first_label_y = std::max(-5, static_cast<int>(std::ceil(min_y / label_spacing)));
+    const int last_label_y = std::min(5, static_cast<int>(std::floor(max_y / label_spacing)));
     for (int i = first_label_x; i <= last_label_x; i++) {
         if (i == 0)
             continue;
@@ -277,7 +287,10 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
                 info = bitmap_font::get_glyph_info('?');
             label_width += static_cast<float>(info.advance) * glyph_scale;
         }
-        const auto x_label_origin = to_world(value, -x_label_offset)
+        const double x_label_x = value > 0 ? value + x_label_offset + label_size
+                                           : value - x_label_offset;
+        const double x_label_y = -0.5 * label_size;
+        const auto x_label_origin = to_world(x_label_x, x_label_y)
                                     + glm::dvec3(glm::rotate(label_normal, glm::vec3(-label_width, 0, 0)));
         m_ca.draw_bitmap_text_3d(x_label_origin, label_normal, label_size, label);
     }
@@ -294,7 +307,9 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
                 info = bitmap_font::get_glyph_info('?');
             label_width += static_cast<float>(info.advance) * glyph_scale;
         }
-        const auto y_label_origin = to_world(label_offset + label_size, value)
+        const double y_label_y = value > 0 ? value + 3.0f * label_size : value - 0.5f * label_size;
+        const double y_label_x = label_offset + label_size;
+        const auto y_label_origin = to_world(y_label_x, y_label_y)
                                     + glm::dvec3(glm::rotate(label_normal, glm::vec3(-label_width, 0, 0)));
         m_ca.draw_bitmap_text_3d(y_label_origin, label_normal, label_size, label);
     }

@@ -27,6 +27,8 @@
 namespace dune3d {
 using json = nlohmann::json;
 
+constexpr float default_sketch_camera_distance = 200.0f;
+
 void Editor::init_workspace_browser()
 {
     m_workspace_browser = Gtk::make_managed<WorkspaceBrowser>(m_core);
@@ -63,6 +65,7 @@ void Editor::init_workspace_browser()
                     // from the Front (-Y) side so X is right and Z is up.
                     camera_quat = glm::quatLookAt(glm::dvec3(0, 1, 0), glm::dvec3(0, 0, 1));
                 }
+                get_canvas().set_cam_distance(default_sketch_camera_distance, Canvas::ZoomCenter::SCREEN);
                 get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
             }
         }
@@ -75,6 +78,10 @@ void Editor::init_workspace_browser()
         }
         update_sketch_mode_ui();
         canvas_update();
+        Glib::signal_idle().connect_once([this] {
+            if (m_sketch_editing)
+                get_canvas().set_cam_distance(default_sketch_camera_distance, Canvas::ZoomCenter::SCREEN);
+        });
     });
     m_workspace_browser->signal_add_group().connect(sigc::mem_fun(*this, &Editor::on_add_group));
     m_workspace_browser->signal_delete_current_group().connect(sigc::mem_fun(*this, &Editor::on_delete_current_group));
@@ -425,8 +432,13 @@ void Editor::finish_sketch_plane_selection(const UUID &plane)
         // XZ has +Y as its positive normal, but open the sketch from Front.
         camera_quat = glm::quatLookAt(glm::dvec3(0, 1, 0), glm::dvec3(0, 0, 1));
     }
+    get_canvas().set_cam_distance(default_sketch_camera_distance, Canvas::ZoomCenter::SCREEN);
     get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
     canvas_update();
+    Glib::signal_idle().connect_once([this] {
+        if (m_sketch_editing)
+            get_canvas().set_cam_distance(default_sketch_camera_distance, Canvas::ZoomCenter::SCREEN);
+    });
 }
 
 void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned int face_idx)
@@ -529,8 +541,13 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     finish_add_group(&group);
     m_sketch_editing = true;
     update_sketch_mode_ui();
+    get_canvas().set_cam_distance(default_sketch_camera_distance, Canvas::ZoomCenter::SCREEN);
     get_canvas().animate_to_cam_quat(camera_quat);
     canvas_update();
+    Glib::signal_idle().connect_once([this] {
+        if (m_sketch_editing)
+            get_canvas().set_cam_distance(default_sketch_camera_distance, Canvas::ZoomCenter::SCREEN);
+    });
 }
 
 void Editor::finish_sketch()

@@ -26,6 +26,10 @@
 
 namespace dune3d {
 
+// The sketch camera starts at 200. After 28 zoom-in steps the grid reaches
+// its 2.5-unit minimum; permit 44 more steps before stopping the camera.
+static const float min_cam_distance = 200.0f / pow(1.15f, 72.0f); // 72 steps total
+
 static void profile_debug(const std::string &message)
 {
     std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
@@ -553,7 +557,9 @@ void Canvas::zoom_gesture_begin_cb(Gdk::EventSequence *seq)
 void Canvas::zoom_gesture_update_cb(Gdk::EventSequence *seq)
 {
     auto delta = m_gesture_zoom->get_scale_delta();
-    set_cam_distance(m_gesture_zoom_cam_dist_orig / delta, ZoomCenter::CURSOR);
+    set_cam_distance(std::max(min_cam_distance,
+                              static_cast<float>(m_gesture_zoom_cam_dist_orig / delta)),
+                     ZoomCenter::CURSOR);
     queue_draw();
 }
 
@@ -614,18 +620,18 @@ void Canvas::animate_zoom(float factor, ZoomCenter zoom_center)
 
 void Canvas::animate_zoom_internal(float factor, ZoomCenter zoom_center)
 {
-    // Make one wheel step a small increment. Ten steps now produce the
-    // approximately twofold zoom change that the previous single step used.
-    const float zoom_base = 1.0717734625f; // pow(2, 1 / 10)
+    // Apply the configured 15% zoom change for each wheel step.
+    const float zoom_base = 1.15f; // 15% per zoom step
     if (m_enable_animations) {
         if (factor == 0)
             return;
         start_anim();
         m_animation_zoom_center = zoom_center;
-        m_zoom_animator.target += factor;
+        const float min_zoom_anim = log(min_cam_distance) / log(zoom_base);
+        m_zoom_animator.target = std::max(min_zoom_anim, m_zoom_animator.target + factor);
     }
     else {
-        set_cam_distance(m_cam_distance * pow(zoom_base, factor), zoom_center);
+        set_cam_distance(std::max(min_cam_distance, m_cam_distance * pow(zoom_base, factor)), zoom_center);
     }
 }
 
@@ -1944,7 +1950,7 @@ void Canvas::set_projection(Projection proj)
     m_signal_view_changed.emit();
 }
 
-static const float zoom_base = 1.0717734625f; // pow(2, 1 / 10)
+static const float zoom_base = 1.15f; // 15% per zoom step
 
 static float cam_dist_to_anim(float d)
 {
@@ -1968,7 +1974,8 @@ int Canvas::animate_step(GdkFrameClock *frame_clock)
     set_cam_quat(glm::quat(m_quat_w_animator.get_s(), m_quat_x_animator.get_s(), m_quat_y_animator.get_s(),
                            m_quat_z_animator.get_s()));
     const auto ca = glm::vec3{m_cx_animator.get_s_delta(), m_cy_animator.get_s_delta(), m_cz_animator.get_s_delta()};
-    set_cam_distance(cam_dist_from_anim(m_zoom_animator.get_s()), m_animation_zoom_center);
+    set_cam_distance(std::max(min_cam_distance, cam_dist_from_anim(m_zoom_animator.get_s())),
+                     m_animation_zoom_center);
     set_center(get_center() + ca);
 
     if (stop)
