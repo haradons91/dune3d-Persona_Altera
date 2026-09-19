@@ -42,6 +42,7 @@ public:
     };
 
     virtual void set_chunk(unsigned int chunk) = 0;
+    virtual glm::dvec2 project_to_window(glm::dvec3 point) const = 0;
 
     virtual void clear() = 0;
     virtual VertexRef draw_point(glm::vec3 p) = 0;
@@ -49,6 +50,8 @@ public:
     virtual VertexRef draw_axis_line(glm::vec3 from, glm::vec3 to, Axis axis) = 0;
     virtual VertexRef draw_screen_line(glm::vec3 origin, glm::vec3 direction) = 0;
     virtual std::vector<VertexRef> draw_bitmap_text(glm::vec3 p, float size, const std::string &rtext) = 0;
+    virtual std::vector<VertexRef> draw_bitmap_text_centered(glm::vec3 p, float size,
+                                                             const std::string &rtext, float angle = 0) = 0;
     virtual std::vector<VertexRef> draw_bitmap_text_3d(glm::vec3 p, const glm::quat &norm, float size,
                                                        const std::string &rtext) = 0;
 
@@ -80,6 +83,7 @@ public:
     virtual void set_vertex_constraint(bool c) = 0;
     virtual void set_vertex_construction(bool c) = 0;
     virtual void set_no_points(bool c) = 0;
+    virtual void set_show_default_points(bool c) = 0;
     virtual void set_line_style(LineStyle style) = 0;
     virtual void set_transform(const glm::mat4 &transform) = 0;
 

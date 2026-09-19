@@ -4,8 +4,18 @@
 #include "dune3d_appwindow.hpp"
 #include "canvas/canvas.hpp"
 #include "core/tool_id.hpp"
+#include <fstream>
+#include <format>
 
 namespace dune3d {
+namespace {
+void sketch_dimension_debug_log(const std::string &message)
+{
+    static std::ofstream log("/tmp/dune3d-sketch-dimension-debug.log", std::ios::app);
+    log << message << '\n';
+    log.flush();
+}
+} // namespace
 
 bool Editor::force_end_tool()
 {
@@ -41,15 +51,32 @@ void Editor::tool_begin(ToolID id, std::unique_ptr<ToolData> data)
     //        args.selection = sel;
     //   else
     args.selection = get_canvas().get_selection();
+    // Dimension can be started with a preselected rectangle side.  That side
+    // is only the first reference now, so leave the canvas selectable while
+    // the tool waits for the second side.
+    const bool select_dimension_after_begin = id == ToolID::CONSTRAIN_DISTANCE && args.selection.size() <= 1;
+    if (id == ToolID::CONSTRAIN_DISTANCE)
+        sketch_dimension_debug_log(std::format("editor tool_begin selection_count={} select_after_begin={} mode={}",
+                                               args.selection.size(), select_dimension_after_begin,
+                                               static_cast<int>(get_canvas().get_selection_mode())));
     m_last_selection_mode = get_canvas().get_selection_mode();
     get_canvas().set_selection_mode(SelectionMode::NONE);
     ToolResponse r = m_core.tool_begin(id, args);
     tool_process(r);
+    if (select_dimension_after_begin && m_core.tool_is_active())
+        get_canvas().set_selection_mode(SelectionMode::NORMAL);
+    if (id == ToolID::CONSTRAIN_DISTANCE)
+        sketch_dimension_debug_log(std::format("editor tool_begin complete active={} mode={}",
+                                               m_core.tool_is_active(),
+                                               static_cast<int>(get_canvas().get_selection_mode())));
 }
 
 
 void Editor::tool_update_data(std::unique_ptr<ToolData> data)
 {
+    if (data)
+        sketch_dimension_debug_log(std::format("editor tool_update_data active={} data_type={}",
+                                               m_core.tool_is_active(), typeid(*data).name()));
     if (m_core.tool_is_active()) {
         ToolArgs args;
         args.type = ToolEventType::DATA;

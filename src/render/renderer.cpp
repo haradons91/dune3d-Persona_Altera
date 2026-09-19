@@ -2,7 +2,9 @@
 #include "canvas/icanvas.hpp"
 #include "document/document.hpp"
 #include "document/entity/all_entities.hpp"
+#include "document/entity/entity_line2d.hpp"
 #include "document/group/group_extrude.hpp"
+#include "document/group/group_sketch.hpp"
 #include "document/group/group_reference.hpp"
 #include "document/constraint/all_constraints.hpp"
 #include "document/solid_model/solid_model.hpp"
@@ -23,9 +25,63 @@
 #include "canvas/bitmap_font_util.hpp"
 #include <array>
 #include <iomanip>
+#include <limits>
 #include <ranges>
 #include <sstream>
 #include <glm/gtx/io.hpp>
+#include <format>
+#include <fstream>
+#include <GL/glu.h>
+
+namespace {
+struct TessVertex {
+    double x, y, z;
+    size_t index = 0;
+};
+
+struct TessOutput {
+    std::vector<std::tuple<size_t, size_t, size_t>> triangles;
+    GLenum mode = GL_TRIANGLES;
+    std::vector<size_t> current;
+};
+
+void tess_begin(GLenum mode, void *data)
+{
+    static_cast<TessOutput *>(data)->mode = mode;
+    static_cast<TessOutput *>(data)->current.clear();
+}
+
+void tess_vertex(void *vertex_data, void *data)
+{
+    static_cast<TessOutput *>(data)->current.push_back(static_cast<TessVertex *>(vertex_data)->index);
+}
+
+void tess_end(void *data)
+{
+    auto &out = *static_cast<TessOutput *>(data);
+    const auto &v = out.current;
+    if (out.mode == GL_TRIANGLES) {
+        for (size_t i = 0; i + 2 < v.size(); i += 3)
+            out.triangles.emplace_back(v[i], v[i + 1], v[i + 2]);
+    }
+    else if (out.mode == GL_TRIANGLE_FAN) {
+        for (size_t i = 1; i + 1 < v.size(); i++)
+            out.triangles.emplace_back(v[0], v[i], v[i + 1]);
+    }
+    else if (out.mode == GL_TRIANGLE_STRIP) {
+        for (size_t i = 2; i < v.size(); i++) {
+            if (i % 2)
+                out.triangles.emplace_back(v[i - 1], v[i - 2], v[i]);
+            else
+                out.triangles.emplace_back(v[i - 2], v[i - 1], v[i]);
+        }
+    }
+}
+
+void tess_error(GLenum, void *)
+{
+}
+}
 
 namespace dune3d {
 
@@ -168,7 +224,27 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
 
     // Draw the sketch axes last so they remain visible over the light grid.
     m_ca.set_vertex_inactive(false);
-    m_ca.draw_axis_line(to_world(min_x, 0), to_world(max_x, 0), ICanvas::Axis::X);
+    // In sketch mode the X axis should terminate at the sketch geometry's
+    // left and right bounds.  The rectangle tool updates its line entities
+    // while they are being resized, so using the current entity positions
+    // keeps the axis in sync with the live rectangle preview as well.
+    double axis_min_x = std::numeric_limits<double>::max();
+    double axis_max_x = std::numeric_limits<double>::lowest();
+    bool have_sketch_geometry = false;
+    for (const auto &entry : m_doc->m_entities) {
+        const auto &entity = entry.second;
+        if (entity->m_group != m_current_group->m_uuid || entity->get_type() != Entity::Type::LINE_2D)
+            continue;
+        const auto &line = dynamic_cast<const EntityLine2D &>(*entity);
+        if (line.m_wrkpl != wrkpl.m_uuid)
+            continue;
+        axis_min_x = std::min({axis_min_x, line.m_p1.x, line.m_p2.x});
+        axis_max_x = std::max({axis_max_x, line.m_p1.x, line.m_p2.x});
+        have_sketch_geometry = true;
+    }
+    if (!have_sketch_geometry)
+        axis_min_x = min_x, axis_max_x = max_x;
+    m_ca.draw_axis_line(to_world(axis_min_x, 0), to_world(axis_max_x, 0), ICanvas::Axis::X);
     m_ca.draw_axis_line(to_world(0, min_y), to_world(0, max_y), ICanvas::Axis::Y);
 
     // Put scale labels alongside the major grid lines. The text is drawn in
@@ -285,8 +361,22 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
     }
 
     for (auto &[uu, group] : doc.get_groups()) {
-        if (group->get_index() < first_group_index)
+        const bool is_visible_extrusion_source =
+                m_current_group && m_current_group->get_type() == Group::Type::EXTRUDE &&
+                group->m_uuid == dynamic_cast<const GroupExtrude &>(*m_current_group).m_source_group &&
+                group_is_visible(group->m_uuid);
+        if (group->get_index() < first_group_index && !is_visible_extrusion_source)
             continue;
+        if (m_is_current_document && m_current_group && m_current_group->get_type() == Group::Type::EXTRUDE) {
+            const auto &extrude = dynamic_cast<const GroupExtrude &>(*m_current_group);
+            if (group->m_uuid == extrude.m_source_group) {
+                std::ofstream log("/tmp/dune3d-visibility-debug.log", std::ios::app);
+                log << "renderer source_sketch=" << static_cast<std::string>(group->m_uuid) << " checked="
+                    << m_doc_view->group_is_visible(group->m_uuid) << " accepted="
+                    << group_is_visible(group->m_uuid) << " current_group="
+                    << static_cast<std::string>(m_current_group->m_uuid) << '\n';
+            }
+        }
         if (!group_is_visible(group->m_uuid))
             continue;
         set_chunk_from_group(*group);
@@ -299,7 +389,9 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             bool have_profile_point = false;
             const auto sketch_paths = paths::Paths::from_document(doc, extrude.m_wrkpl, extrude.m_source_group);
             for (size_t profile_idx = 0; profile_idx < sketch_paths.paths.size(); profile_idx++) {
-                if (extrude.m_source_path && profile_idx != *extrude.m_source_path)
+                if ((!extrude.m_source_paths.empty() && !extrude.m_source_paths.contains(profile_idx))
+                    || (extrude.m_source_paths.empty() && extrude.m_source_path
+                        && profile_idx != *extrude.m_source_path))
                     continue;
                 const auto &path = sketch_paths.paths.at(profile_idx);
                 if (path.size() == 1) {
@@ -324,13 +416,80 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             m_ca.add_selectable(m_ca.draw_line(base, tip), handle);
             m_ca.add_selectable(m_ca.draw_point(tip, IconID::POINT_DIAMOND), handle);
         }
-        if (m_is_current_document && group->get_type() == Group::Type::SKETCH && group->m_active_wrkpl) {
+        bool is_extrusion_source_overlay = false;
+        if (m_is_current_document && m_render_extrusion_editor && m_current_group
+            && m_current_group->get_type() == Group::Type::EXTRUDE) {
+            const auto &extrude = dynamic_cast<const GroupExtrude &>(*m_current_group);
+            is_extrusion_source_overlay = group->m_uuid == extrude.m_source_group;
+        }
+        if (m_is_current_document && !m_render_sketch_grid && !is_extrusion_source_overlay
+            && group->get_type() == Group::Type::SKETCH && group->m_active_wrkpl) {
             const auto &workplane = doc.get_entity<EntityWorkplane>(group->m_active_wrkpl);
             const auto sketch_paths = paths::Paths::from_document(doc, workplane.m_uuid, group->m_uuid);
-            unsigned int profile_idx = 0;
-            for (const auto &path : sketch_paths.paths) {
-                face::Face profile;
-                profile.color = face::Color{0.2, 0.65, 1.0};
+            static std::string last_profile_debug_signature;
+            const auto profile_debug_signature = std::format("paths={} cells={}", sketch_paths.paths.size(),
+                                                              sketch_paths.cells.size());
+            if (profile_debug_signature != last_profile_debug_signature) {
+                std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
+                log << "renderer " << profile_debug_signature << '\n';
+                for (size_t i = 0; i < sketch_paths.cells.size(); i++) {
+                    log << "cell " << i << " boundary=" << sketch_paths.cells.at(i).boundary << " holes=";
+                    for (const auto hole : sketch_paths.cells.at(i).holes)
+                        log << hole << ',';
+                    log << '\n';
+                }
+                last_profile_debug_signature = profile_debug_signature;
+            }
+            std::vector<size_t> profile_order;
+            for (size_t i = 0; i < sketch_paths.paths.size(); i++)
+                profile_order.push_back(i);
+            const auto profile_area = [&sketch_paths](size_t index) {
+                const auto &path = sketch_paths.paths.at(index);
+                if (path.size() == 1) {
+                    if (const auto *circle = dynamic_cast<const EntityCircle2D *>(&path.front().second.entity))
+                        return M_PI * circle->m_radius * circle->m_radius;
+                    return std::numeric_limits<double>::max();
+                }
+                double area = 0;
+                for (size_t i = 0; i < path.size(); i++) {
+                    const auto &a = path.at(i).first.p;
+                    const auto &b = path.at((i + 1) % path.size()).first.p;
+                    area += a.x * b.y - b.x * a.y;
+                }
+                return std::abs(area);
+            };
+            // Coplanar faces use depth testing for picking, with the later
+            // face winning in this renderer. Draw larger regions first so
+            // enclosed regions remain on top and selectable.
+            std::ranges::sort(profile_order, [](size_t a, size_t b) {
+                return a > b;
+            });
+            std::ranges::stable_sort(profile_order, [&profile_area](size_t a, size_t b) {
+                return profile_area(a) > profile_area(b);
+            });
+            const bool has_selected_profiles = m_selected_sketch_profile_group
+                                               && *m_selected_sketch_profile_group == group->m_uuid
+                                               && !m_selected_sketch_profiles.empty();
+            {
+                static std::string last_selection_signature;
+                std::string selection_signature = std::format("group={} selected_group={} selected=",
+                                                               static_cast<std::string>(group->m_uuid),
+                                                               m_selected_sketch_profile_group
+                                                                   ? static_cast<std::string>(*m_selected_sketch_profile_group)
+                                                                   : "none");
+                for (const auto index : m_selected_sketch_profiles)
+                    selection_signature += std::format("{},", index);
+                selection_signature += std::format(" active={}", has_selected_profiles);
+                if (selection_signature != last_selection_signature) {
+                    std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
+                    log << "renderer " << selection_signature << '\n';
+                    last_selection_signature = selection_signature;
+                }
+            }
+            size_t profile_layer = 0;
+            const auto make_profile_vertices = [&workplane, &sketch_paths](size_t index) {
+                std::vector<face::Vertex> vertices;
+                const auto &path = sketch_paths.paths.at(index);
                 if (path.size() == 1) {
                     if (const auto *circle = dynamic_cast<const EntityCircle2D *>(&path.front().second.entity)) {
                         constexpr unsigned int n_segments = 48;
@@ -338,7 +497,7 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                             const auto a = 2 * M_PI * i / n_segments;
                             const auto p = workplane.transform(circle->m_center
                                                                + glm::dvec2{std::cos(a), std::sin(a)} * circle->m_radius);
-                            profile.vertices.emplace_back(p.x, p.y, p.z);
+                            vertices.emplace_back(p.x, p.y, p.z);
                         }
                     }
                 }
@@ -347,8 +506,8 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                         if (const auto *arc = dynamic_cast<const EntityArc2D *>(&edge.entity)) {
                             const auto point = node.get_pt_for_edge(edge);
                             const auto other_point = point == 1 ? 2u : 1u;
-                            const auto start = paths::Paths::get_pt(edge.entity, point, edge.transform_fn);
-                            const auto end = paths::Paths::get_pt(edge.entity, other_point, edge.transform_fn);
+                            const auto start = edge.get_point(point);
+                            const auto end = edge.get_point(other_point);
                             const auto radius = glm::length(arc->m_center - arc->m_from);
                             const auto start_angle = angle(start - edge.transform(arc->m_center));
                             const auto end_angle = angle(end - edge.transform(arc->m_center));
@@ -364,31 +523,90 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                             for (unsigned int i = 0; i < segments; i++) {
                                 const auto p = workplane.transform(edge.transform(
                                         arc->m_center + euler(radius, start_angle + delta * i / segments)));
-                                profile.vertices.emplace_back(p.x, p.y, p.z);
+                                vertices.emplace_back(p.x, p.y, p.z);
                             }
                         }
                         else {
                             const auto p = workplane.transform(node.p);
-                            profile.vertices.emplace_back(p.x, p.y, p.z);
+                            vertices.emplace_back(p.x, p.y, p.z);
                         }
                     }
                 }
+                return vertices;
+            };
+            for (const auto profile_idx : profile_order) {
+                const bool profile_selected = m_selected_sketch_profiles.contains(profile_idx);
+                if (has_selected_profiles && !profile_selected)
+                    continue;
+                face::Face profile;
+                profile.color = face::Color{0.2, 0.65, 1.0};
+                profile.vertices = make_profile_vertices(profile_idx);
                 if (profile.vertices.size() >= 3) {
-                    const auto offset = glm::vec3(get_sketch_geometry_offset());
+                    const auto cell = std::ranges::find_if(sketch_paths.cells, [profile_idx](const auto &candidate) {
+                        return candidate.boundary == profile_idx && !candidate.holes.empty();
+                    });
+                    std::vector<TessVertex> tess_vertices;
+                    TessOutput tess_output;
+                    if (cell != sketch_paths.cells.end()) {
+                        auto add_contour = [&](const std::vector<face::Vertex> &contour) {
+                            const auto first = tess_vertices.size();
+                            for (const auto &vertex : contour) {
+                                tess_vertices.push_back({vertex.x, vertex.y, vertex.z, profile.vertices.size()});
+                                profile.vertices.push_back(vertex);
+                            }
+                            return std::pair{first, tess_vertices.size()};
+                        };
+                        profile.vertices.clear();
+                        std::vector<std::pair<size_t, size_t>> contours;
+                        contours.push_back(add_contour(make_profile_vertices(cell->boundary)));
+                        for (const auto hole : cell->holes)
+                            contours.push_back(add_contour(make_profile_vertices(hole)));
+
+                        GLUtesselator *tess = gluNewTess();
+                        gluTessCallback(tess, GLU_TESS_BEGIN_DATA, reinterpret_cast<void (*)()>(&tess_begin));
+                        gluTessCallback(tess, GLU_TESS_VERTEX_DATA, reinterpret_cast<void (*)()>(&tess_vertex));
+                        gluTessCallback(tess, GLU_TESS_END_DATA, reinterpret_cast<void (*)()>(&tess_end));
+                        gluTessCallback(tess, GLU_TESS_ERROR_DATA, reinterpret_cast<void (*)()>(&tess_error));
+                        gluTessProperty(tess, GLU_TESS_WINDING_RULE, GLU_TESS_WINDING_ODD);
+                        gluTessBeginPolygon(tess, &tess_output);
+                        for (const auto [begin, end] : contours) {
+                            gluTessBeginContour(tess);
+                            for (size_t i = begin; i < end; i++) {
+                                auto &vertex = tess_vertices.at(i);
+                                gluTessVertex(tess, &vertex.x, &vertex);
+                            }
+                            gluTessEndContour(tess);
+                        }
+                        gluTessEndPolygon(tess);
+                        gluDeleteTess(tess);
+                        profile.triangle_indices = std::move(tess_output.triangles);
+                    }
+                    auto offset = glm::vec3(get_sketch_geometry_offset());
+                    // Keep enclosed profiles in front of their containing
+                    // profile in both the visible and pick passes.
+                    offset -= glm::vec3(m_ca.get_cam_normal()) * static_cast<float>(profile_layer) * 1e-3f;
                     for (auto &vertex : profile.vertices)
                         vertex += face::Vertex{offset.x, offset.y, offset.z};
                     const auto normal = workplane.get_normal_vector();
                     for (size_t i = 0; i < profile.vertices.size(); i++)
                         profile.normals.emplace_back(normal.x, normal.y, normal.z);
-                    for (size_t i = 1; i + 1 < profile.vertices.size(); i++)
-                        profile.triangle_indices.emplace_back(0, i, i + 1);
+                    if (profile.triangle_indices.empty()) {
+                        for (size_t i = 1; i + 1 < profile.vertices.size(); i++)
+                            profile.triangle_indices.emplace_back(0, i, i + 1);
+                    }
                     const auto vref = m_ca.add_face_group({profile}, {0, 0, 0},
                                                           glm::quat_identity<float, glm::defaultp>(),
                                                           ICanvas::FaceColor::SKETCH_PROFILE);
+                    {
+                        std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
+                        log << std::format("renderer submit profile={} selected={} layer={} vertices={} triangles={}\n",
+                                           profile_idx, profile_selected, profile_layer, profile.vertices.size(),
+                                           profile.triangle_indices.size());
+                    }
                     m_ca.add_selectable(vref, SelectableRef{SelectableRef::Type::SKETCH_PROFILE,
                                                             group->m_uuid, profile_idx});
                 }
-                profile_idx++;
+                profile_layer++;
             }
         }
         for (const auto &[uu, el] : doc.m_entities) {
@@ -412,8 +630,6 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                     last_solid_model = gr->get_solid_model();
                     last_solid_model_group = group;
                 }
-                if (group->m_uuid == current_group)
-                    break;
             }
         }
 
@@ -446,7 +662,7 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
     if (!sr && !m_workspace_view->show_only_solid_models()) {
         set_chunk_from_group(*m_current_group);
         for (const auto &[uu, el] : doc.m_constraints) {
-            if (m_current_group->m_uuid != el->m_group)
+            if (!doc.get_groups().contains(el->m_group) || !group_is_visible(el->m_group))
                 continue;
             try {
                 el->accept(*this);
@@ -471,6 +687,18 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
 
 void Renderer::render(const Entity &entity)
 {
+    // Generated extrusion geometry is already represented by the solid
+    // model.  Do not draw its source arcs/circles (or their center markers)
+    // over the finished solid.  The extrusion editor intentionally keeps
+    // these entities available for its preview.
+    if (!m_render_extrusion_editor && entity.m_kind == ItemKind::GENRERATED &&
+        m_doc->get_group(entity.m_group).get_type() == Group::Type::EXTRUDE)
+        return;
+    if (m_render_extrusion_editor
+        && entity.of_type(Entity::Type::LINE_2D, Entity::Type::ARC_2D, Entity::Type::CIRCLE_2D,
+                          Entity::Type::POINT_2D, Entity::Type::BEZIER_2D, Entity::Type::LINE_3D,
+                          Entity::Type::ARC_3D, Entity::Type::CIRCLE_3D, Entity::Type::BEZIER_3D))
+        return;
     if (!entity.m_visible) {
         if (entity.get_type() != Entity::Type::WORKPLANE)
             return;
@@ -499,6 +727,7 @@ void Renderer::render(const Entity &entity)
     m_ca.set_vertex_inactive(entity.m_group != m_current_group->m_uuid && !visible_sketch_group);
     m_ca.set_selection_invisible(entity.m_selection_invisible);
     m_ca.set_vertex_construction(entity.m_construction);
+    m_ca.set_show_default_points(m_show_dimension_points);
     try {
         entity.accept(*this);
     }
@@ -513,11 +742,22 @@ void Renderer::visit(const EntityLine3D &line)
     // The extrusion leader is an editing aid, not part of the model.
     if (line.m_name == "leader")
         return;
+    if (line.m_kind == ItemKind::GENRERATED && m_doc->get_group(line.m_group).get_type() == Group::Type::EXTRUDE) {
+        const auto *sketch = m_current_group && m_current_group->get_type() == Group::Type::SKETCH
+                                     ? dynamic_cast<const GroupSketch *>(m_current_group)
+                                     : nullptr;
+        const bool show_face_reference = m_render_sketch_grid && sketch && sketch->m_attached_to_face;
+        if (!show_face_reference)
+            return;
+    }
     const bool extrusion_view_only = m_current_group && !m_render_extrusion_editor
                                       && m_current_group->get_type() == Group::Type::EXTRUDE
                                       && line.m_group == m_current_group->m_uuid;
     if (extrusion_view_only) {
-        m_ca.draw_line(line.m_p1, line.m_p2);
+        // Generated extrusion side/outline lines are construction geometry;
+        // the finished solid supplies the visible result.  Keep them out of
+        // the committed view so only the dedicated center handle is shown
+        // while extrusion editing is active.
         return;
     }
     m_ca.add_selectable(m_ca.draw_line(line.m_p1, line.m_p2),
@@ -1204,6 +1444,7 @@ void Renderer::draw_distance_line_with_direction(const glm::vec3 &from, const gl
                                                  const glm::vec3 &text_p, const std::string &label, const UUID &uu,
                                                  const glm::vec3 &fallback_normal)
 {
+    m_ca.set_line_style(ICanvas::LineStyle::THINNER);
     auto n = glm::normalize(dir);
     if (glm::dot(glm::normalize(from - to), n) < 0)
         n *= -1;
@@ -1215,7 +1456,18 @@ void Renderer::draw_distance_line_with_direction(const glm::vec3 &from, const gl
     m_ca.add_selectable(m_ca.draw_line(from, p1), sr);
     m_ca.add_selectable(m_ca.draw_line(to, p2), sr);
 
-    add_selectables(sr, m_ca.draw_bitmap_text(text_p, 1, label));
+    // The offset controls where the dimension line is placed, but the label
+    // should remain centered on the rendered measurement segment.  Using the
+    // raw offset point here made newly-created labels appear far along the
+    // line whenever the second selection/cursor was not at its midpoint.
+    const auto screen_from = m_ca.project_to_window(p1);
+    const auto screen_to = m_ca.project_to_window(p2);
+    auto label_angle = static_cast<float>(std::atan2(-(screen_to.y - screen_from.y), screen_to.x - screen_from.x));
+    if (label_angle > glm::half_pi<float>())
+        label_angle -= glm::pi<float>();
+    else if (label_angle <= -glm::half_pi<float>())
+        label_angle += glm::pi<float>();
+    add_selectables(sr, m_ca.draw_bitmap_text_centered((p1 + p2) / 2.f, 0.75f, label, label_angle));
 
     const float scale = constraint_arrow_scale;
     const float aspect = constraint_arrow_aspect;
@@ -1295,6 +1547,7 @@ void Renderer::visit(const ConstraintDiameterRadius &constr)
     AutoSaveRestore asr{*this};
 
     m_ca.set_vertex_constraint(true);
+    m_ca.set_line_style(ICanvas::LineStyle::THINNER);
     auto &en = m_doc->get_entity(constr.m_entity);
     auto &en_radius = dynamic_cast<const IEntityRadius &>(en);
     auto &en_wrkpl = dynamic_cast<const IEntityInWorkplane &>(en);
@@ -1326,7 +1579,14 @@ void Renderer::visit(const ConstraintDiameterRadius &constr)
     m_ca.add_selectable(m_ca.draw_screen_line(to, (-n + l * aspect) * scale), sr);
 
     const auto label = format_datum(*m_doc, constr);
-    add_selectables(sr, m_ca.draw_bitmap_text(p, 1, label));
+    const auto screen_from = m_ca.project_to_window(from);
+    const auto screen_to = m_ca.project_to_window(to);
+    auto label_angle = static_cast<float>(std::atan2(-(screen_to.y - screen_from.y), screen_to.x - screen_from.x));
+    if (label_angle > glm::half_pi<float>())
+        label_angle -= glm::pi<float>();
+    else if (label_angle <= -glm::half_pi<float>())
+        label_angle += glm::pi<float>();
+    add_selectables(sr, m_ca.draw_bitmap_text_centered(p, 0.75f, label, label_angle));
 }
 
 void Renderer::visit(const ConstraintPointDistanceHV &constr)
@@ -1334,11 +1594,75 @@ void Renderer::visit(const ConstraintPointDistanceHV &constr)
     AutoSaveRestore asr{*this};
 
     m_ca.set_vertex_constraint(true);
+    m_ca.set_line_style(ICanvas::LineStyle::THINNER);
     auto &wrkpl = m_doc->get_entity<EntityWorkplane>(constr.m_wrkpl);
     auto from = wrkpl.project(m_doc->get_point(constr.m_entity1));
     auto to = wrkpl.project(m_doc->get_point(constr.m_entity2));
     glm::vec2 mid = (from + to) / 2.;
     auto p = wrkpl.project(wrkpl.transform(mid) + constr.m_offset);
+
+    // Keep vertical rectangle dimensions on the left edge by default, and
+    // horizontal dimensions on the bottom edge by default. Move their visual
+    // extension lines to the opposite edge once the annotation is dragged
+    // past the rectangle's midpoint. The constraints themselves remain
+    // attached to their original geometry.
+    if (constr.get_type() == Constraint::Type::POINT_DISTANCE_VERTICAL ||
+        constr.get_type() == Constraint::Type::POINT_DISTANCE_HORIZONTAL) {
+        if (const auto *dimension_line = dynamic_cast<const EntityLine2D *>(
+                    &m_doc->get_entity(constr.m_entity1.entity))) {
+            constexpr double tolerance = 1e-6;
+            if (constr.get_type() == Constraint::Type::POINT_DISTANCE_VERTICAL) {
+                const auto y1 = std::min(dimension_line->m_p1.y, dimension_line->m_p2.y);
+                const auto y2 = std::max(dimension_line->m_p1.y, dimension_line->m_p2.y);
+                double left_x = std::numeric_limits<double>::infinity();
+                double right_x = -std::numeric_limits<double>::infinity();
+
+                for (const auto &[uuid, entity] : m_doc->m_entities) {
+                    const auto *line = dynamic_cast<const EntityLine2D *>(entity.get());
+                    if (!line || line->m_wrkpl != dimension_line->m_wrkpl ||
+                        std::abs(line->m_p2.x - line->m_p1.x) > tolerance)
+                        continue;
+                    const auto line_y1 = std::min(line->m_p1.y, line->m_p2.y);
+                    const auto line_y2 = std::max(line->m_p1.y, line->m_p2.y);
+                    if (std::abs(line_y1 - y1) > tolerance || std::abs(line_y2 - y2) > tolerance)
+                        continue;
+                    left_x = std::min(left_x, line->m_p1.x);
+                    right_x = std::max(right_x, line->m_p1.x);
+                }
+
+                if (std::isfinite(left_x) && std::isfinite(right_x) && right_x > left_x + tolerance) {
+                    const auto anchor_x = p.x > (left_x + right_x) / 2. ? right_x : left_x;
+                    from = {anchor_x, from.y};
+                    to = {anchor_x, to.y};
+                }
+            }
+            else {
+                const auto x1 = std::min(dimension_line->m_p1.x, dimension_line->m_p2.x);
+                const auto x2 = std::max(dimension_line->m_p1.x, dimension_line->m_p2.x);
+                double bottom_y = std::numeric_limits<double>::infinity();
+                double top_y = -std::numeric_limits<double>::infinity();
+
+                for (const auto &[uuid, entity] : m_doc->m_entities) {
+                    const auto *line = dynamic_cast<const EntityLine2D *>(entity.get());
+                    if (!line || line->m_wrkpl != dimension_line->m_wrkpl ||
+                        std::abs(line->m_p2.y - line->m_p1.y) > tolerance)
+                        continue;
+                    const auto line_x1 = std::min(line->m_p1.x, line->m_p2.x);
+                    const auto line_x2 = std::max(line->m_p1.x, line->m_p2.x);
+                    if (std::abs(line_x1 - x1) > tolerance || std::abs(line_x2 - x2) > tolerance)
+                        continue;
+                    bottom_y = std::min(bottom_y, line->m_p1.y);
+                    top_y = std::max(top_y, line->m_p1.y);
+                }
+
+                if (std::isfinite(bottom_y) && std::isfinite(top_y) && top_y > bottom_y + tolerance) {
+                    const auto anchor_y = p.y > (bottom_y + top_y) / 2. ? top_y : bottom_y;
+                    from = {from.x, anchor_y};
+                    to = {to.x, anchor_y};
+                }
+            }
+        }
+    }
     const double scale = constraint_arrow_scale;
     const double aspect = constraint_arrow_aspect;
     const double ext = constraint_line_extension;
@@ -1373,7 +1697,14 @@ void Renderer::visit(const ConstraintPointDistanceHV &constr)
     m_ca.add_selectable(m_ca.draw_line(ptt, wrkpl.transform(to)), sr);
 
     const auto label = format_datum(*m_doc, constr);
-    add_selectables(sr, m_ca.draw_bitmap_text(wrkpl.transform(p), 1, label));
+    const auto screen_from = m_ca.project_to_window(pft);
+    const auto screen_to = m_ca.project_to_window(ptt);
+    auto angle = static_cast<float>(std::atan2(-(screen_to.y - screen_from.y), screen_to.x - screen_from.x));
+    if (angle > glm::half_pi<float>())
+        angle -= glm::pi<float>();
+    else if (angle <= -glm::half_pi<float>())
+        angle += glm::pi<float>();
+    add_selectables(sr, m_ca.draw_bitmap_text_centered(wrkpl.transform(p), 0.75f, label, angle));
 }
 
 void Renderer::visit(const ConstraintPointsCoincident &constraint)
@@ -1524,7 +1855,7 @@ void Renderer::visit(const ConstraintLengthRatio &constraint)
 
     const auto label = format_datum(*m_doc, constraint);
     add_selectables(SelectableRef{SelectableRef::Type::CONSTRAINT, constraint.m_uuid, 0},
-                    m_ca.draw_bitmap_text(position, 1, label));
+                    m_ca.draw_bitmap_text_centered(position, 1, label));
 }
 
 void Renderer::visit(const ConstraintEqualRadius &constraint)
@@ -1638,7 +1969,7 @@ void Renderer::visit(const ConstraintLinesAngle &constr)
     }
 
     const auto label = format_datum(*m_doc, constr);
-    add_selectables(sr, m_ca.draw_bitmap_text(p, 1, label));
+    add_selectables(sr, m_ca.draw_bitmap_text_centered(p, 1, label));
 }
 
 void Renderer::visit(const ConstraintArcLineTangent &constraint)

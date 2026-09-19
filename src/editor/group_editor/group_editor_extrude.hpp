@@ -15,7 +15,10 @@ private:
     GroupExtrude &get_group();
 
     Gtk::Switch *m_normal_switch = nullptr;
+    Gtk::DropDown *m_profile_combo = nullptr;
     Gtk::DropDown *m_mode_combo = nullptr;
+
+    void reload_profiles();
 };
 
 } // namespace dune3d

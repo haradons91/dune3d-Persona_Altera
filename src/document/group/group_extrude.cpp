@@ -38,6 +38,10 @@ GroupExtrude::GroupExtrude(const UUID &uu, const json &j)
         j.at("direction").get_to(m_direction);
     if (j.contains("source_path"))
         m_source_path = j.at("source_path").get<unsigned int>();
+    if (j.contains("source_paths"))
+        m_source_paths = j.at("source_paths").get<std::set<unsigned int>>();
+    if (j.contains("source_profiles"))
+        m_source_profiles = j.at("source_profiles").get<std::set<unsigned int>>();
     // j.at("parallel_constraint_vals").get_to(m_parallel_constraint_vals);
 }
 
@@ -48,6 +52,10 @@ json GroupExtrude::serialize() const
     j["direction"] = m_direction;
     if (m_source_path)
         j["source_path"] = *m_source_path;
+    if (!m_source_paths.empty())
+        j["source_paths"] = m_source_paths;
+    if (!m_source_profiles.empty())
+        j["source_profiles"] = m_source_profiles;
     j["mode"] = m_mode;
     if (m_mode != Mode::SINGLE)
         j["offset_mul"] = m_offset_mul;

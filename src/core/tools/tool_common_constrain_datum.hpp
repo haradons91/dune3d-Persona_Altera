@@ -15,6 +15,7 @@ public:
 
 protected:
     ToolResponse prepare_interactive(Constraint &constraint);
+    bool has_interactive_constraint() const { return m_constraint_datum != nullptr; }
 
 private:
     class IConstraintDatum *m_constraint_datum = nullptr;

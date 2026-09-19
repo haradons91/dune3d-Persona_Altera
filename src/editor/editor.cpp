@@ -34,8 +34,18 @@
 #include "nlohmann/json.hpp"
 #include "buffer.hpp"
 #include <iostream>
+#include <fstream>
+#include <format>
 
 namespace dune3d {
+namespace {
+void sketch_dimension_debug_log(const std::string &message)
+{
+    static std::ofstream log("/tmp/dune3d-sketch-dimension-debug.log", std::ios::app);
+    log << message << '\n';
+    log.flush();
+}
+} // namespace
 
 Editor::CanvasUpdater::CanvasUpdater(Editor &editor) : m_editor(editor)
 {
@@ -376,6 +386,7 @@ void Editor::update_sketch_mode_ui()
     const bool extrusion_active = m_extrude_editing && m_core.has_documents()
                                   && m_core.get_current_document().get_group(m_core.get_current_group()).get_type()
                                              == Group::Type::EXTRUDE;
+    get_canvas().set_selection_peeling_enabled(!sketch_active);
     m_win.get_ribbon_create_group().set_visible(!sketch_active && !extrusion_active);
     m_win.get_ribbon_modify_group().set_visible(!sketch_active);
     m_win.get_ribbon_sketch_group().set_visible(sketch_active);
@@ -413,6 +424,18 @@ void Editor::init_canvas()
                 true);
 
         get_canvas().add_controller(controller);
+    }
+    {
+        // The ribbon button keeps keyboard focus after a tool is activated.
+        // Listen at the window level as well so Escape cancels immediately,
+        // without requiring the user to focus the canvas first.
+        auto controller = Gtk::EventControllerKey::create();
+        controller->signal_key_pressed().connect(
+                [this, controller](guint keyval, guint keycode, Gdk::ModifierType state) -> bool {
+                    return handle_action_key(controller, keyval, state);
+                },
+                true);
+        m_win.add_controller(controller);
     }
     {
         auto controller = Gtk::GestureClick::create();
@@ -456,6 +479,33 @@ void Editor::init_canvas()
                     ToolArgs args;
                     args.type = ToolEventType::ACTION;
                     args.action = InToolActionID::LMB;
+                    // A dimension tool may be activated before the geometry
+                    // is selected. Pass the current canvas selection so the
+                    // first click can choose the line to dimension.
+                    args.selection = get_canvas().get_selection();
+                    if (m_core.get_tool_id() == ToolID::CONSTRAIN_DISTANCE) {
+                        // Once Dimension is active, its tool selection is the
+                        // authoritative first item.  The canvas selection can
+                        // be cleared while the tool waits for the second
+                        // click, especially when Ctrl-clicking another edge.
+                        // Combine the existing tool item with the current
+                        // hover so two edges from nested rectangles reach the
+                        // constraint tool together.
+                        args.selection = m_core.get_tool_selection();
+                    }
+                    if (auto hover_selection = get_canvas().get_hover_selection())
+                        args.selection.insert(*hover_selection);
+                    if (m_core.get_tool_id() == ToolID::CONSTRAIN_DISTANCE) {
+                        const auto state = controller->get_current_event_state();
+                        args.m_keep_selection = (state & (Gdk::ModifierType::CONTROL_MASK
+                                                          | Gdk::ModifierType::SHIFT_MASK))
+                                                != Gdk::ModifierType{};
+                    }
+                    if (m_core.get_tool_id() == ToolID::CONSTRAIN_DISTANCE)
+                        sketch_dimension_debug_log(std::format(
+                                "editor canvas_click selection_count={} hover={} mode={}", args.selection.size(),
+                                get_canvas().get_hover_selection().has_value(),
+                                static_cast<int>(get_canvas().get_selection_mode())));
                     ToolResponse r = m_core.tool_update(args);
                     tool_process(r);
                 }
@@ -841,7 +891,9 @@ void Editor::init_properties_notebook()
     m_properties_notebook = Gtk::make_managed<Gtk::Notebook>();
     m_properties_notebook->set_show_border(false);
     m_properties_notebook->set_tab_pos(Gtk::PositionType::BOTTOM);
-    m_win.get_left_bar().set_end_child(*m_properties_notebook);
+    // The lower properties notebook is intentionally not attached to the
+    // left pane.  The tree remains, but the Group/Constraints/Selection tabs
+    // are no longer displayed there.
     {
         auto box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
         m_group_editor_box = Gtk::make_managed<Gtk::Box>();
@@ -1055,7 +1107,7 @@ void Editor::init_header_bar()
     attach_action_button(m_win.get_ribbon_btn_rect(), ToolID::DRAW_RECTANGLE);
     attach_action_button(m_win.get_ribbon_btn_circle(), ToolID::DRAW_CIRCLE_2D);
     attach_action_button(m_win.get_ribbon_btn_polygon(), ToolID::DRAW_REGULAR_POLYGON);
-    attach_action_button(m_win.get_ribbon_btn_text(), ToolID::DRAW_TEXT);
+    attach_action_button(m_win.get_ribbon_btn_dimension_create(), ToolID::CONSTRAIN_DISTANCE);
 
     attach_action_button(m_win.get_ribbon_btn_dimension(), ToolID::CONSTRAIN_DISTANCE);
     attach_action_button(m_win.get_ribbon_sketch_btn_fillet(), ToolID::SKETCH_FILLET);
@@ -1510,6 +1562,18 @@ void Editor::render_document(const IDocumentInfo &doc)
                                     && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
     renderer.m_render_extrusion_editor = m_extrude_editing
                                          && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
+    renderer.m_show_dimension_points = m_core.get_tool_id() == ToolID::CONSTRAIN_DISTANCE
+                                      && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
+    for (const auto &selection : get_canvas().get_selection()) {
+        Logger::log_debug(std::format("render selection type={} item={} point={}",
+                                      static_cast<int>(selection.type), static_cast<std::string>(selection.item),
+                                      selection.point),
+                          Logger::Domain::CANVAS);
+        if (selection.type == SelectableRef::Type::SKETCH_PROFILE) {
+            renderer.m_selected_sketch_profile_group = selection.item;
+            renderer.m_selected_sketch_profiles.insert(selection.point);
+        }
+    }
     renderer.m_sketch_plane_grid = m_sketch_plane_grid;
     renderer.m_sketch_grid_offset = m_sketch_grid_offset;
     if (renderer.m_render_sketch_plane_selector) {
@@ -1530,9 +1594,25 @@ void Editor::render_document(const IDocumentInfo &doc)
 }
 void Editor::canvas_update()
 {
-    if (m_rectangle_dimensions_origin)
-        m_win.position_rectangle_dimensions(get_canvas().project_to_window(*m_rectangle_dimensions_origin),
-                                            m_rectangle_dimensions_negative_x, m_rectangle_dimensions_negative_y);
+    if (m_extrude_editing && m_core.has_documents()
+        && m_core.get_current_document().get_group(m_core.get_current_group()).get_type() == Group::Type::EXTRUDE) {
+        auto &doc = m_core.get_current_document();
+        const auto &group = doc.get_group<GroupExtrude>(m_core.get_current_group());
+        const auto &workplane = doc.get_entity<EntityWorkplane>(group.m_wrkpl);
+        const auto base = workplane.m_origin;
+        const auto tip = base + group.m_dvec;
+        if (!m_win.rectangle_dimensions_visible())
+            m_win.show_extrude_dimension(glm::length(group.m_dvec));
+        m_win.position_extrude_dimension(get_canvas().project_to_window(base), get_canvas().project_to_window(tip));
+    }
+    else if (m_rectangle_dimensions_origin)
+        m_win.position_rectangle_dimensions(
+                get_canvas().project_to_window(*m_rectangle_dimensions_origin),
+                get_canvas().project_to_window(*m_rectangle_dimensions_x_min),
+                get_canvas().project_to_window(*m_rectangle_dimensions_x_max),
+                get_canvas().project_to_window(*m_rectangle_dimensions_y_min),
+                get_canvas().project_to_window(*m_rectangle_dimensions_y_max), m_rectangle_dimensions_negative_x,
+                m_rectangle_dimensions_negative_y);
     auto docs = m_core.get_documents();
     auto hover_sel = get_canvas().get_hover_selection();
     if (m_update_groups_after == UUID()) {
@@ -1603,23 +1683,88 @@ void Editor::update_rectangle_dimensions(double width, double height)
 {
     m_win.update_rectangle_dimensions(width, height);
 }
+void Editor::show_extrude_dimension(double height)
+{
+    m_win.show_extrude_dimension(height);
+}
+void Editor::update_extrude_dimension(double height)
+{
+    if (!m_extrude_editing || !m_core.has_documents() || height < 0 || height > 1e6)
+        return;
+    auto &doc = m_core.get_current_document();
+    auto &group = doc.get_group<GroupExtrude>(m_core.get_current_group());
+    auto direction = glm::length(group.m_dvec) > 1e-9 ? glm::normalize(group.m_dvec)
+                                                       : doc.get_entity<EntityWorkplane>(group.m_wrkpl).get_normal_vector();
+    group.m_dvec = direction * height;
+    doc.set_group_generate_pending(group.m_uuid);
+    doc.update_pending();
+    canvas_update_keep_selection();
+}
+void Editor::hide_extrude_dimension()
+{
+    m_win.hide_extrude_dimension();
+}
+void Editor::position_extrude_dimension(glm::dvec3 base, glm::dvec3 tip)
+{
+    m_win.position_extrude_dimension(get_canvas().project_to_window(base), get_canvas().project_to_window(tip));
+}
 void Editor::hide_rectangle_dimensions()
 {
     m_win.hide_rectangle_dimensions();
     m_rectangle_dimensions_origin.reset();
+    m_rectangle_dimensions_x_min.reset();
+    m_rectangle_dimensions_x_max.reset();
+    m_rectangle_dimensions_y_min.reset();
+    m_rectangle_dimensions_y_max.reset();
 }
 
-void Editor::position_rectangle_dimensions(glm::dvec3 origin, bool negative_x, bool negative_y)
+void Editor::show_circle_dimension(double diameter)
+{
+    m_win.show_circle_dimension(diameter);
+}
+void Editor::update_circle_dimension(double diameter)
+{
+    m_win.update_circle_dimension(diameter);
+}
+void Editor::hide_circle_dimension()
+{
+    m_win.hide_circle_dimension();
+}
+void Editor::position_circle_dimension(glm::dvec3 center, glm::dvec3 left, glm::dvec3 right)
+{
+    m_win.position_circle_dimension(get_canvas().project_to_window(center), get_canvas().project_to_window(left),
+                                    get_canvas().project_to_window(right));
+}
+
+void Editor::position_rectangle_dimensions(glm::dvec3 origin, glm::dvec3 x_min, glm::dvec3 x_max,
+                                           glm::dvec3 y_min, glm::dvec3 y_max, bool negative_x, bool negative_y)
 {
     m_rectangle_dimensions_origin = origin;
+    m_rectangle_dimensions_x_min = x_min;
+    m_rectangle_dimensions_x_max = x_max;
+    m_rectangle_dimensions_y_min = y_min;
+    m_rectangle_dimensions_y_max = y_max;
     m_rectangle_dimensions_negative_x = negative_x;
     m_rectangle_dimensions_negative_y = negative_y;
-    m_win.position_rectangle_dimensions(get_canvas().project_to_window(origin), negative_x, negative_y);
+    m_win.position_rectangle_dimensions(get_canvas().project_to_window(origin), get_canvas().project_to_window(x_min),
+                                        get_canvas().project_to_window(x_max), get_canvas().project_to_window(y_min),
+                                        get_canvas().project_to_window(y_max), negative_x, negative_y);
 }
 
 void Editor::accept_rectangle_dimensions()
 {
     if (m_core.get_tool_id() != ToolID::DRAW_RECTANGLE)
+        return;
+    ToolArgs args;
+    args.type = ToolEventType::ACTION;
+    args.action = InToolActionID::LMB;
+    ToolResponse response = m_core.tool_update(args);
+    tool_process(response);
+}
+
+void Editor::accept_circle_dimension()
+{
+    if (m_core.get_tool_id() != ToolID::DRAW_CIRCLE_2D && m_core.get_tool_id() != ToolID::SKETCH_FILLET)
         return;
     ToolArgs args;
     args.type = ToolEventType::ACTION;
@@ -1763,6 +1908,13 @@ void Editor::handle_click(unsigned int button, unsigned int n)
     else if (button == 1) {
         auto hover_sel = get_canvas().get_hover_selection();
         if (!hover_sel)
+            return;
+
+        // Sketch geometry is edited through explicit sketch tools and
+        // constraints. Do not start the generic move-drag when the sketch is
+        // being edited; this prevents a line from being grabbed and moved by
+        // an ordinary click-drag.
+        if (m_sketch_editing && hover_sel->type != SelectableRef::Type::CONSTRAINT)
             return;
 
         auto sel = get_canvas().get_selection();

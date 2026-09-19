@@ -7,7 +7,9 @@ Appearance::Appearance()
 {
     colors[ColorP::BACKGROUND_BOTTOM] = {1.00, 1.00, 0.93};
     colors[ColorP::BACKGROUND_TOP] = {0.74, 0.92, 0.94};
-    colors[ColorP::CONSTRAINT] = {0.69, 0.25, 0.68};
+    // Dimension annotations and their guide geometry use the same black
+    // annotation style as the sketch geometry.
+    colors[ColorP::CONSTRAINT] = {0.00, 0.00, 0.00};
     colors[ColorP::CONSTRUCTION_ENTITY] = {0.36, 0.21, 0.36};
     colors[ColorP::CONSTRUCTION_POINT] = {0.18, 0.63, 0.00};
     colors[ColorP::ENTITY] = {0.00, 0.00, 0.00};

@@ -15,6 +15,7 @@ EntityPoint2D::EntityPoint2D(const UUID &uu) : Base(uu)
 EntityPoint2D::EntityPoint2D(const UUID &uu, const json &j)
     : Base(uu, j), m_p(j.at("p").get<glm::dvec2>()), m_wrkpl(j.at("wrkpl").get<UUID>())
 {
+    m_visible = j.value("visible", true);
 }
 
 json EntityPoint2D::serialize() const
@@ -22,6 +23,7 @@ json EntityPoint2D::serialize() const
     json j = Entity::serialize();
     j["p"] = m_p;
     j["wrkpl"] = m_wrkpl;
+    j["visible"] = m_visible;
     return j;
 }
 

@@ -2,6 +2,7 @@
 #include "group_sweep.hpp"
 #include <glm/glm.hpp>
 #include <optional>
+#include <set>
 
 namespace dune3d {
 
@@ -22,6 +23,10 @@ public:
     Direction m_direction = Direction::NORMAL;
 
     glm::dvec3 m_dvec = {0, 0, 1};
+    std::set<unsigned int> m_source_paths;
+    // Profile cells explicitly selected by the user.  Unlike source_paths,
+    // these identify planar regions rather than only their boundary loops.
+    std::set<unsigned int> m_source_profiles;
     std::optional<unsigned int> m_source_path;
     void update_solid_model(const Document &doc) override;
 

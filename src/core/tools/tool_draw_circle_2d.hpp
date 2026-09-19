@@ -34,6 +34,7 @@ private:
     glm::dvec2 m_first_point;
     glm::dvec2 m_second_point;
     unsigned int m_points_placed = 0;
+    bool m_diameter_locked = false;
 
     bool update_three_point_circle(const glm::dvec2 &third_point);
 };

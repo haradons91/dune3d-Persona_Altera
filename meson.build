@@ -13,6 +13,7 @@ gtk4 = dependency('gtk4', version: '>=4.10')
 pthread = cxx.find_library('pthread')
 gtkmm = dependency('gtkmm-4.0', version: '>=4.10')
 epoxy = dependency('epoxy')
+glu = cxx.find_library('GLU', required: false)
 eigen = dependency('eigen3')
 glm = dependency('glm')
 harfbuzz = dependency('harfbuzz')
@@ -422,6 +423,9 @@ if is_libstdcpp
 endif
 
 build_dependencies = [gtk4, gtkmm, epoxy, opencascade, eigen, glm, stdlibs, spnav, harfbuzz, freetype, png, pthread]
+if glu.found()
+  build_dependencies += glu
+endif
 if not is_windows
 	uuid = dependency('uuid')
 	build_dependencies += uuid

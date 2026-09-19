@@ -1,7 +1,9 @@
 #include "group_editor_extrude.hpp"
 #include "document/group/group_extrude.hpp"
 #include "util/gtk_util.hpp"
+#include "util/paths.hpp"
 #include "core/core.hpp"
+#include <format>
 
 namespace dune3d {
 
@@ -27,6 +29,40 @@ GroupEditorExtrude::GroupEditorExtrude(Core &core, const UUID &group_uu) : Group
     add_operation_combo();
     {
         auto items = Gtk::StringList::create();
+        items->append("All profiles");
+        try {
+            const auto paths = paths::Paths::from_document(m_core.get_current_document(), group.m_wrkpl,
+                                                           group.m_source_group);
+            for (size_t i = 0; i < paths.paths.size(); i++)
+                items->append(std::format("Profile {}", i + 1));
+        }
+        catch (...) {
+            // The source sketch can be temporarily incomplete while an
+            // extrusion is being created.  Keep the default choice usable.
+        }
+
+        m_profile_combo = Gtk::make_managed<Gtk::DropDown>(items);
+        const auto selected_profile = group.m_source_paths.size() == 1
+                                              ? *group.m_source_paths.begin() + 1
+                                              : (group.m_source_path ? *group.m_source_path + 1 : 0);
+        m_profile_combo->set_selected(selected_profile < items->get_n_items() ? selected_profile : 0);
+        m_profile_combo->property_selected().signal_changed().connect([this] {
+            if (is_reloading())
+                return;
+            auto &group = get_group();
+            const auto selected = m_profile_combo->get_selected();
+            group.m_source_paths.clear();
+            if (selected == 0)
+                group.m_source_path.reset();
+            else
+                group.m_source_path = selected - 1;
+            m_core.get_current_document().set_group_generate_pending(group.m_uuid);
+            m_signal_changed.emit(CommitMode::IMMEDIATE);
+        });
+        grid_attach_label_and_widget(*this, "Profile", *m_profile_combo, m_top);
+    }
+    {
+        auto items = Gtk::StringList::create();
         items->append("Single");
         items->append("Offset");
         items->append("Offset symmetric");
@@ -50,7 +86,28 @@ void GroupEditorExtrude::do_reload()
     GroupEditorSweep::do_reload();
     auto &group = get_group();
     m_normal_switch->set_active(group.m_direction == GroupExtrude::Direction::NORMAL);
+    reload_profiles();
     m_mode_combo->set_selected(static_cast<guint>(group.m_mode));
+}
+
+void GroupEditorExtrude::reload_profiles()
+{
+    auto &group = get_group();
+    auto items = Gtk::StringList::create();
+    items->append("All profiles");
+    try {
+        const auto paths = paths::Paths::from_document(m_core.get_current_document(), group.m_wrkpl,
+                                                       group.m_source_group);
+        for (size_t i = 0; i < paths.paths.size(); i++)
+            items->append(std::format("Profile {}", i + 1));
+    }
+    catch (...) {
+    }
+    m_profile_combo->set_model(items);
+    const auto selected_profile = group.m_source_paths.size() == 1
+                                          ? *group.m_source_paths.begin() + 1
+                                          : (group.m_source_path ? *group.m_source_path + 1 : 0);
+    m_profile_combo->set_selected(selected_profile < items->get_n_items() ? selected_profile : 0);
 }
 
 GroupExtrude &GroupEditorExtrude::get_group()

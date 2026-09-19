@@ -760,9 +760,21 @@ std::optional<ActionToolID> Editor::get_doubleclick_action(const SelectableRef &
 bool Editor::handle_action_key(Glib::RefPtr<Gtk::EventControllerKey> controller, unsigned int keyval,
                                Gdk::ModifierType state)
 {
+    if ((keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) && m_extrude_editing
+        && (state & (Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::CONTROL_MASK
+                     | Gdk::ModifierType::ALT_MASK)) == Gdk::ModifierType::NO_MODIFIER_MASK) {
+        m_win.commit_extrude_dimension();
+        finish_extrusion();
+        return true;
+    }
     if ((keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab)
         && m_core.get_tool_id() == ToolID::DRAW_RECTANGLE) {
         m_win.commit_and_focus_next_rectangle_dimension();
+        return true;
+    }
+    if ((keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab)
+        && (m_core.get_tool_id() == ToolID::DRAW_CIRCLE_2D || m_core.get_tool_id() == ToolID::SKETCH_FILLET)) {
+        m_win.focus_circle_dimension();
         return true;
     }
     auto ev = controller->get_current_event();

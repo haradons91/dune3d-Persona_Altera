@@ -4,10 +4,12 @@ layout(location=1) in vec2 shift;
 layout(location=2) in float scale;
 layout(location=3) in uint bits;
 layout(location=4) in uint flags;
+layout(location=5) in float angle;
 
 out vec4 origin_to_geom;
 out vec2 shift_to_geom;
 out float scale_to_geom;
+out float angle_to_geom;
 flat out uint flags_to_geom;
 flat out uint pick_to_geom;
 flat out uint bits_to_geom;
@@ -23,6 +25,6 @@ void main() {
     shift_to_geom = shift * scale_factor;
     bits_to_geom = bits;
     scale_to_geom = scale * scale_factor;
+    angle_to_geom = angle;
 	
 }
-

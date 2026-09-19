@@ -26,10 +26,11 @@ class FaceBuilder {
 public:
     using Transform = std::function<glm::dvec3(const glm::dvec3 &)>;
     static FaceBuilder from_document(const Document &doc, const UUID &wrkpl_uu, const UUID &source_group_uu,
-                                     const glm::dvec3 &offset, std::optional<unsigned int> source_path = {});
+                                     const glm::dvec3 &offset,
+                                     std::optional<std::set<unsigned int>> source_paths = {});
     static FaceBuilder from_document(const Document &doc, const UUID &wrkpl_uu, const UUID &source_group_uu,
                                      Transform fn_transform, Transform fn_transform_normal,
-                                     std::optional<unsigned int> source_path = {});
+                                     std::optional<std::set<unsigned int>> source_paths = {});
 
     const TopoDS_Compound &get_faces() const;
     const auto &get_wires() const

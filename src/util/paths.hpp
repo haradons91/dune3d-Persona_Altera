@@ -4,6 +4,8 @@
 #include <list>
 #include <functional>
 #include <deque>
+#include <optional>
+#include <vector>
 #include <glm/glm.hpp>
 
 
@@ -31,7 +33,8 @@ public:
 class Edge {
 public:
     using Transform = std::function<glm::dvec2(glm::dvec2)>;
-    Edge(std::list<Node> &nodes, const Entity &e, Transform tr);
+    Edge(std::list<Node> &nodes, const Entity &e, Transform tr, std::optional<glm::dvec2> p1 = {},
+         std::optional<glm::dvec2> p2 = {});
     Edge(Node &node, const EntityCircle2D &e, Transform tr);
     Node &from;
     Node &to;
@@ -39,13 +42,24 @@ public:
     const Entity &entity;
     const Transform transform_fn;
     glm::dvec2 transform(const glm::dvec2 &v) const;
+    glm::dvec2 get_point(unsigned int pt) const;
+
+private:
+    std::optional<glm::dvec2> m_p1;
+    std::optional<glm::dvec2> m_p2;
 };
 
 using Path = std::deque<std::pair<Node &, Edge &>>;
 
+struct Cell {
+    unsigned int boundary = 0;
+    std::set<unsigned int> holes;
+};
+
 class Paths {
 public:
     std::deque<Path> paths;
+    std::deque<Cell> cells;
     static Paths from_document(const Document &doc, const UUID &wrkpl_uu, const UUID &source_group_uu);
     static glm::dvec2 get_pt(const Entity &e, unsigned int pt, Edge::Transform tr);
 

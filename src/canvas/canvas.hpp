@@ -53,6 +53,8 @@ public:
     VertexRef draw_axis_line(glm::vec3 from, glm::vec3 to, Axis axis) override;
     VertexRef draw_screen_line(glm::vec3 origin, glm::vec3 direction) override;
     std::vector<VertexRef> draw_bitmap_text(glm::vec3 p, float size, const std::string &rtext) override;
+    std::vector<VertexRef> draw_bitmap_text_centered(glm::vec3 p, float size,
+                                                     const std::string &rtext, float angle = 0) override;
     std::vector<VertexRef> draw_bitmap_text_3d(glm::vec3 p, const glm::quat &norm, float size,
                                                const std::string &rtext) override;
     void add_selectable(const VertexRef &vref, const SelectableRef &sref) override;
@@ -71,6 +73,10 @@ public:
     void set_no_points(bool c) override
     {
         m_state.no_points = c;
+    }
+    void set_show_default_points(bool c) override
+    {
+        m_state.show_default_points = c;
     }
     void set_line_style(LineStyle style) override
     {
@@ -100,9 +106,15 @@ public:
     }
     glm::dvec2 get_cursor_pos_win() const;
     void update_cursor_position(double x, double y);
-    glm::dvec2 project_to_window(glm::dvec3 point) const;
+    glm::dvec2 project_to_window(glm::dvec3 point) const override;
 
     void set_selection_mode(SelectionMode mode);
+    void set_selection_peeling_enabled(bool enabled)
+    {
+        m_selection_peeling_enabled = enabled;
+        if (!enabled)
+            m_selection_peeling = false;
+    }
     SelectionMode get_selection_mode() const
     {
         return m_selection_mode;
@@ -488,6 +500,7 @@ private:
         bool vertex_constraint = false;
         bool vertex_construction = false;
         bool no_points = false;
+        bool show_default_points = false;
         LineStyle line_style = LineStyle::DEFAULT;
     };
 
@@ -498,6 +511,7 @@ private:
     glm::vec3 transform_point_rel(glm::vec3 pt) const;
 
     bool m_selection_peeling = false;
+    bool m_selection_peeling_enabled = true;
     static constexpr unsigned int s_peel_max = 8;
 
     Gtk::Popover *m_selection_menu = nullptr;

@@ -7,6 +7,7 @@
 #include "document/constraint/constraint_point_on_line.hpp"
 #include "document/constraint/constraint_point_on_circle.hpp"
 #include "editor/editor_interface.hpp"
+#include "dialogs/rectangle_dimensions_window.hpp"
 #include "util/selection_util.hpp"
 #include "util/action_label.hpp"
 #include "tool_common_impl.hpp"
@@ -57,15 +58,25 @@ ToolResponse ToolDrawCircle2D::update(const ToolArgs &args)
     if (args.type == ToolEventType::MOVE) {
         if (m_temp_circle) {
             const auto p = get_cursor_pos_in_plane();
-            if (m_tool_id == ToolID::DRAW_CIRCLE_2_POINT && m_points_placed == 1) {
+            if (!m_diameter_locked && m_tool_id == ToolID::DRAW_CIRCLE_2_POINT && m_points_placed == 1) {
                 m_temp_circle->m_center = (m_first_point + p) / 2.;
                 m_temp_circle->m_radius = glm::length(p - m_first_point) / 2.;
             }
-            else if (m_tool_id == ToolID::DRAW_CIRCLE_3_POINT && m_points_placed == 2) {
+            else if (!m_diameter_locked && m_tool_id == ToolID::DRAW_CIRCLE_3_POINT && m_points_placed == 2) {
                 update_three_point_circle(p);
             }
-            else
+            else if (!m_diameter_locked)
                 m_temp_circle->m_radius = glm::length(p - m_temp_circle->m_center);
+
+            const auto center = m_wrkpl->transform(m_temp_circle->m_center);
+            const auto radius = m_wrkpl->transform({m_temp_circle->m_center.x + m_temp_circle->m_radius,
+                                                     m_temp_circle->m_center.y});
+            const auto diameter = 2. * m_temp_circle->m_radius;
+            m_intf.update_circle_dimension(diameter);
+            m_intf.position_circle_dimension(center,
+                                             m_wrkpl->transform({m_temp_circle->m_center.x - m_temp_circle->m_radius,
+                                                                 m_temp_circle->m_center.y}),
+                                             radius);
         }
         update_tip();
         set_first_update_group_current();
@@ -83,14 +94,16 @@ ToolResponse ToolDrawCircle2D::update(const ToolArgs &args)
                 if (m_tool_id == ToolID::DRAW_CIRCLE_2_POINT && m_points_placed == 1) {
                     const auto p = get_cursor_pos_in_plane();
                     m_temp_circle->m_center = (m_first_point + p) / 2.;
-                    m_temp_circle->m_radius = glm::length(p - m_first_point) / 2.;
+                    if (!m_diameter_locked)
+                        m_temp_circle->m_radius = glm::length(p - m_first_point) / 2.;
                 }
                 else if (m_tool_id == ToolID::DRAW_CIRCLE_3_POINT && m_points_placed == 2) {
                     const auto p = get_cursor_pos_in_plane();
-                    if (!update_three_point_circle(p))
+                    if (!m_diameter_locked && !update_three_point_circle(p))
                         return ToolResponse();
                 }
                 m_temp_circle->m_selection_invisible = false;
+                m_intf.hide_circle_dimension();
                 if (m_constrain) {
                     if (auto hsel = m_intf.get_hover_selection()) {
                         if (hsel->type == SelectableRef::Type::ENTITY) {
@@ -114,6 +127,8 @@ ToolResponse ToolDrawCircle2D::update(const ToolArgs &args)
                 m_temp_circle->m_wrkpl = m_wrkpl->m_uuid;
                 m_first_point = m_temp_circle->m_center;
                 m_points_placed = 1;
+                m_diameter_locked = false;
+                m_intf.show_circle_dimension(0);
 
                 if (m_constrain && m_tool_id == ToolID::DRAW_CIRCLE_2D) {
                     const EntityAndPoint circle_center{m_temp_circle->m_uuid, 1};
@@ -135,11 +150,23 @@ ToolResponse ToolDrawCircle2D::update(const ToolArgs &args)
 
         case InToolActionID::RMB:
         case InToolActionID::CANCEL:
+            m_intf.hide_circle_dimension();
             return ToolResponse::revert();
 
         default:;
         }
         update_tip();
+    }
+
+    else if (args.type == ToolEventType::DATA) {
+        if (auto data = dynamic_cast<const ToolDataCircleDimensionsWindow *>(args.data.get())) {
+            if (data->event == ToolDataWindow::Event::UPDATE && m_temp_circle) {
+                m_temp_circle->m_radius = std::abs(data->diameter) / 2.;
+                m_diameter_locked = true;
+                set_first_update_group_current();
+                m_intf.canvas_update_from_tool();
+            }
+        }
     }
 
     return ToolResponse();

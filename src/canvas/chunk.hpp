@@ -92,6 +92,7 @@ public:
 
         float scale;
         uint32_t bits;
+        float angle = 0;
 
         VertexFlags flags = VertexFlags::DEFAULT;
     };

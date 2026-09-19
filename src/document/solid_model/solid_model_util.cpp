@@ -18,6 +18,9 @@
 #include <NCollection_Array1.hxx>
 #include <Geom_BezierCurve.hxx>
 #include <gp_Circ.hxx>
+#include <fstream>
+#include <format>
+#include <limits>
 
 namespace dune3d::solid_model_util {
 
@@ -153,7 +156,7 @@ static Clipper2Lib::PathD path_to_clipper(const Path &path, unsigned int path_in
             }
         }
         else {
-            const auto pct = edge.transform({pc.x, pc.y});
+            const auto pct = edge.get_point(pt);
             cpath.emplace_back(
                     pct.x, pct.y,
                     VertexInfo{.sub = false, .vertex_index = static_cast<unsigned int>(iv), .path_index = path_index}
@@ -182,17 +185,7 @@ static bool path_is_valid(const Path &path)
 
 bool FaceBuilder::check_path(const Clipper2Lib::PathD &contour)
 {
-    const auto path_index = VertexInfo::unpack(contour.front().z).path_index;
-    if (contour.front().z == -1)
-        return false;
-
-    auto same_z = std::ranges::all_of(contour, [path_index](auto &pt) {
-        return VertexInfo::unpack(pt.z).path_index == path_index && pt.z != -1;
-    });
-    if (!same_z)
-        return false;
-
-    return true;
+    return !contour.empty();
 }
 
 void FaceBuilder::visit_poly_path(const Clipper2Lib::PolyPathD &path, const DocumentRef &docref)
@@ -251,6 +244,20 @@ static std::pair<const Node &, const Edge &> get_node_and_edge(const Path &path,
 TopoDS_Wire FaceBuilder::path_to_wire(const Clipper2Lib::PathD &path, bool hole, const DocumentRef &docref)
 {
 
+    // Clipper creates synthetic vertices (z == -1) where contours touch.
+    // Rebuild such clipped contours directly instead of discarding them.
+    if (std::ranges::any_of(path, [](const auto &point) { return point.z == -1; })) {
+        BRepBuilderAPI_MakeWire wire;
+        for (size_t i = 0; i < path.size(); i++) {
+            const auto &a = path.at(i);
+            const auto &b = path.at((i + 1) % path.size());
+            const auto pa = docref.transform(docref.wrkpl.transform(glm::dvec2{a.x, a.y}));
+            const auto pb = docref.transform(docref.wrkpl.transform(glm::dvec2{b.x, b.y}));
+            wire.Add(BRepBuilderAPI_MakeEdge(gp_Pnt(pa.x, pa.y, pa.z), gp_Pnt(pb.x, pb.y, pb.z)));
+        }
+        return wire;
+    }
+
     const Path &orig_path = docref.paths.paths.at(VertexInfo::unpack(path.front().z).path_index);
     if (orig_path.size() == 1) {
         auto &orig_edge = orig_path.front().second;
@@ -303,8 +310,10 @@ TopoDS_Wire FaceBuilder::path_to_wire(const Clipper2Lib::PathD &path, bool hole,
         const auto &[node, edge] = get_node_and_edge(orig_path, i, path_reverse);
         const auto pt = node.get_pt_for_edge(edge);
         const auto next_pt = pt == 1 ? 2 : 1;
-        const auto pa = Paths::get_pt(edge.entity, pt, edge.transform_fn);
-        const auto pb = Paths::get_pt(edge.entity, next_pt, edge.transform_fn);
+        const auto pa = edge.entity.of_type(Entity::Type::LINE_2D) ? edge.get_point(pt)
+                                                                    : Paths::get_pt(edge.entity, pt, edge.transform_fn);
+        const auto pb = edge.entity.of_type(Entity::Type::LINE_2D) ? edge.get_point(next_pt)
+                                                                    : Paths::get_pt(edge.entity, next_pt, edge.transform_fn);
 
         const auto pat = docref.transform(docref.wrkpl.transform(pa));
         const auto pbt = docref.transform(docref.wrkpl.transform(pb));
@@ -355,7 +364,7 @@ TopoDS_Wire FaceBuilder::path_to_wire(const Clipper2Lib::PathD &path, bool hole,
 
 FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu, const UUID &source_group_uu,
                                        Transform fn_transform, Transform fn_transform_normal,
-                                       std::optional<unsigned int> source_path)
+                                       std::optional<std::set<unsigned int>> source_paths)
 {
     auto paths = Paths::from_document(doc, wrkpl_uu, source_group_uu);
 
@@ -366,13 +375,48 @@ FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu
         unsigned int path_index = 0;
         for (auto &path : paths.paths) {
             const auto current_path = path_index++;
-            if ((!source_path || current_path == *source_path) && path_is_valid(path))
+            {
+                std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
+                glm::dvec2 minimum{std::numeric_limits<double>::max()};
+                glm::dvec2 maximum{std::numeric_limits<double>::lowest()};
+                double area = 0;
+                for (const auto &[node, edge] : path) {
+                    minimum = glm::min(minimum, node.p);
+                    maximum = glm::max(maximum, node.p);
+                }
+                for (size_t i = 0; i < path.size(); i++) {
+                    const auto &a = path.at(i).first.p;
+                    const auto &b = path.at((i + 1) % path.size()).first.p;
+                    area += a.x * b.y - b.x * a.y;
+                }
+                log << std::format("facebuilder path={} selected={} entities={} area={} bounds=({},{})->({},{})\n",
+                                   current_path, !source_paths || source_paths->contains(current_path), path.size(),
+                                   area, minimum.x, minimum.y, maximum.x, maximum.y);
+            }
+            if ((!source_paths || source_paths->contains(current_path)) && path_is_valid(path))
                 cpaths.emplace_back(path_to_clipper(path, current_path));
         }
     }
     Clipper2Lib::PolyTreeD poly_tree;
     Clipper2Lib::ClipperD clipper{3};
-    clipper.AddSubject(cpaths);
+    if (source_paths && source_paths->size() > 1) {
+        // A selected planar cell is an outer boundary minus its interior
+        // contours.  Difference is important when an inner contour touches
+        // the outer boundary: even-odd union can leave that region filled.
+        bool first = true;
+        for (const auto &path : cpaths) {
+            if (first) {
+                clipper.AddSubject({path});
+                first = false;
+            }
+            else {
+                clipper.AddClip({path});
+            }
+        }
+    }
+    else {
+        clipper.AddSubject(cpaths);
+    }
     if (0) {
         std::ofstream ofs("/tmp/paths.txt");
         for (auto &path : cpaths) {
@@ -387,7 +431,9 @@ FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu
                             const Clipper2Lib::PointD &e2bot, const Clipper2Lib::PointD &e2top,
                             Clipper2Lib::PointD &pt) { pt.z = -1; });
 
-    clipper.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::EvenOdd, poly_tree);
+    const auto clip_type = source_paths && source_paths->size() > 1 ? Clipper2Lib::ClipType::Difference
+                                                                      : Clipper2Lib::ClipType::Union;
+    clipper.Execute(clip_type, Clipper2Lib::FillRule::EvenOdd, poly_tree);
 
     auto &wrkpl = doc.get_entity<EntityWorkplane>(wrkpl_uu);
 
@@ -401,17 +447,18 @@ FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu
 }
 
 FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu, const UUID &source_group_uu,
-                                       const glm::dvec3 &offset, std::optional<unsigned int> source_path)
+                                       const glm::dvec3 &offset, std::optional<std::set<unsigned int>> source_paths)
 {
-    if (!source_path)
+    if (!source_paths)
         return from_document(doc, wrkpl_uu, source_group_uu, [offset](const glm::dvec3 &p) { return p + offset; },
-                             [](const glm::dvec3 &p) { return p; });
+                             [](const glm::dvec3 &p) { return p; }, {});
 
     auto paths = Paths::from_document(doc, wrkpl_uu, source_group_uu);
-    if (*source_path >= paths.paths.size())
-        return FaceBuilder{};
+    for (const auto path : *source_paths)
+        if (path >= paths.paths.size())
+            return FaceBuilder{};
     return from_document(doc, wrkpl_uu, source_group_uu, [offset](const glm::dvec3 &p) { return p + offset; },
-                         [](const glm::dvec3 &p) { return p; }, source_path);
+                         [](const glm::dvec3 &p) { return p; }, source_paths);
 }
 
 } // namespace dune3d::solid_model_util

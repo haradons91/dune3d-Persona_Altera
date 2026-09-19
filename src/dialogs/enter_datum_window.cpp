@@ -4,8 +4,18 @@
 #include "widgets/spin_button_ratio.hpp"
 #include "editor/editor_interface.hpp"
 #include "util/gtk_util.hpp"
+#include <fstream>
+#include <format>
 
 namespace dune3d {
+namespace {
+void sketch_dimension_debug_log(const std::string &message)
+{
+    static std::ofstream log("/tmp/dune3d-sketch-dimension-debug.log", std::ios::app);
+    log << message << '\n';
+    log.flush();
+}
+} // namespace
 
 
 EnterDatumWindow::EnterDatumWindow(Gtk::Window &parent, EditorInterface &intf, const std::string &label, DatumUnit unit,
@@ -42,8 +52,11 @@ EnterDatumWindow::EnterDatumWindow(Gtk::Window &parent, EditorInterface &intf, c
     }
     m_sp->set_margin_start(8);
     m_sp->set_value(def);
-    spinbutton_connect_activate(*m_sp, [this] { emit_event(ToolDataWindow::Event::OK); });
+    // Enter should commit the datum immediately, including when the value
+    // was just edited. This makes keyboard confirmation match the OK button.
+    spinbutton_connect_activate_immediate(*m_sp, [this] { emit_event(ToolDataWindow::Event::OK); });
     m_sp->signal_value_changed().connect([this] {
+        sketch_dimension_debug_log(std::format("datum spin changed value={}", get_value()));
         auto data = std::make_unique<ToolDataEnterDatumWindow>();
         data->event = ToolDataWindow::Event::UPDATE;
         data->value = get_value();
@@ -51,6 +64,12 @@ EnterDatumWindow::EnterDatumWindow(Gtk::Window &parent, EditorInterface &intf, c
     });
     box->append(*m_sp);
     set_child(*box);
+    // Put keyboard focus in the value field so typing a replacement value
+    // immediately updates the active dimensional constraint.
+    Glib::signal_idle().connect_once([this] {
+        m_sp->grab_focus();
+        m_sp->select_region(0, -1);
+    });
 }
 
 void EnterDatumWindow::set_range(double lo, double hi)

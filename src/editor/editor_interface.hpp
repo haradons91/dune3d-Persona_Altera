@@ -26,8 +26,19 @@ public:
     virtual void show_rectangle_dimensions(double width, double height) = 0;
     virtual void update_rectangle_dimensions(double width, double height) = 0;
     virtual void hide_rectangle_dimensions() = 0;
-    virtual void position_rectangle_dimensions(glm::dvec3 origin, bool negative_x, bool negative_y) = 0;
+    virtual void position_rectangle_dimensions(glm::dvec3 origin, glm::dvec3 x_min, glm::dvec3 x_max,
+                                               glm::dvec3 y_min, glm::dvec3 y_max, bool negative_x,
+                                               bool negative_y) = 0;
     virtual void accept_rectangle_dimensions() = 0;
+    virtual void accept_circle_dimension() = 0;
+    virtual void show_circle_dimension(double diameter) = 0;
+    virtual void update_circle_dimension(double diameter) = 0;
+    virtual void hide_circle_dimension() = 0;
+    virtual void position_circle_dimension(glm::dvec3 center, glm::dvec3 left, glm::dvec3 right) = 0;
+    virtual void show_extrude_dimension(double height) = 0;
+    virtual void update_extrude_dimension(double height) = 0;
+    virtual void hide_extrude_dimension() = 0;
+    virtual void position_extrude_dimension(glm::dvec3 base, glm::dvec3 tip) = 0;
 
     virtual void tool_bar_set_actions(const std::vector<ActionLabelInfo> &labels) = 0;
     virtual void tool_bar_set_tool_tip(const std::string &s) = 0;

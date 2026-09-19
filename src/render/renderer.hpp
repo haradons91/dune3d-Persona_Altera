@@ -9,6 +9,7 @@
 #include "util/badge.hpp"
 #include <optional>
 #include <filesystem>
+#include <set>
 
 namespace dune3d {
 
@@ -36,10 +37,15 @@ public:
     bool m_render_sketch_plane_selector = false;
     bool m_render_sketch_grid = false;
     bool m_render_extrusion_editor = false;
+    bool m_show_dimension_points = false;
     std::optional<UUID> m_sketch_plane_hovered;
     std::optional<UUID> m_sketch_plane_grid;
     std::optional<glm::dvec3> m_sketch_grid_offset;
     UUID m_first_group;
+    // Profile indices selected in the sketch.  These are passed in by the
+    // editor so the profile overlay does not visually cover every profile.
+    std::optional<UUID> m_selected_sketch_profile_group;
+    std::set<unsigned int> m_selected_sketch_profiles;
 
     void add_constraint_icons(glm::vec3 p, glm::vec3 v, const std::vector<ConstraintType> &constraints);
     static unsigned int get_chunk_from_group(const Group &group);

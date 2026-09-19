@@ -17,7 +17,7 @@ namespace dune3d {
 ToolBase::CanBegin ToolMove::can_begin()
 {
     for (const auto &sr : m_selection) {
-        if (sr.type == SelectableRef::Type::ENTITY) {
+        if (sr.type == SelectableRef::Type::ENTITY && sr.point == 0) {
             auto &entity = get_entity(sr.item);
             if (entity.can_move(get_doc()))
                 return true;
@@ -44,7 +44,10 @@ ToolResponse ToolMove::begin(const ToolArgs &args)
     const Group *first_group = nullptr;
     const Group *first_group_render = nullptr;
     for (const auto &sr : m_selection) {
-        if (sr.type == SelectableRef::Type::ENTITY) {
+        // Endpoint/vertex markers are selectable for constraints and
+        // inspection, but are not drag handles. Moving them directly makes
+        // an unconstrained sketch dimension change unexpectedly.
+        if (sr.type == SelectableRef::Type::ENTITY && sr.point == 0) {
             auto entity = &get_entity(sr.item);
             auto point = sr.point;
             while (entity->m_move_instead.contains(point)) {

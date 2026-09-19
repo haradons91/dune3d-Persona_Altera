@@ -185,7 +185,9 @@ void FaceRenderer::render()
                 }
                 else if (group.color == ICanvas::FaceColor::SKETCH_PROFILE) {
                     glUniform3f(m_override_color_loc, 0.20f, 0.65f, 1.0f);
-                    glUniform1f(m_override_alpha_loc, 0.16f);
+                    const bool selected = (group.flags & Canvas::VertexFlags::SELECTED) != Canvas::VertexFlags::DEFAULT;
+                    const bool hovered = (group.flags & Canvas::VertexFlags::HOVER) != Canvas::VertexFlags::DEFAULT;
+                    glUniform1f(m_override_alpha_loc, selected ? 0.48f : (hovered ? 0.30f : 0.16f));
                 }
                 else {
                     const auto colorp = (group.color == ICanvas::FaceColor::SOLID_MODEL)

@@ -26,6 +26,12 @@
 
 namespace dune3d {
 
+static void profile_debug(const std::string &message)
+{
+    std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
+    log << message << '\n';
+}
+
 static const MSD::Params msd_params_slow{
         .mass = .0123,
         .damping = .2020,
@@ -387,19 +393,40 @@ void Canvas::handle_click_release()
         if (m_hover_selection.has_value()) {
             m_selection_mode = SelectionMode::NORMAL;
             queue_draw();
-            m_signal_selection_changed.emit();
+            // A profile is a complete selectable region, so the first click
+            // should commit it immediately even when the canvas starts in
+            // hover-select mode.  This is especially important before
+            // creating an extrusion; otherwise the click only changes the
+            // selection mode and the sketch appears to be selected instead.
+            if (m_hover_selection->type == SelectableRef::Type::SKETCH_PROFILE) {
+                m_selection_peeling = true;
+                queue_draw();
+            }
+            else
+                m_signal_selection_changed.emit();
             m_signal_selection_mode_changed.emit();
         }
     }
     else if (m_selection_mode == SelectionMode::NORMAL) {
         if (m_hover_selection.has_value()) {
             const auto state = get_display()->get_default_seat()->get_keyboard()->get_modifier_state();
-            if ((state & Gdk::ModifierType::SHIFT_MASK) == Gdk::ModifierType::SHIFT_MASK) {
+            // Ctrl-click is used for multi-selecting overlapping sketch
+            // profiles (for example an outer loop and an inner loop). Peel
+            // the selectable layers so the profile face can be selected
+            // instead of the sketch edge/group in front of it.
+            const bool peel = m_selection_peeling_enabled
+                              && (state & (Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::CONTROL_MASK))
+                                         != Gdk::ModifierType{};
+            if (peel || m_hover_selection->type == SelectableRef::Type::SKETCH_PROFILE) {
                 m_selection_peeling = true;
                 queue_draw();
                 return;
             }
             auto sel = get_selection();
+            const bool additive = (state & (Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::CONTROL_MASK))
+                                  != Gdk::ModifierType{};
+            if (!additive)
+                sel.clear();
             if (sel.contains(m_hover_selection.value())) {
                 sel.erase(m_hover_selection.value());
             }
@@ -742,6 +769,18 @@ void Canvas::clear_flags(VertexFlags mask)
 unsigned int Canvas::get_hover_pick(const std::vector<pick_buf_t> &pick_buf) const
 {
     auto pick = read_pick_buf(pick_buf, m_last_x, m_last_y);
+    // Filled sketch profiles are selectable regions.  Prefer them over the
+    // sketch edges that may be drawn at the same location; otherwise a click
+    // on the first profile resolves to the sketch geometry/group instead of
+    // the profile that extrusion uses.
+    if (pick) {
+        const auto vref = get_vertex_ref_for_pick(pick);
+        if (vref.type == VertexType::FACE_GROUP) {
+            if (auto sr = get_selectable_ref_for_pick(pick); sr
+                && sr->type == SelectableRef::Type::SKETCH_PROFILE)
+                return pick;
+        }
+    }
     if (!pick || any_of(get_vertex_ref_for_pick(pick).type, VertexType::FACE_GROUP, VertexType::PICTURE)) {
         int box_size = 10;
         float best_distance = glm::vec2(box_size, box_size).length();
@@ -788,6 +827,18 @@ void Canvas::update_hover_selection()
 
 
         if (m_hover_selection != last_hover_selection) {
+            if (m_hover_selection && m_hover_selection->type == SelectableRef::Type::SKETCH_PROFILE)
+                Logger::log_debug(std::format("hover sketch profile item={} index={}",
+                                               static_cast<std::string>(m_hover_selection->item),
+                                               m_hover_selection->point),
+                                  Logger::Domain::CANVAS);
+            if (m_hover_selection)
+                profile_debug(std::format("hover type={} item={} point={}",
+                                          static_cast<int>(m_hover_selection->type),
+                                          static_cast<std::string>(m_hover_selection->item),
+                                          m_hover_selection->point));
+            else
+                profile_debug("hover none");
             auto mask = VertexFlags::HOVER;
             if (m_selection_mode == SelectionMode::HOVER || m_selection_mode == SelectionMode::HOVER_ONLY) {
                 mask |= VertexFlags::SELECTED;
@@ -1202,6 +1253,34 @@ void Canvas::peel_selection()
         render_all(pick_buf);
     }
 
+    // The first profile pick is the same profile reported by hover. Keep
+    // that ordering when committing the click; reversing it would select the
+    // containing outer profile after hovering an inner circle or triangle.
+    std::optional<SelectableRef> picked_profile;
+    for (const auto pick : peeled_picks) {
+        if (auto sr = get_selectable_ref_for_pick(pick); sr) {
+            profile_debug(std::format("peeled type={} point={}", static_cast<int>(sr->type), sr->point));
+            if (!picked_profile && sr->type == SelectableRef::Type::SKETCH_PROFILE)
+                picked_profile = *sr;
+        }
+    }
+    if (picked_profile) {
+        profile_debug(std::format("commit profile point={} peeled_count={}", picked_profile->point,
+                                  peeled_picks.size()));
+        auto sel = get_selection();
+        const auto state = get_display()->get_default_seat()->get_keyboard()->get_modifier_state();
+        const bool additive = (state & (Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::CONTROL_MASK))
+                              != Gdk::ModifierType{};
+        if (!additive)
+            sel.clear();
+        if (sel.contains(*picked_profile))
+            sel.erase(*picked_profile);
+        else
+            sel.insert(*picked_profile);
+        Glib::signal_idle().connect_once([this, sel] { set_selection(sel, true); });
+        return;
+    }
+
     ISelectionMenuCreator::SelectableRefAndVertexTypeList srv_list;
 
     {
@@ -1463,6 +1542,11 @@ void Canvas::clear_chunks(unsigned int first_chunk)
 
 ICanvas::VertexRef Canvas::draw_point(glm::vec3 p)
 {
+    if (!m_state.show_default_points)
+        return {VertexType::SELECTION_INVISIBLE, 0};
+    // Default point boxes are visual editing handles. Keep them out of the
+    // scene entirely; explicit point icons (origins, centers, handles, etc.)
+    // still use the overload below and remain available where needed.
     return draw_point(p, IconTexture::IconTextureID::POINT_BOX);
 }
 
@@ -1568,6 +1652,48 @@ std::vector<ICanvas::VertexRef> Canvas::draw_bitmap_text(glm::vec3 p, float size
     return vrefs;
 }
 
+std::vector<ICanvas::VertexRef> Canvas::draw_bitmap_text_centered(glm::vec3 p, float size,
+                                                                   const std::string &rtext, float angle)
+{
+    p = transform_point(p);
+    std::vector<ICanvas::VertexRef> vrefs;
+    Glib::ustring text(rtext);
+    const float sc = size * .75;
+    float width = 0;
+    for (auto codepoint : text) {
+        if (codepoint != ' ') {
+            auto info = bitmap_font::get_glyph_info(codepoint);
+            if (!info.is_valid())
+                info = bitmap_font::get_glyph_info('?');
+            width += info.advance * char_space * sc;
+        }
+        else {
+            width += 7 * char_space * sc;
+        }
+    }
+
+    glm::vec2 point = {-width / 2, 0};
+    for (auto codepoint : text) {
+        if (codepoint != ' ') {
+            auto info = bitmap_font::get_glyph_info(codepoint);
+            if (!info.is_valid())
+                info = bitmap_font::get_glyph_info('?');
+            const uint32_t bits = pack_bits(info);
+            const glm::vec2 shift(info.minx, -info.miny);
+            const auto ps = point + shift * sc;
+            auto &gl = m_current_chunk->m_glyphs.emplace_back(p.x, p.y, p.z, ps.x, ps.y, sc, bits);
+            gl.angle = angle;
+            apply_flags(gl.flags);
+            vrefs.push_back({VertexType::GLYPH, m_current_chunk->m_glyphs.size() - 1, m_current_chunk_id});
+            point.x += info.advance * char_space * sc;
+        }
+        else {
+            point.x += 7 * char_space * sc;
+        }
+    }
+    return vrefs;
+}
+
 std::vector<ICanvas::VertexRef> Canvas::draw_bitmap_text_3d(glm::vec3 p, const glm::quat &norm_in, float size,
                                                             const std::string &rtext)
 {
@@ -1667,6 +1793,20 @@ Canvas::VertexFlags &Canvas::get_vertex_flags(const VertexRef &vref)
 
 void Canvas::set_selection(const std::set<SelectableRef> &sel, bool emit)
 {
+    for (const auto &selection : sel) {
+        if (selection.type == SelectableRef::Type::SKETCH_PROFILE)
+            profile_debug(std::format("set selection profile item={} point={} emit={}",
+                                      static_cast<std::string>(selection.item), selection.point, emit));
+    }
+    if (std::ranges::any_of(sel, [](const auto &sr) {
+            return sr.type == SelectableRef::Type::SKETCH_PROFILE;
+        })) {
+        Logger::log_debug(std::format("selected sketch profile count={}",
+                                      std::ranges::count_if(sel, [](const auto &sr) {
+                                          return sr.type == SelectableRef::Type::SKETCH_PROFILE;
+                                      })),
+                          Logger::Domain::CANVAS);
+    }
     set_flag_for_selectables(sel, VertexFlags::SELECTED);
     if (emit)
         m_signal_selection_changed.emit();
@@ -1773,6 +1913,13 @@ void Canvas::set_selection_mode(SelectionMode mode)
         m_push_flags =
                 static_cast<PushFlags>(m_push_flags | PF_LINES | PF_GLYPHS | PF_GLYPHS_3D | PF_ICONS | PF_PICTURES);
         queue_draw();
+    }
+    else if (m_selection_mode == SelectionMode::NORMAL) {
+        // Rebuild the hover target when a command re-enables picking. This is
+        // important for tools such as Sketch Dimension, which are activated
+        // before the user clicks the geometry and may not get a motion event
+        // between those two actions.
+        update_hover_selection();
     }
     m_signal_selection_mode_changed.emit();
 }

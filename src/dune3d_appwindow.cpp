@@ -106,6 +106,10 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_new_button = refBuilder->get_widget<Gtk::Button>("new_button");
     m_save_button = refBuilder->get_widget<Gtk::Button>("save_button");
     m_save_as_button = refBuilder->get_widget<Gtk::Button>("save_as_button");
+    auto screenshot_button = refBuilder->get_widget<Gtk::Button>("screenshot_button");
+    screenshot_button->signal_clicked().connect([] {
+        Glib::spawn_command_line_async("spectacle -b -n -a -o /tmp/dune3dscreenshot.png");
+    });
     m_open_recent_listbox = refBuilder->get_widget<Gtk::ListBox>("open_recent_listbox");
     m_open_recent_search_entry = refBuilder->get_widget<Gtk::SearchEntry>("open_recent_search_entry");
 
@@ -138,7 +142,7 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_ribbon_btn_rect = refBuilder->get_widget<Gtk::Button>("ribbon_btn_rect");
     m_ribbon_btn_circle = refBuilder->get_widget<Gtk::Button>("ribbon_btn_circle");
     m_ribbon_btn_polygon = refBuilder->get_widget<Gtk::Button>("ribbon_btn_polygon");
-    m_ribbon_btn_text = refBuilder->get_widget<Gtk::Button>("ribbon_btn_text");
+    m_ribbon_btn_dimension_create = refBuilder->get_widget<Gtk::Button>("ribbon_btn_dimension_create");
 
     m_ribbon_btn_dimension = refBuilder->get_widget<Gtk::Button>("ribbon_btn_dimension");
     m_ribbon_sketch_btn_fillet = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_fillet");
@@ -196,6 +200,10 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
         auto selector_box = refBuilder->get_widget<Gtk::Box>("sketch_plane_selector_box");
         selector_box->append(*m_sketch_plane_selector);
         m_rectangle_dimensions_box = refBuilder->get_widget<Gtk::Box>("rectangle_dimensions_box");
+        // Let pointer motion/clicks fall through to the canvas around the
+        // entries. The entries themselves remain targetable, while the
+        // dynamically-sized guide must not block rectangle tracking.
+        m_rectangle_dimensions_box->set_can_target(false);
         m_rectangle_dimensions_box->set_visible(false);
         get_canvas().signal_view_changed().connect(
                 sigc::track_obj([this, axes_cube] { axes_cube->set_quat(get_canvas().get_cam_quat()); }, *axes_cube));
@@ -326,13 +334,109 @@ void Dune3DAppWindow::hide_rectangle_dimensions()
     m_rectangle_dimensions_active = false;
     m_rectangle_dimensions_box->set_visible(false);
 }
-void Dune3DAppWindow::position_rectangle_dimensions(glm::dvec2 pos, bool negative_x, bool negative_y)
+void Dune3DAppWindow::show_circle_dimension(double diameter)
+{
+    m_rectangle_dimensions->reset_circle_dimension_editing();
+    m_rectangle_dimensions->set_circle_dimension(diameter);
+    m_rectangle_dimensions_box->set_visible(true);
+    m_rectangle_dimensions_active = true;
+    // Circle and fillet tools use the same inline dimension editor as the
+    // rectangle tool. Give its textbox focus as soon as it appears so Tab
+    // and direct keyboard input work immediately.
+    m_rectangle_dimensions->focus_width();
+}
+void Dune3DAppWindow::focus_circle_dimension()
+{
+    if (m_rectangle_dimensions && m_rectangle_dimensions_active)
+        Glib::signal_idle().connect_once([this] { m_rectangle_dimensions->focus_width(); });
+}
+void Dune3DAppWindow::update_circle_dimension(double diameter)
+{
+    m_rectangle_dimensions->set_circle_dimension(diameter);
+}
+void Dune3DAppWindow::hide_circle_dimension()
+{
+    m_rectangle_dimensions->reset_circle_dimension_editing();
+    hide_rectangle_dimensions();
+}
+void Dune3DAppWindow::position_circle_dimension(glm::dvec2 center, glm::dvec2 left, glm::dvec2 right)
 {
     m_rectangle_dimensions_box->set_halign(Gtk::Align::START);
     m_rectangle_dimensions_box->set_valign(Gtk::Align::START);
-    m_rectangle_dimensions_box->set_margin_start(std::max(0., pos.x - 150.));
-    m_rectangle_dimensions_box->set_margin_top(std::max(0., pos.y - 50.));
-    m_rectangle_dimensions->position_dimensions(negative_x, negative_y);
+    const auto x_min = std::min(left.x, right.x);
+    const auto x_max = std::max(left.x, right.x);
+    const auto margin_start = std::max(0., std::min(center.x - 150., x_min - 35.));
+    const auto margin_top = std::max(0., center.y - 50.);
+    m_rectangle_dimensions_box->set_margin_start(margin_start);
+    m_rectangle_dimensions_box->set_margin_top(margin_top);
+    m_rectangle_dimensions->position_circle_dimension(x_min - margin_start, x_max - margin_start,
+                                                       center.y - margin_top, x_max - margin_start + 35.,
+                                                       center.y - margin_top + 30.);
+}
+void Dune3DAppWindow::show_extrude_dimension(double height)
+{
+    m_rectangle_dimensions->set_extrude_dimension(height);
+    m_rectangle_dimensions_box->set_visible(true);
+    m_rectangle_dimensions_active = true;
+    m_rectangle_dimensions->focus_width();
+}
+void Dune3DAppWindow::update_extrude_dimension(double height)
+{
+    m_rectangle_dimensions->set_extrude_dimension(height);
+}
+void Dune3DAppWindow::hide_extrude_dimension()
+{
+    m_rectangle_dimensions->reset_extrude_dimension_editing();
+    m_rectangle_dimensions_active = false;
+    m_rectangle_dimensions_box->set_visible(false);
+}
+void Dune3DAppWindow::commit_extrude_dimension()
+{
+    m_rectangle_dimensions->commit_extrude_dimension();
+}
+void Dune3DAppWindow::position_extrude_dimension(glm::dvec2 base, glm::dvec2 tip)
+{
+    m_rectangle_dimensions_box->set_halign(Gtk::Align::START);
+    m_rectangle_dimensions_box->set_valign(Gtk::Align::START);
+    const auto margin_start = std::max(0., std::min(base.x, tip.x) - 10.);
+    const auto margin_top = std::max(0., std::min(base.y, tip.y) - 10.);
+    const auto guide_width = std::abs(tip.x - base.x) + 150.;
+    const auto guide_height = std::abs(tip.y - base.y) + 60.;
+    m_rectangle_dimensions_box->set_margin_start(margin_start);
+    m_rectangle_dimensions_box->set_margin_top(margin_top);
+    m_rectangle_dimensions->position_extrude_dimension(base.x - margin_start, base.y - margin_top,
+                                                        tip.x - margin_start, tip.y - margin_top, guide_width,
+                                                        guide_height);
+}
+void Dune3DAppWindow::position_rectangle_dimensions(glm::dvec2 pos, glm::dvec2 x_min, glm::dvec2 x_max,
+                                                    glm::dvec2 y_min, glm::dvec2 y_max, bool negative_x,
+                                                    bool negative_y)
+{
+    m_rectangle_dimensions_box->set_halign(Gtk::Align::START);
+    m_rectangle_dimensions_box->set_valign(Gtk::Align::START);
+    // Keep both projected X bounds inside the guide drawing area. The old
+    // fixed origin-based margin clipped the guide for wider rectangles.
+    const auto screen_x_min = std::min(x_min.x, x_max.x);
+    const auto screen_x_max = std::max(x_min.x, x_max.x);
+    const auto screen_y_min = std::min(y_min.y, y_max.y);
+    const auto screen_y_max = std::max(y_min.y, y_max.y);
+    const auto margin_start = std::max(0., std::min(pos.x - 150., screen_x_min - 35.));
+    constexpr double dimension_buffer = 50.;
+    const auto dimension_line_y = negative_y ? screen_y_min - dimension_buffer : screen_y_max + dimension_buffer;
+    const auto guide_top = std::min(screen_y_min, dimension_line_y) - 15.;
+    const auto margin_top = std::max(0., std::min(pos.y - 50., guide_top));
+    const auto guide_width = std::max(330., screen_x_max - margin_start + 35.);
+    // Include the complete vertical guide as well as the buffered horizontal
+    // guide. Otherwise the drawing area clips the Y line once the rectangle
+    // grows past the fixed overlay height.
+    const auto guide_bottom = std::max(screen_y_max, dimension_line_y) + 15.;
+    const auto guide_height = std::max(160., guide_bottom - margin_top);
+    m_rectangle_dimensions_box->set_margin_start(margin_start);
+    m_rectangle_dimensions_box->set_margin_top(margin_top);
+    m_rectangle_dimensions->position_dimensions(negative_x, negative_y, screen_x_min - margin_start,
+                                                screen_x_max - margin_start, screen_y_min - margin_top,
+                                                screen_y_max - margin_top,
+                                                guide_width, guide_height);
 }
 
 void Dune3DAppWindow::set_key_hint_label_text(const std::string &s)

@@ -20,6 +20,7 @@ GLuint GlyphRenderer::create_vao(GLuint program, GLuint &vbo_out)
     GLuint scale_index = glGetAttribLocation(program, "scale");
     GLuint bits_index = glGetAttribLocation(program, "bits");
     GLuint flags_index = glGetAttribLocation(program, "flags");
+    GLuint angle_index = glGetAttribLocation(program, "angle");
     GLuint vao, buffer;
 
     /* we need to create a VAO to store the other buffers */
@@ -57,6 +58,10 @@ GLuint GlyphRenderer::create_vao(GLuint program, GLuint &vbo_out)
     glEnableVertexAttribArray(flags_index);
     glVertexAttribIPointer(flags_index, 1, GL_UNSIGNED_INT, sizeof(CanvasChunk::GlyphVertex),
                            (void *)offsetof(CanvasChunk::GlyphVertex, flags));
+    GL_CHECK_ERROR
+    glEnableVertexAttribArray(angle_index);
+    glVertexAttribPointer(angle_index, 1, GL_FLOAT, GL_FALSE, sizeof(CanvasChunk::GlyphVertex),
+                          (void *)offsetof(CanvasChunk::GlyphVertex, angle));
     GL_CHECK_ERROR
     /* enable and set the color attribute */
     /* reset the state; we will re-enable the VAO when needed */

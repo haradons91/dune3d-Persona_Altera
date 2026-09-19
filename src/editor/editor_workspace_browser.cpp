@@ -5,6 +5,7 @@
 #include "document/group/all_groups.hpp"
 #include "widgets/sketch_plane_selector.hpp"
 #include "document/entity/entity_workplane.hpp"
+#include "document/entity/entity_circle2d.hpp"
 #include "document/constraint/constraint_lock_rotation.hpp"
 #include "util/selection_util.hpp"
 #include "canvas/canvas.hpp"
@@ -19,6 +20,9 @@
 #include "widgets/select_groups_dialog.hpp"
 #include "core/tool_data_create_circular_sweep_group.hpp"
 #include "util/glm_util.hpp"
+#include "util/paths.hpp"
+#include <fstream>
+#include <format>
 
 namespace dune3d {
 using json = nlohmann::json;
@@ -39,8 +43,14 @@ void Editor::init_workspace_browser()
         const auto type = m_core.get_current_document().get_group(uu_group).get_type();
         if (type == Group::Type::SKETCH) {
             m_extrude_editing = false;
-            if (!m_sketch_editing)
+            auto &doc_view = get_current_document_view();
+            if (!m_sketch_editing) {
                 m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+                m_sketch_previous_visibility = doc_view.m_group_views[uu_group].m_visible;
+            }
+            // A hidden sketch must be visible while it is being edited, but
+            // its original visibility is restored when editing ends.
+            doc_view.m_group_views[uu_group].m_visible = true;
             m_sketch_editing = true;
             auto &sketch = m_core.get_current_document().get_group(uu_group);
             if (sketch.m_active_wrkpl) {
@@ -58,7 +68,7 @@ void Editor::init_workspace_browser()
         }
         else if (type == Group::Type::EXTRUDE) {
             m_sketch_editing = false;
-            m_extrude_editing = false;
+            m_extrude_editing = true;
         }
         else {
             return;
@@ -184,12 +194,83 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         group.m_wrkpl = current_group.m_active_wrkpl;
         group.m_dvec = doc.get_entity<EntityWorkplane>(group.m_wrkpl).get_normal_vector();
         group.m_source_group = current_group.m_uuid;
+        bool have_profile_selection = false;
+        const auto source_cells = paths::Paths::from_document(doc, group.m_wrkpl, group.m_source_group).cells;
+        std::set<unsigned int> selected_profiles;
         for (const auto &selection : get_canvas().get_selection()) {
+            {
+                std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
+                log << std::format("extrude selection type={} item={} point={}\n", static_cast<int>(selection.type),
+                                   static_cast<std::string>(selection.item), selection.point);
+            }
             if (selection.type == SelectableRef::Type::SKETCH_PROFILE
                 && selection.item == current_group.m_uuid) {
-                group.m_source_path = selection.point;
-                break;
+                selected_profiles.insert(selection.point);
+                have_profile_selection = true;
             }
+        }
+        group.m_source_profiles = selected_profiles;
+        // Combine the selected planar cells using the same even-odd contour
+        // rule used by FaceBuilder.  A hole becomes solid when its profile is
+        // selected too, so its contour is toggled twice and cancels out.
+        for (const auto selected_profile : selected_profiles) {
+            auto cell = std::ranges::find_if(source_cells, [selected_profile](const auto &candidate) {
+                return candidate.boundary == selected_profile;
+            });
+            if (cell == source_cells.end()) {
+                group.m_source_paths.insert(selected_profile);
+                continue;
+            }
+            const auto toggle_path = [&group](unsigned int path) {
+                if (group.m_source_paths.contains(path))
+                    group.m_source_paths.erase(path);
+                else
+                    group.m_source_paths.insert(path);
+            };
+            toggle_path(cell->boundary);
+            for (const auto hole : cell->holes)
+                toggle_path(hole);
+        }
+        // If the profile face is occluded by sketch geometry, the canvas may
+        // return the selected sketch edges instead.  Convert those edges back
+        // to profile indices so Extrude still uses only the intended loops.
+        if (!have_profile_selection) {
+            std::set<UUID> selected_entities;
+            for (const auto &selection : get_canvas().get_selection()) {
+                if (selection.type == SelectableRef::Type::ENTITY)
+                    selected_entities.insert(selection.item);
+            }
+            if (!selected_entities.empty()) {
+                const auto paths = paths::Paths::from_document(doc, group.m_wrkpl, group.m_source_group);
+                for (size_t profile_idx = 0; profile_idx < paths.paths.size(); profile_idx++) {
+                    if (std::ranges::any_of(paths.paths.at(profile_idx), [&selected_entities](const auto &entry) {
+                            return selected_entities.contains(entry.second.entity.m_uuid);
+                        }))
+                        group.m_source_paths.insert(profile_idx);
+                }
+            }
+        }
+        // Selecting an outer region should retain enclosed sketch loops as
+        // holes.  FaceBuilder uses the even-odd rule, so include contained
+        // loops with the selected outer loop; selecting an inner loop alone
+        // still produces only that inner profile.
+        if (group.m_source_paths.size() == 1) {
+            const auto selected_idx = *group.m_source_paths.begin();
+            const auto source_paths = paths::Paths::from_document(doc, group.m_wrkpl, group.m_source_group);
+            if (selected_idx < source_paths.paths.size()) {
+                const auto cell = std::ranges::find_if(source_paths.cells, [selected_idx](const auto &candidate) {
+                    return candidate.boundary == selected_idx;
+                });
+                if (cell != source_paths.cells.end())
+                    group.m_source_paths.insert(cell->holes.begin(), cell->holes.end());
+            }
+        }
+        {
+            std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
+            log << "extrude source_paths=";
+            for (const auto path : group.m_source_paths)
+                log << path << ',';
+            log << std::format(" have_profile_selection={}\n", have_profile_selection);
         }
     }
     else if (group_type == Group::Type::REVOLVE) {
@@ -468,6 +549,10 @@ void Editor::finish_sketch()
         }
     }
     m_sketch_editing = false;
+    if (m_sketch_previous_visibility) {
+        get_current_document_view().m_group_views[sketch.m_uuid].m_visible = *m_sketch_previous_visibility;
+        m_sketch_previous_visibility.reset();
+    }
     update_sketch_mode_ui();
     canvas_update();
     if (m_sketch_plane_previous_cam_quat) {
@@ -480,10 +565,23 @@ void Editor::finish_extrusion()
 {
     if (!m_core.has_documents() || !force_end_tool())
         return;
-    if (m_core.get_current_document().get_group(m_core.get_current_group()).get_type() != Group::Type::EXTRUDE)
+    auto &doc = m_core.get_current_document();
+    auto &current_group = doc.get_group(m_core.get_current_group());
+    if (current_group.get_type() != Group::Type::EXTRUDE)
         return;
+    const auto &extrude = dynamic_cast<const GroupExtrude &>(current_group);
+    // Once the extrusion is committed, hide its source sketch overlay.  The
+    // finished solid remains visible through the extrusion group itself.
+    if (doc.get_groups().contains(extrude.m_source_group))
+        get_current_document_view().m_group_views[extrude.m_source_group].m_visible = false;
     m_extrude_dragging = false;
     m_extrude_editing = false;
+    m_win.hide_extrude_dimension();
+    m_solid_model_edge_select_mode = false;
+    // The extrusion editor adds transient line/icon geometry to render
+    // chunks. Rebuild all chunks when it closes so none of that preview can
+    // survive into the committed model view.
+    m_update_groups_after = UUID();
     update_sketch_mode_ui();
     canvas_update();
 }
@@ -583,6 +681,9 @@ void Editor::on_workspace_browser_group_checked(const UUID &uu_doc, const UUID &
 {
     CanvasUpdater canvas_updater{*this};
     get_current_document_views()[uu_doc].m_group_views[uu_group].m_visible = checked;
+    std::ofstream log("/tmp/dune3d-visibility-debug.log", std::ios::app);
+    log << "checkbox doc=" << static_cast<std::string>(uu_doc) << " group="
+        << static_cast<std::string>(uu_group) << " checked=" << checked << '\n';
     m_workspace_browser->update_current_group(get_current_document_views());
 }
 

@@ -1,8 +1,18 @@
 #include "tool_window.hpp"
 #include "editor/editor_interface.hpp"
 #include "util/gtk_util.hpp"
+#include <fstream>
+#include <format>
 
 namespace dune3d {
+namespace {
+void sketch_dimension_debug_log(const std::string &message)
+{
+    static std::ofstream log("/tmp/dune3d-sketch-dimension-debug.log", std::ios::app);
+    log << message << '\n';
+    log.flush();
+}
+} // namespace
 
 ToolWindow::ToolWindow(Gtk::Window &parent, EditorInterface &intf) : m_interface(intf)
 {
@@ -31,6 +41,7 @@ ToolWindow::ToolWindow(Gtk::Window &parent, EditorInterface &intf) : m_interface
 
 void ToolWindow::emit_event(ToolDataWindow::Event ev)
 {
+    sketch_dimension_debug_log(std::format("tool window emitted event={}", static_cast<int>(ev)));
     auto data = std::make_unique<ToolDataWindow>();
     data->event = ev;
     m_interface.tool_update_data(std::move(data));

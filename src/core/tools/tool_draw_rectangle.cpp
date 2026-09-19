@@ -9,6 +9,7 @@
 #include "document/constraint/constraint_parallel.hpp"
 #include "document/constraint/constraint_angle.hpp"
 #include "document/constraint/constraint_midpoint.hpp"
+#include "document/constraint/constraint_point_distance_hv.hpp"
 #include "editor/editor_interface.hpp"
 #include "util/selection_util.hpp"
 #include "util/action_label.hpp"
@@ -89,10 +90,10 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
                 }
                 if (m_width_locked) {
                     if (m_mode == Mode::CORNER)
-                        pb.x = pa.x - m_width;
+                        pb.x = pa.x + m_width;
                     else {
-                        pa.x = m_first_point.x + m_width / 2.;
-                        pb.x = m_first_point.x - m_width / 2.;
+                        pa.x = m_first_point.x - m_width / 2.;
+                        pb.x = m_first_point.x + m_width / 2.;
                     }
                 }
                 if (m_height_locked) {
@@ -108,7 +109,7 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
                 p3 = pb;
                 p4 = glm::dvec2(pa.x, pb.y);
                 if (!m_width_locked)
-                    m_width = -(pb.x - pa.x);
+                    m_width = pb.x - pa.x;
                 if (!m_height_locked)
                     m_height = pb.y - pa.y;
             }
@@ -122,7 +123,15 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
             m_lines.at(3)->m_p2 = p1;
             if (!m_width_locked || !m_height_locked) {
                 m_intf.update_rectangle_dimensions(m_width, m_height);
-                m_intf.position_rectangle_dimensions(m_wrkpl->transform(m_first_point), m_height < 0, m_width < 0);
+                const auto x_min = std::min({p1.x, p2.x, p3.x, p4.x});
+                const auto x_max = std::max({p1.x, p2.x, p3.x, p4.x});
+                const auto y_min = std::min({p1.y, p2.y, p3.y, p4.y});
+                const auto y_max = std::max({p1.y, p2.y, p3.y, p4.y});
+                m_intf.position_rectangle_dimensions(m_wrkpl->transform(m_first_point),
+                                                      m_wrkpl->transform({x_min, p1.y}),
+                                                      m_wrkpl->transform({x_max, p1.y}),
+                                                      m_wrkpl->transform({p1.x, y_min}),
+                                                      m_wrkpl->transform({p1.x, y_max}), m_width > 0, m_height < 0);
             }
             rectangle_debug_log(std::format(
                     "[rectangle-dim] MOVE anchor=({}, {}) cursor=({}, {}) corner=({}, {}) delta=({}, {}) "
@@ -230,6 +239,36 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
                                             {midpt.m_uuid, 0});
                     }
                 }
+                // Keep the rectangle's width and height as visible sketch
+                // dimensions immediately after creation.  Use the opposing
+                // endpoints of the horizontal and vertical sides so the
+                // dimensions remain tied to the rectangle geometry.
+                {
+                    auto &width = add_constraint<ConstraintPointDistanceHorizontal>();
+                    width.m_entity1 = {m_lines.at(0)->m_uuid, 1};
+                    width.m_entity2 = {m_lines.at(0)->m_uuid, 2};
+                    width.m_wrkpl = m_wrkpl->m_uuid;
+                    auto width_value = width.measure_distance(get_doc());
+                    if (width_value < 0) {
+                        width.flip();
+                        width_value = -width_value;
+                    }
+                    width.m_distance = width_value;
+
+                    auto &height = add_constraint<ConstraintPointDistanceVertical>();
+                    // Anchor the initial vertical dimension to the rectangle's
+                    // left edge. The renderer may switch to the right edge
+                    // when the dimension is dragged past the rectangle center.
+                    height.m_entity1 = {m_lines.at(3)->m_uuid, 1};
+                    height.m_entity2 = {m_lines.at(3)->m_uuid, 2};
+                    height.m_wrkpl = m_wrkpl->m_uuid;
+                    auto height_value = height.measure_distance(get_doc());
+                    if (height_value < 0) {
+                        height.flip();
+                        height_value = -height_value;
+                    }
+                    height.m_distance = height_value;
+                }
                 m_intf.hide_rectangle_dimensions();
                 return ToolResponse::commit();
             }
@@ -254,7 +293,11 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
                 m_height_locked = false;
                 m_three_point_edge_set = false;
                 m_intf.show_rectangle_dimensions(0, 0);
-                m_intf.position_rectangle_dimensions(m_wrkpl->transform(m_first_point), false, false);
+                m_intf.position_rectangle_dimensions(m_wrkpl->transform(m_first_point),
+                                                      m_wrkpl->transform(m_first_point),
+                                                      m_wrkpl->transform(m_first_point),
+                                                      m_wrkpl->transform(m_first_point),
+                                                      m_wrkpl->transform(m_first_point), false, false);
 
                 return ToolResponse();
             }
@@ -304,7 +347,24 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
                     m_height_locked = true;
                 }
                 update_from_dimensions();
-                m_intf.position_rectangle_dimensions(m_wrkpl->transform(m_first_point), m_height < 0, m_width < 0);
+                const auto x_min = std::min({m_lines[0]->m_p1.x, m_lines[0]->m_p2.x, m_lines[1]->m_p1.x,
+                                             m_lines[1]->m_p2.x, m_lines[2]->m_p1.x, m_lines[2]->m_p2.x,
+                                             m_lines[3]->m_p1.x, m_lines[3]->m_p2.x});
+                const auto x_max = std::max({m_lines[0]->m_p1.x, m_lines[0]->m_p2.x, m_lines[1]->m_p1.x,
+                                             m_lines[1]->m_p2.x, m_lines[2]->m_p1.x, m_lines[2]->m_p2.x,
+                                             m_lines[3]->m_p1.x, m_lines[3]->m_p2.x});
+                const auto y_min = std::min({m_lines[0]->m_p1.y, m_lines[0]->m_p2.y, m_lines[1]->m_p1.y,
+                                             m_lines[1]->m_p2.y, m_lines[2]->m_p1.y, m_lines[2]->m_p2.y,
+                                             m_lines[3]->m_p1.y, m_lines[3]->m_p2.y});
+                const auto y_max = std::max({m_lines[0]->m_p1.y, m_lines[0]->m_p2.y, m_lines[1]->m_p1.y,
+                                             m_lines[1]->m_p2.y, m_lines[2]->m_p1.y, m_lines[2]->m_p2.y,
+                                             m_lines[3]->m_p1.y, m_lines[3]->m_p2.y});
+                m_intf.position_rectangle_dimensions(m_wrkpl->transform(m_first_point),
+                                                      m_wrkpl->transform({x_min, m_lines[0]->m_p1.y}),
+                                                      m_wrkpl->transform({x_max, m_lines[0]->m_p1.y}),
+                                                      m_wrkpl->transform({m_lines[0]->m_p1.x, y_min}),
+                                                      m_wrkpl->transform({m_lines[0]->m_p1.x, y_max}),
+                                                      m_width > 0, m_height < 0);
             }
         }
     }
@@ -319,11 +379,11 @@ void ToolDrawRectangle::update_from_dimensions()
     glm::dvec2 pa = m_first_point;
     glm::dvec2 pb;
     if (m_mode == Mode::CORNER) {
-        pb = pa + glm::dvec2(-m_width, m_height);
+        pb = pa + glm::dvec2(m_width, m_height);
     }
     else {
-        pa = m_first_point - glm::dvec2(-m_width, m_height) / 2.;
-        pb = m_first_point + glm::dvec2(-m_width, m_height) / 2.;
+        pa = m_first_point - glm::dvec2(m_width, m_height) / 2.;
+        pb = m_first_point + glm::dvec2(m_width, m_height) / 2.;
     }
     const auto world_a = m_wrkpl->transform(pa);
     const auto world_b = m_wrkpl->transform(pb);

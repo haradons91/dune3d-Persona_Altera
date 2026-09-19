@@ -36,7 +36,10 @@ private:
     int m_line1_corner = -1;
     int m_line2_corner = -1;
     double m_max_radius = 0;
+    double m_radius = 0;
     bool m_ready = false;
+    bool m_radius_locked = false;
+    bool m_line1_arc_point1 = true;
 
     bool select_line(EntityLine2D *&line);
     bool setup_corner();

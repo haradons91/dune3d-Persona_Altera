@@ -5,6 +5,7 @@
 #include "nlohmann/json_fwd.hpp"
 #include <filesystem>
 #include <set>
+#include <stdexcept>
 #include <glm/glm.hpp>
 #include "util/file_version.hpp"
 #include "entity/entity_and_point.hpp"
@@ -52,7 +53,10 @@ public:
 
     template <typename T = Entity> T &get_entity(const UUID &uu)
     {
-        return dynamic_cast<T &>(*m_entities.at(uu));
+        auto it = m_entities.find(uu);
+        if (it == m_entities.end())
+            throw std::out_of_range("entity UUID not found: " + static_cast<std::string>(uu));
+        return dynamic_cast<T &>(*it->second);
     }
 
     template <typename T = Entity> T *get_entity_ptr(const UUID &uu)
@@ -80,7 +84,10 @@ public:
 
     template <typename T = Entity> const T &get_entity(const UUID &uu) const
     {
-        return dynamic_cast<const T &>(*m_entities.at(uu));
+        auto it = m_entities.find(uu);
+        if (it == m_entities.end())
+            throw std::out_of_range("entity UUID not found: " + static_cast<std::string>(uu));
+        return dynamic_cast<const T &>(*it->second);
     }
 
     template <typename T = Entity> const T *get_entity_ptr(const UUID &uu) const

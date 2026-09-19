@@ -153,7 +153,7 @@ public:
     Gtk::Button &get_ribbon_btn_rect() { return *m_ribbon_btn_rect; }
     Gtk::Button &get_ribbon_btn_circle() { return *m_ribbon_btn_circle; }
     Gtk::Button &get_ribbon_btn_polygon() { return *m_ribbon_btn_polygon; }
-    Gtk::Button &get_ribbon_btn_text() { return *m_ribbon_btn_text; }
+    Gtk::Button &get_ribbon_btn_dimension_create() { return *m_ribbon_btn_dimension_create; }
 
     Gtk::Button &get_ribbon_btn_dimension() { return *m_ribbon_btn_dimension; }
     Gtk::Button &get_ribbon_sketch_btn_fillet() { return *m_ribbon_sketch_btn_fillet; }
@@ -165,11 +165,22 @@ public:
     void show_rectangle_dimensions(double width, double height);
     void update_rectangle_dimensions(double width, double height);
     void hide_rectangle_dimensions();
-    void position_rectangle_dimensions(glm::dvec2 pos, bool negative_x, bool negative_y);
+    void position_rectangle_dimensions(glm::dvec2 pos, glm::dvec2 x_min, glm::dvec2 x_max, glm::dvec2 y_min,
+                                       glm::dvec2 y_max, bool negative_x, bool negative_y);
     void init_rectangle_dimensions(EditorInterface &intf);
     void focus_next_rectangle_dimension();
     void commit_rectangle_dimensions();
+    void show_circle_dimension(double diameter);
+    void update_circle_dimension(double diameter);
+    void hide_circle_dimension();
+    void position_circle_dimension(glm::dvec2 center, glm::dvec2 left, glm::dvec2 right);
+    void show_extrude_dimension(double height);
+    void update_extrude_dimension(double height);
+    void hide_extrude_dimension();
+    void position_extrude_dimension(glm::dvec2 base, glm::dvec2 tip);
+    void commit_extrude_dimension();
     void commit_and_focus_next_rectangle_dimension();
+    void focus_circle_dimension();
     bool rectangle_dimensions_visible() const;
 
     void set_key_hint_label_text(const std::string &s);
@@ -285,7 +296,7 @@ private:
     Gtk::Button *m_ribbon_btn_rect = nullptr;
     Gtk::Button *m_ribbon_btn_circle = nullptr;
     Gtk::Button *m_ribbon_btn_polygon = nullptr;
-    Gtk::Button *m_ribbon_btn_text = nullptr;
+    Gtk::Button *m_ribbon_btn_dimension_create = nullptr;
 
     Gtk::Button *m_ribbon_btn_dimension = nullptr;
     Gtk::Button *m_ribbon_sketch_btn_fillet = nullptr;

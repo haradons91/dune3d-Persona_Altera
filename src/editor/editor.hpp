@@ -49,8 +49,18 @@ public:
     void show_rectangle_dimensions(double width, double height) override;
     void update_rectangle_dimensions(double width, double height) override;
     void hide_rectangle_dimensions() override;
-    void position_rectangle_dimensions(glm::dvec3 origin, bool negative_x, bool negative_y) override;
+    void position_rectangle_dimensions(glm::dvec3 origin, glm::dvec3 x_min, glm::dvec3 x_max, glm::dvec3 y_min,
+                                       glm::dvec3 y_max, bool negative_x, bool negative_y) override;
     void accept_rectangle_dimensions() override;
+    void accept_circle_dimension() override;
+    void show_circle_dimension(double diameter) override;
+    void update_circle_dimension(double diameter) override;
+    void hide_circle_dimension() override;
+    void position_circle_dimension(glm::dvec3 center, glm::dvec3 left, glm::dvec3 right) override;
+    void show_extrude_dimension(double height) override;
+    void update_extrude_dimension(double height) override;
+    void hide_extrude_dimension() override;
+    void position_extrude_dimension(glm::dvec3 base, glm::dvec3 tip) override;
     void tool_update_data(std::unique_ptr<ToolData> data) override;
     void enable_hover_selection(bool enable) override;
     std::optional<SelectableRef> get_hover_selection() const override;
@@ -186,6 +196,7 @@ private:
 
     bool m_selecting_sketch_plane = false;
     bool m_sketch_editing = false;
+    std::optional<bool> m_sketch_previous_visibility;
     bool m_extrude_editing = false;
     bool m_extrude_dragging = false;
     bool m_extrude_drag_changed = false;
@@ -248,6 +259,10 @@ private:
 
     bool m_no_canvas_update = false;
     std::optional<glm::dvec3> m_rectangle_dimensions_origin;
+    std::optional<glm::dvec3> m_rectangle_dimensions_x_min;
+    std::optional<glm::dvec3> m_rectangle_dimensions_x_max;
+    std::optional<glm::dvec3> m_rectangle_dimensions_y_min;
+    std::optional<glm::dvec3> m_rectangle_dimensions_y_max;
     bool m_rectangle_dimensions_negative_x = false;
     bool m_rectangle_dimensions_negative_y = false;
     bool m_solid_model_edge_select_mode = false;

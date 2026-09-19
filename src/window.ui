@@ -98,6 +98,12 @@ dim-label</property>
                 <property name="tooltip-text">Save As</property>
               </object>
             </child>
+            <child>
+              <object class="GtkButton" id="screenshot_button">
+                <property name="label">Screenshot</property>
+                <property name="tooltip-text">Save a screenshot of the Dune3D window</property>
+              </object>
+            </child>
           </object>
         </child>
       </object>
@@ -510,23 +516,23 @@ dim-label</property>
                       </object>
                     </child>
                     <child>
-                      <object class="GtkButton" id="ribbon_btn_text">
+                      <object class="GtkButton" id="ribbon_btn_dimension_create">
                         <property name="css-classes">fusion-ribbon-btn</property>
-                        <property name="tooltip-text">Draw Text</property>
+                        <property name="tooltip-text">Sketch Dimension</property>
                         <child>
                           <object class="GtkBox">
                             <property name="orientation">vertical</property>
                             <property name="spacing">2</property>
                             <child>
                               <object class="GtkImage">
-                                <property name="icon-name">action-draw-text-symbolic</property>
+                                <property name="icon-name">action-draw-line-rectangle-symbolic</property>
                                 <property name="icon-size">large</property>
                               </object>
                             </child>
                             <child>
                               <object class="GtkLabel">
                                 <property name="css-classes">fusion-ribbon-btn-label</property>
-                                <property name="label">Text</property>
+                                <property name="label">Dimension</property>
                               </object>
                             </child>
                           </object>
