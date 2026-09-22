@@ -36,6 +36,17 @@ void Editor::init_workspace_browser()
     m_workspace_browser_stack = Gtk::make_managed<Gtk::Stack>();
     m_workspace_browser_stack->set_vexpand(true);
     m_win.get_left_bar().set_start_child(*m_workspace_browser_stack);
+
+    // Connected once here (rather than per-document in connect_workspace_browser)
+    // since it always refreshes whichever browser is currently active, not the
+    // browser that was current when it was connected.
+    m_core.signal_rebuilt().connect([this] {
+        Glib::signal_idle().connect_once([this] {
+            if (!m_current_workspace_view || !m_workspace_browser)
+                return;
+            m_workspace_browser->update_documents(m_workspace_views.at(m_current_workspace_view).m_documents);
+        });
+    });
 }
 
 void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
@@ -133,15 +144,6 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
     });
 
     m_workspace_browser->set_sensitive(m_core.has_documents());
-
-    m_core.signal_rebuilt().connect([this] {
-        Glib::signal_idle().connect_once([this] {
-            if (!m_current_workspace_view)
-                return;
-            m_workspace_browser->update_documents(m_workspace_views.at(m_current_workspace_view).m_documents);
-        });
-    });
-
 }
 
 void Editor::ensure_workspace_browser(const UUID &doc_uuid)
@@ -163,6 +165,21 @@ void Editor::show_workspace_browser(const UUID &doc_uuid)
     m_workspace_browser->set_sensitive(true);
     if (m_workspace_views.contains(m_current_workspace_view))
         m_workspace_browser->update_documents(get_current_document_views());
+}
+
+void Editor::remove_workspace_browser(const UUID &doc_uuid)
+{
+    auto it = m_workspace_browsers.find(doc_uuid);
+    if (it == m_workspace_browsers.end())
+        return;
+    const bool was_active = (m_workspace_browser == it->second);
+    m_workspace_browser_stack->remove(*it->second);
+    m_workspace_browsers.erase(it);
+    if (was_active) {
+        m_workspace_browser = nullptr;
+        if (m_core.has_documents())
+            show_workspace_browser(m_core.get_current_idocument_info().get_uuid());
+    }
 }
 
 void Editor::on_workspace_browser_group_selected(const UUID &uu_doc, const UUID &uu_group)

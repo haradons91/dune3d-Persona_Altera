@@ -1528,6 +1528,7 @@ void Editor::do_close_document(const UUID &doc_uu)
     if (m_core.get_current_idocument_info().get_uuid() == doc_uu)
         force_end_tool();
     m_core.close_document(doc_uu);
+    remove_workspace_browser(doc_uu);
     auto_close_workspace_views();
 }
 

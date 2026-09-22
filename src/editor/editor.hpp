@@ -100,6 +100,7 @@ private:
     void connect_workspace_browser(WorkspaceBrowser &browser);
     void ensure_workspace_browser(const UUID &doc_uuid);
     void show_workspace_browser(const UUID &doc_uuid);
+    void remove_workspace_browser(const UUID &doc_uuid);
     void init_properties_notebook();
     void init_header_bar();
     void init_actions();
