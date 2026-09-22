@@ -239,36 +239,6 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
                                             {midpt.m_uuid, 0});
                     }
                 }
-                // Keep the rectangle's width and height as visible sketch
-                // dimensions immediately after creation.  Use the opposing
-                // endpoints of the horizontal and vertical sides so the
-                // dimensions remain tied to the rectangle geometry.
-                {
-                    auto &width = add_constraint<ConstraintPointDistanceHorizontal>();
-                    width.m_entity1 = {m_lines.at(0)->m_uuid, 1};
-                    width.m_entity2 = {m_lines.at(0)->m_uuid, 2};
-                    width.m_wrkpl = m_wrkpl->m_uuid;
-                    auto width_value = width.measure_distance(get_doc());
-                    if (width_value < 0) {
-                        width.flip();
-                        width_value = -width_value;
-                    }
-                    width.m_distance = width_value;
-
-                    auto &height = add_constraint<ConstraintPointDistanceVertical>();
-                    // Anchor the initial vertical dimension to the rectangle's
-                    // left edge. The renderer may switch to the right edge
-                    // when the dimension is dragged past the rectangle center.
-                    height.m_entity1 = {m_lines.at(3)->m_uuid, 1};
-                    height.m_entity2 = {m_lines.at(3)->m_uuid, 2};
-                    height.m_wrkpl = m_wrkpl->m_uuid;
-                    auto height_value = height.measure_distance(get_doc());
-                    if (height_value < 0) {
-                        height.flip();
-                        height_value = -height_value;
-                    }
-                    height.m_distance = height_value;
-                }
                 m_intf.hide_rectangle_dimensions();
                 return ToolResponse::commit();
             }
