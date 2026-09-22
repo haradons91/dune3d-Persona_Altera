@@ -2,7 +2,9 @@
 #include "document/document.hpp"
 #include "document/constraint/constraint_point_distance.hpp"
 #include "document/entity/entity_line2d.hpp"
+#include "document/entity/entity_point2d.hpp"
 #include "document/entity/entity_workplane.hpp"
+#include "document/constraint/constraint_point_on_line.hpp"
 #include "document/constraint/constraint_points_coincident.hpp"
 #include "editor/editor_interface.hpp"
 #include "tool_common_impl.hpp"
@@ -162,6 +164,43 @@ ToolResponse ToolSketchChamfer::update(const ToolArgs &args)
             m_line2->m_p2 = m_preview_line->m_p2;
         m_preview_line->m_selection_invisible = false;
 
+        // Keep the original sharp corner available as a solver reference
+        // when the chamfer is made at the workplane origin. It is
+        // deliberately hidden; the workplane origin remains the only
+        // visible marker.
+        if (glm::length(m_corner) < 1e-6) {
+            EntityPoint2D *origin_reference = nullptr;
+            for (const auto &[uuid, entity] : get_doc().m_entities) {
+                const auto *point = dynamic_cast<const EntityPoint2D *>(entity.get());
+                if (point && point->m_wrkpl == m_line1->m_wrkpl && !point->m_visible
+                    && glm::length(point->m_p) < 1e-6) {
+                    origin_reference = const_cast<EntityPoint2D *>(point);
+                    break;
+                }
+            }
+            if (!origin_reference) {
+                origin_reference = &add_entity<EntityPoint2D>();
+                origin_reference->m_wrkpl = m_line1->m_wrkpl;
+                origin_reference->m_p = m_corner;
+                origin_reference->m_construction = true;
+                origin_reference->m_visible = false;
+                origin_reference->m_selection_invisible = true;
+                auto &origin_constraint = add_constraint<ConstraintPointsCoincident>();
+                origin_constraint.m_wrkpl = m_line1->m_wrkpl;
+                origin_constraint.m_entity1 = {origin_reference->m_uuid, 0};
+                origin_constraint.m_entity2 = {m_line1->m_wrkpl, 1};
+
+                auto &line1_origin = add_constraint<ConstraintPointOnLine>();
+                line1_origin.m_wrkpl = m_line1->m_wrkpl;
+                line1_origin.m_point = {origin_reference->m_uuid, 0};
+                line1_origin.m_line = m_line1->m_uuid;
+                auto &line2_origin = add_constraint<ConstraintPointOnLine>();
+                line2_origin.m_wrkpl = m_line2->m_wrkpl;
+                line2_origin.m_point = {origin_reference->m_uuid, 0};
+                line2_origin.m_line = m_line2->m_uuid;
+            }
+        }
+
         const EntityAndPoint line1_corner{m_line1->m_uuid, static_cast<unsigned int>(m_line1_corner + 1)};
         const EntityAndPoint line2_corner{m_line2->m_uuid, static_cast<unsigned int>(m_line2_corner + 1)};
 
@@ -187,8 +226,21 @@ ToolResponse ToolSketchChamfer::update(const ToolArgs &args)
 
         for (auto it = get_doc().m_constraints.begin(); it != get_doc().m_constraints.end();) {
             auto coincident = dynamic_cast<ConstraintPointsCoincident *>(it->second.get());
-            if (coincident && ((coincident->m_entity1 == line1_corner && coincident->m_entity2 == line2_corner)
-                               || (coincident->m_entity1 == line2_corner && coincident->m_entity2 == line1_corner))) {
+            const auto is_corner_pair = coincident
+                                        && ((coincident->m_entity1 == line1_corner
+                                             && coincident->m_entity2 == line2_corner)
+                                            || (coincident->m_entity1 == line2_corner
+                                                && coincident->m_entity2 == line1_corner));
+            const auto is_origin_corner = coincident
+                                          && ((coincident->m_entity1 == line1_corner
+                                               && coincident->m_entity2 == EntityAndPoint{m_line1->m_wrkpl, 1})
+                                              || (coincident->m_entity2 == line1_corner
+                                                  && coincident->m_entity1 == EntityAndPoint{m_line1->m_wrkpl, 1})
+                                              || (coincident->m_entity1 == line2_corner
+                                                  && coincident->m_entity2 == EntityAndPoint{m_line2->m_wrkpl, 1})
+                                              || (coincident->m_entity2 == line2_corner
+                                                  && coincident->m_entity1 == EntityAndPoint{m_line2->m_wrkpl, 1}));
+            if (is_corner_pair || is_origin_corner) {
                 it = get_doc().m_constraints.erase(it);
                 set_current_group_solve_pending();
             }

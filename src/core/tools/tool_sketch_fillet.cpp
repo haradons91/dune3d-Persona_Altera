@@ -58,7 +58,8 @@ bool ToolSketchFillet::select_line(EntityLine2D *&line)
         return false;
 
     auto *candidate = dynamic_cast<EntityLine2D *>(&get_doc().get_entity(hover->item));
-    if (!candidate || candidate->m_wrkpl != get_workplane_uuid() || candidate == line)
+    if (!candidate || candidate->m_wrkpl != get_workplane_uuid() || candidate == line || candidate == m_line1
+        || candidate == m_line2)
         return false;
     line = candidate;
     return true;
@@ -68,7 +69,10 @@ bool ToolSketchFillet::setup_corner()
 {
     const std::array<glm::dvec2, 2> line1_points = {m_line1->m_p1, m_line1->m_p2};
     const std::array<glm::dvec2, 2> line2_points = {m_line2->m_p1, m_line2->m_p2};
-    double best_distance = 1e-6;
+    // Matches the tolerance used for corner-matching in ToolSketchChamfer and
+    // for coincident-loop detection in Paths::from_document: post-solve
+    // coincident points can drift slightly, so 1e-6 is too tight.
+    double best_distance = 1e-4;
     int corner1 = -1;
     int corner2 = -1;
     for (int i = 0; i < 2; i++) {
