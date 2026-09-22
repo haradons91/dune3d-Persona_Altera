@@ -27,6 +27,7 @@
 #include "tools/tool_move_anchor.hpp"
 #include "tools/tool_toggle_construction.hpp"
 #include "tools/tool_import_step.hpp"
+#include "tools/tool_import_stl.hpp"
 #include "tools/tool_constrain_diameter_radius.hpp"
 #include "tools/tool_select_edges.hpp"
 #include "tools/tool_constrain_perpendicular.hpp"
@@ -191,6 +192,9 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
 
     case ToolID::IMPORT_STEP:
         return std::make_unique<ToolImportSTEP>(tool_id, *this, m_intf, flags);
+
+    case ToolID::IMPORT_STL:
+        return std::make_unique<ToolImportSTL>(tool_id, *this, m_intf, flags);
 
     case ToolID::CONSTRAIN_DIAMETER:
     case ToolID::CONSTRAIN_RADIUS:

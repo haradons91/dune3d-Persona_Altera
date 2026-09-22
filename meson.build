@@ -243,6 +243,7 @@ src_gui = files(
   'src/core/tools/tool_move_anchor.cpp',
   'src/core/tools/tool_toggle_construction.cpp',
   'src/core/tools/tool_import_step.cpp',
+  'src/core/tools/tool_import_stl.cpp',
   'src/core/tools/tool_import_dxf.cpp',
   'src/core/tools/tool_select_edges.cpp',
   'src/core/tools/tool_set_workplane.cpp',
