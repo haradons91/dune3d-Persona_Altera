@@ -2354,6 +2354,8 @@ void Editor::open_file(const std::filesystem::path &path)
 
         {
             auto &wv = m_workspace_views.at(m_current_workspace_view);
+            if (m_core.has_documents() && m_core.get_current_idocument_info().get_uuid() != wv.m_current_document)
+                reset_sketch_editing_state();
             m_core.set_current_document(wv.m_current_document);
             m_core.set_current_group(get_current_document_view().m_current_group);
         }

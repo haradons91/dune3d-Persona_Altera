@@ -181,6 +181,31 @@ void Editor::remove_workspace_browser(const UUID &doc_uuid)
     }
 }
 
+void Editor::reset_sketch_editing_state()
+{
+    if (m_selecting_sketch_plane) {
+        m_win.get_sketch_plane_selector().set_visible(false);
+        get_canvas().set_selection_mode(SelectionMode::NORMAL);
+    }
+    m_selecting_sketch_plane = false;
+    m_sketch_editing = false;
+    m_extrude_editing = false;
+    m_extrude_dragging = false;
+    m_extrude_drag_changed = false;
+    m_sketch_previous_visibility.reset();
+    m_sketch_plane_previous_cam_quat.reset();
+    m_sketch_plane_previous_cam_distance.reset();
+    m_sketch_plane_grid.reset();
+    m_restore_sketch_plane_cam_on_undo = false;
+    m_sketch_plane_created_group.reset();
+    m_sketch_redo_reenter_group.reset();
+    m_sketch_grid_offset.reset();
+    m_sketch_finished_for_undo.reset();
+    m_sketch_entered_by_undo = false;
+    m_sketch_finished_return_cam_distance.reset();
+    update_sketch_mode_ui();
+}
+
 void Editor::on_workspace_browser_group_selected(const UUID &uu_doc, const UUID &uu_group)
 {
     if (m_core.tool_is_active())
@@ -189,6 +214,8 @@ void Editor::on_workspace_browser_group_selected(const UUID &uu_doc, const UUID 
     auto &idoc = m_core.get_current_idocument_info();
     if (idoc.get_uuid() == uu_doc && idoc.get_current_group() == uu_group)
         return;
+    if (idoc.get_uuid() != uu_doc)
+        reset_sketch_editing_state();
     m_core.set_current_document(uu_doc);
     m_workspace_views.at(m_current_workspace_view).m_current_document = uu_doc;
     update_version_info();

@@ -204,6 +204,12 @@ private:
     void update_action_bar_visibility();
     void update_sketch_mode_ui();
     bool force_end_tool();
+    // Sketch-editing/undo-redo tracking below is Editor-wide state, not
+    // scoped to a document. Call this whenever the current document is
+    // about to change so state from the document being left (e.g. "was
+    // choosing a sketch plane", a finished-sketch undo marker, an in-progress
+    // extrude drag) cannot leak into the document being switched to.
+    void reset_sketch_editing_state();
 
     bool m_selecting_sketch_plane = false;
     bool m_sketch_editing = false;

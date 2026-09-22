@@ -199,6 +199,8 @@ void Editor::set_current_workspace_view(const UUID &uu)
         m_workspace_view_loading = false;
     }
     if (m_core.has_documents()) {
+        if (m_core.get_current_idocument_info().get_uuid() != wv.m_current_document)
+            reset_sketch_editing_state();
         m_core.set_current_document(wv.m_current_document);
         set_current_group(get_current_document_view().m_current_group);
         show_workspace_browser(m_core.get_current_idocument_info().get_uuid());

@@ -507,6 +507,8 @@ void Editor::init_actions()
     connect_action(ActionID::SET_CURRENT_DOCUMENT, [this](const auto &a) {
         if (auto doc = document_from_selection(get_canvas().get_selection())) {
             CanvasUpdater canvas_updater{*this};
+            if (m_core.get_current_idocument_info().get_uuid() != doc.value())
+                reset_sketch_editing_state();
             m_core.set_current_document(doc.value());
             m_workspace_views.at(m_current_workspace_view).m_current_document = doc.value();
             m_workspace_browser->update_current_group(get_current_document_views());
