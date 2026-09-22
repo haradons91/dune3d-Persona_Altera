@@ -138,4 +138,9 @@ private:
     int m_index = 0;
 };
 
+// An extrusion that shouldn't be treated as starting a new body: either a
+// Difference (it removes material from an earlier body) or a sketch
+// extruded from a face of another body (it belongs to that body).
+bool group_is_connected_extrusion(const Document &doc, const Group &group);
+
 } // namespace dune3d

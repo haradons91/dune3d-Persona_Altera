@@ -195,20 +195,9 @@ std::vector<Document::BodyGroups> Document::get_groups_by_body() const
 {
     DUNE3D_TRACE(DebugCategory::MODEL);
     std::vector<Document::BodyGroups> r;
-    const auto is_connected_extrusion = [this](const Group &group) {
-        const auto *extrude = dynamic_cast<const GroupExtrude *>(&group);
-        if (!extrude)
-            return false;
-        if (extrude->m_operation == IGroupSolidModel::Operation::DIFFERENCE)
-            return true;
-        if (!m_groups.contains(extrude->m_source_group))
-            return false;
-        const auto *sketch = dynamic_cast<const GroupSketch *>(&get_group(extrude->m_source_group));
-        return sketch && sketch->m_attached_to_face;
-    };
     const Group *logical_body_root = nullptr;
     for (auto group : get_groups_sorted()) {
-        if (group->m_body && !is_connected_extrusion(*group)) {
+        if (group->m_body && !group_is_connected_extrusion(*this, *group)) {
             r.emplace_back(group->m_body.value());
             logical_body_root = group;
         }
@@ -218,7 +207,8 @@ std::vector<Document::BodyGroups> Document::get_groups_by_body() const
             r.emplace_back(group->find_body(*this).body);
             logical_body_root = group;
         }
-        assert(r.size());
+        if (r.empty())
+            throw std::runtime_error("body not found for group " + static_cast<std::string>(group->m_uuid));
         r.back().groups.push_back(group);
     }
 

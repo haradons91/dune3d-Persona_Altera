@@ -184,31 +184,37 @@ std::unique_ptr<Group> Group::new_from_json(const UUID &uu, const json &j)
     throw std::runtime_error("unknown group type");
 }
 
+bool group_is_connected_extrusion(const Document &doc, const Group &group)
+{
+    const auto *extrude = dynamic_cast<const GroupExtrude *>(&group);
+    if (!extrude)
+        return false;
+    if (extrude->m_operation == IGroupSolidModel::Operation::DIFFERENCE)
+        return true;
+    if (!doc.get_groups().contains(extrude->m_source_group))
+        return false;
+    const auto *sketch = dynamic_cast<const GroupSketch *>(&doc.get_group(extrude->m_source_group));
+    return sketch && sketch->m_attached_to_face;
+}
+
 Group::BodyAndGroup Group::find_body(const Document &doc) const
 {
     const Group *body_group = nullptr;
     const Group *body_owner = nullptr;
-    const auto is_connected_extrusion = [&doc](const Group &group) {
-        const auto *extrude = dynamic_cast<const GroupExtrude *>(&group);
-        if (!extrude)
-            return false;
-        if (extrude->m_operation == IGroupSolidModel::Operation::DIFFERENCE)
-            return true;
-        if (!doc.get_groups().contains(extrude->m_source_group))
-            return false;
-        const auto *sketch = dynamic_cast<const GroupSketch *>(&doc.get_group(extrude->m_source_group));
-        return sketch && sketch->m_attached_to_face;
-    };
     for (auto group : doc.get_groups_sorted()) {
-        if (group->m_body && !is_connected_extrusion(*group))
+        if (group->m_body && !group_is_connected_extrusion(doc, *group))
             body_group = body_owner = group;
         else if (!body_group || body_group->get_type() == Group::Type::REFERENCE) {
             const auto *solid_group = dynamic_cast<const IGroupSolidModel *>(group);
             if (solid_group && solid_group->get_solid_model())
                 body_group = group;
         }
-        if (group == this)
+        if (group == this) {
+            if (!body_owner || !body_group)
+                throw std::runtime_error("body not found for group " + static_cast<std::string>(m_uuid)
+                                          + ": no earlier group owns a body");
             return {body_owner->m_body.value(), *body_group};
+        }
     }
     throw std::runtime_error("body not found");
 }
