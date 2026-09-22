@@ -8,6 +8,7 @@ public:
     double get_s() const;
     double get_s_delta();
     void start(double init = 0);
+    void stop();
     float target = 0;
     bool is_running() const;
 

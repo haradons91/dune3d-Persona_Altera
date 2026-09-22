@@ -410,7 +410,11 @@ Paths Paths::from_document(const Document &doc, const UUID &wrkpl_uu, const UUID
             const auto [min_j, max_j] = bounds(paths.paths.at(j));
             const auto area_i = path_area(paths.paths.at(i));
             const auto area_j = path_area(paths.paths.at(j));
-            const auto same_bounds = glm::length(min_i - min_j) < 1e-6 && glm::length(max_i - max_j) < 1e-6;
+            // Coincident loops can differ slightly after constraint solving.
+            // Treat those as duplicates before building cells; retaining two
+            // identical holes makes the even-odd fill rule cancel them and
+            // incorrectly fills the nested profile.
+            const auto same_bounds = glm::length(min_i - min_j) < 1e-4 && glm::length(max_i - max_j) < 1e-4;
             const auto similar_area = std::min(area_i, area_j) > 1e-6
                                      && std::max(area_i, area_j) / std::min(area_i, area_j) < 1.05;
             if (same_bounds && similar_area)
