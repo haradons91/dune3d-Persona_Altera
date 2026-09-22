@@ -1,15 +1,13 @@
 #pragma once
 #include <gtkmm.h>
 #include "core/tool_data_window.hpp"
-#include <fstream>
+#include "util/debug.hpp"
 #include <string>
 
 namespace dune3d {
 inline void rectangle_debug_log(const std::string &message)
 {
-    static std::ofstream log("/tmp/dune3d-rectangle-debug.log", std::ios::app);
-    log << message << '\n';
-    log.flush();
+    debug_log(DebugCategory::UI, message);
 }
 class EditorInterface;
 class ToolDataRectangleDimensionsWindow : public ToolDataWindow {
