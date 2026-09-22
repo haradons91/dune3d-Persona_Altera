@@ -7,6 +7,8 @@
 #include "document/group/group.hpp"
 #include "document/group/group_extrude.hpp"
 #include "document/entity/entity_workplane.hpp"
+#include "document/entity/entity_line2d.hpp"
+#include "document/entity/entity_arc2d.hpp"
 #include "document/entity/entity_document.hpp"
 #include "system/system.hpp"
 #include "util/fs_util.hpp"
@@ -14,6 +16,7 @@
 #include "logger/log_util.hpp"
 #include "tools/itool_constrain.hpp"
 #include "action/action_catalog.hpp"
+#include "util/debug.hpp"
 #include <iostream>
 
 namespace dune3d {
@@ -560,6 +563,7 @@ bool Core::maybe_end_tool(const ToolResponse &r)
         }*/
         // tool_selection = tool->selection;
         m_last_tool_selection = m_tool->m_selection;
+        const auto ended_tool_id = m_tool->get_id();
         const auto current_group = r.get_current_group();
         std::cout << "end tool" << std::endl;
         m_tool.reset();
@@ -570,6 +574,32 @@ bool Core::maybe_end_tool(const ToolResponse &r)
             // const auto comment = action_catalog.at(tool_id_current).name;
             const auto comment = "tool";
             rebuild_internal(false, comment);
+            if (debug_enabled(DebugCategory::MODEL)
+                && (ended_tool_id == ToolID::SKETCH_CHAMFER || ended_tool_id == ToolID::SKETCH_FILLET)) {
+                debug_log(DebugCategory::MODEL, "post_rebuild");
+                for (const auto &[uuid, entity] : get_current_document().m_entities) {
+                    if (const auto *line = dynamic_cast<const EntityLine2D *>(entity.get())) {
+                        debug_log(DebugCategory::MODEL,
+                                  "line=" + static_cast<std::string>(uuid)
+                                          + " group=" + static_cast<std::string>(line->m_group)
+                                          + " p1=" + std::to_string(line->m_p1.x) + ","
+                                          + std::to_string(line->m_p1.y) + " p2=" + std::to_string(line->m_p2.x)
+                                          + "," + std::to_string(line->m_p2.y));
+                    }
+                    else if (ended_tool_id == ToolID::SKETCH_FILLET) {
+                        if (const auto *arc = dynamic_cast<const EntityArc2D *>(entity.get())) {
+                            debug_log(DebugCategory::MODEL,
+                                      "arc=" + static_cast<std::string>(uuid)
+                                              + " group=" + static_cast<std::string>(arc->m_group)
+                                              + " from=" + std::to_string(arc->m_from.x) + ","
+                                              + std::to_string(arc->m_from.y) + " to="
+                                              + std::to_string(arc->m_to.x) + "," + std::to_string(arc->m_to.y)
+                                              + " center=" + std::to_string(arc->m_center.x) + ","
+                                              + std::to_string(arc->m_center.y));
+                        }
+                    }
+                }
+            }
             set_needs_save(true);
         }
         else if (r.result == ToolResponse::Result::REVERT) {

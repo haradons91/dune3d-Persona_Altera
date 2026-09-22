@@ -5,6 +5,8 @@
 #include "document/entity/entity_point2d.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "document/constraint/constraint_arc_line_tangent.hpp"
+#include "document/constraint/constraint_diameter_radius.hpp"
+#include "document/constraint/constraint_point_distance.hpp"
 #include "document/constraint/constraint_point_on_line.hpp"
 #include "document/constraint/constraint_points_coincident.hpp"
 #include "document/constraint/constraint.hpp"
@@ -17,6 +19,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include "util/debug.hpp"
 
 namespace dune3d {
 
@@ -201,6 +204,22 @@ ToolResponse ToolSketchFillet::update(const ToolArgs &args)
 
         const auto line1_tangent = m_line1_arc_point1 ? m_preview_arc->m_from : m_preview_arc->m_to;
         const auto line2_tangent = m_line1_arc_point1 ? m_preview_arc->m_to : m_preview_arc->m_from;
+
+        debug_log(DebugCategory::MODEL,
+                  "commit line1=" + static_cast<std::string>(m_line1->m_uuid)
+                          + " line2=" + static_cast<std::string>(m_line2->m_uuid)
+                          + " arc=" + static_cast<std::string>(m_preview_arc->m_uuid) + " corner="
+                          + std::to_string(m_corner.x) + "," + std::to_string(m_corner.y)
+                          + " radius=" + std::to_string(m_radius) + " line1_corner=" + std::to_string(m_line1_corner)
+                          + " line2_corner=" + std::to_string(m_line2_corner) + " arc_from="
+                          + std::to_string(m_preview_arc->m_from.x) + "," + std::to_string(m_preview_arc->m_from.y)
+                          + " arc_to=" + std::to_string(m_preview_arc->m_to.x) + ","
+                          + std::to_string(m_preview_arc->m_to.y) + " line1_before="
+                          + std::to_string(m_line1->m_p1.x) + "," + std::to_string(m_line1->m_p1.y) + " / "
+                          + std::to_string(m_line1->m_p2.x) + "," + std::to_string(m_line1->m_p2.y)
+                          + " line2_before=" + std::to_string(m_line2->m_p1.x) + ","
+                          + std::to_string(m_line2->m_p1.y) + " / " + std::to_string(m_line2->m_p2.x) + ","
+                          + std::to_string(m_line2->m_p2.y));
         if (m_line1_corner == 0)
             m_line1->m_p1 = line1_tangent;
         else
@@ -250,6 +269,26 @@ ToolResponse ToolSketchFillet::update(const ToolArgs &args)
 
         const EntityAndPoint line1_corner{m_line1->m_uuid, static_cast<unsigned int>(m_line1_corner + 1)};
         const EntityAndPoint line2_corner{m_line2->m_uuid, static_cast<unsigned int>(m_line2_corner + 1)};
+
+        // Rectangle dimensions are often defined by both endpoints of one
+        // edge. After trimming for a fillet, keep the dimension tied to the
+        // adjacent edge's corner so it continues to represent the full
+        // rectangle width/height instead of pulling the filleted edge away
+        // from the original geometry.
+        for (auto &[uuid, constraint] : get_doc().m_constraints) {
+            auto *distance = dynamic_cast<ConstraintPointDistanceBase *>(constraint.get());
+            if (!distance)
+                continue;
+            auto replace_corner = [&](EntityAndPoint &point) {
+                if (point == line1_corner)
+                    point = line2_corner;
+                else if (point == line2_corner)
+                    point = line1_corner;
+            };
+            replace_corner(distance->m_entity1);
+            replace_corner(distance->m_entity2);
+        }
+
         for (auto it = get_doc().m_constraints.begin(); it != get_doc().m_constraints.end();) {
             auto coincident = dynamic_cast<ConstraintPointsCoincident *>(it->second.get());
             const auto is_corner_pair = coincident
@@ -292,6 +331,23 @@ ToolResponse ToolSketchFillet::update(const ToolArgs &args)
         auto &tangent2 = add_constraint<ConstraintArcLineTangent>();
         tangent2.m_arc = {m_preview_arc->m_uuid, m_line1_arc_point1 ? 2u : 1u};
         tangent2.m_line = m_line2->m_uuid;
+
+        // Preserve the radius selected during the preview. Without this
+        // constraint the solver can change the arc radius while satisfying
+        // the tangent and coincident constraints, which can extend the
+        // adjacent rectangle edges after rebuild.
+        auto &radius = add_constraint<ConstraintRadius>();
+        radius.m_entity = m_preview_arc->m_uuid;
+        radius.m_distance = m_radius;
+
+        debug_log(DebugCategory::MODEL,
+                  "commit_tangents line1=" + std::to_string(line1_tangent.x) + "," + std::to_string(line1_tangent.y)
+                          + " line2=" + std::to_string(line2_tangent.x) + "," + std::to_string(line2_tangent.y)
+                          + " line1_after=" + std::to_string(m_line1->m_p1.x) + ","
+                          + std::to_string(m_line1->m_p1.y) + " / " + std::to_string(m_line1->m_p2.x) + ","
+                          + std::to_string(m_line1->m_p2.y) + " line2_after=" + std::to_string(m_line2->m_p1.x)
+                          + "," + std::to_string(m_line2->m_p1.y) + " / " + std::to_string(m_line2->m_p2.x) + ","
+                          + std::to_string(m_line2->m_p2.y));
         return ToolResponse::commit();
     }
 
