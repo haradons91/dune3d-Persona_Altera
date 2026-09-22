@@ -22,10 +22,15 @@ void main() {
   
   float sample = texture(tex, texcoord_to_fragment).r;
   vec4 colora = vec4(color, sample);
-  if (FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_HOVER_ONLY)
-      && !FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_HOVER | VERTEX_FLAG_SELECTED))
+  bool hidden_hover_only = FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_HOVER_ONLY)
+      && !FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_HOVER | VERTEX_FLAG_SELECTED);
+  if (hidden_hover_only)
     colora.a = 0.0;
-  gl_FragDepth =  gl_FragCoord.z *(1-0.001 + depth_shift_to_frag);
+  // A hidden hover-only marker still needs to reach the pick buffer (so
+  // hovering it works), so it isn't discarded. But it must not write its
+  // true depth, or it would occlude real geometry behind it while
+  // invisible. Push it to the far plane instead.
+  gl_FragDepth = hidden_hover_only ? 1.0 : gl_FragCoord.z *(1-0.001 + depth_shift_to_frag);
   if(colora.a < 0.1 && !FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_HOVER_ONLY))
       discard;
 
