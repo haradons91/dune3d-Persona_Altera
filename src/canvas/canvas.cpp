@@ -8,6 +8,7 @@
 #include "util/template_util.hpp"
 #include "logger/logger.hpp"
 #include "iselection_filter.hpp"
+#include "util/debug.hpp"
 #include <iostream>
 #include <format>
 #include <glm/gtc/matrix_transform.hpp>
@@ -32,8 +33,7 @@ static const float min_cam_distance = 200.0f / pow(1.15f, 72.0f); // 72 steps to
 
 static void profile_debug(const std::string &message)
 {
-    std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-    log << message << '\n';
+    debug_log(DebugCategory::SELECTION, message);
 }
 
 static const MSD::Params msd_params_slow{

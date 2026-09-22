@@ -9,16 +9,14 @@
 #include "dialogs/dialogs.hpp"
 #include "dialogs/enter_datum_window.hpp"
 #include "tool_common_constrain_impl.hpp"
-#include <fstream>
+#include "util/debug.hpp"
 #include <format>
 
 namespace dune3d {
 namespace {
 void sketch_dimension_debug_log(const std::string &message)
 {
-    static std::ofstream log("/tmp/dune3d-sketch-dimension-debug.log", std::ios::app);
-    log << message << '\n';
-    log.flush();
+    debug_log(DebugCategory::UI, message);
 }
 } // namespace
 

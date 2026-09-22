@@ -37,16 +37,13 @@
 #include "nlohmann/json.hpp"
 #include "buffer.hpp"
 #include <iostream>
-#include <fstream>
 #include <format>
 
 namespace dune3d {
 namespace {
 void sketch_dimension_debug_log(const std::string &message)
 {
-    static std::ofstream log("/tmp/dune3d-sketch-dimension-debug.log", std::ios::app);
-    log << message << '\n';
-    log.flush();
+    debug_log(DebugCategory::UI, message);
 }
 } // namespace
 

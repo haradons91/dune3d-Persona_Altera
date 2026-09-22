@@ -23,7 +23,6 @@
 #include "util/glm_util.hpp"
 #include "util/paths.hpp"
 #include "util/debug.hpp"
-#include <fstream>
 #include <format>
 
 namespace dune3d {
@@ -269,11 +268,9 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         bool have_profile_selection = false;
         std::set<unsigned int> selected_profiles;
         for (const auto &selection : get_canvas().get_selection()) {
-            {
-                std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-                log << std::format("extrude selection type={} item={} point={}\n", static_cast<int>(selection.type),
-                                   static_cast<std::string>(selection.item), selection.point);
-            }
+            debug_log(DebugCategory::EXTRUDE,
+                      std::format("extrude selection type={} item={} point={}", static_cast<int>(selection.type),
+                                  static_cast<std::string>(selection.item), selection.point));
             if (selection.type == SelectableRef::Type::SKETCH_PROFILE
                 && selection.item == current_group.m_uuid) {
                 selected_profiles.insert(selection.point);
@@ -303,12 +300,13 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
                 }
             }
         }
-        {
-            std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-            log << "extrude source_paths=";
+        if (debug_enabled(DebugCategory::EXTRUDE)) {
+            std::string paths_str;
             for (const auto path : group.m_source_paths)
-                log << path << ',';
-            log << std::format(" have_profile_selection={}\n", have_profile_selection);
+                paths_str += std::to_string(path) + ',';
+            debug_log(DebugCategory::EXTRUDE,
+                      "extrude source_paths=" + paths_str
+                              + std::format(" have_profile_selection={}", have_profile_selection));
         }
     }
     else if (group_type == Group::Type::REVOLVE) {
@@ -863,9 +861,9 @@ void Editor::on_workspace_browser_group_checked(const UUID &uu_doc, const UUID &
         get_current_document_views()[uu_doc].m_body_views[uu_group].m_visible = checked;
     else
         get_current_document_views()[uu_doc].m_group_views[uu_group].m_visible = checked;
-    std::ofstream log("/tmp/dune3d-visibility-debug.log", std::ios::app);
-    log << "checkbox doc=" << static_cast<std::string>(uu_doc) << " group="
-        << static_cast<std::string>(uu_group) << " checked=" << checked << '\n';
+    debug_log(DebugCategory::UI,
+              "checkbox doc=" + static_cast<std::string>(uu_doc) + " group=" + static_cast<std::string>(uu_group)
+                      + " checked=" + std::to_string(checked));
     m_workspace_browser->update_current_group(get_current_document_views());
 }
 

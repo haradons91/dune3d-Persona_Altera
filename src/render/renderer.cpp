@@ -395,11 +395,11 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
         if (m_is_current_document && m_current_group && m_current_group->get_type() == Group::Type::EXTRUDE) {
             const auto &extrude = dynamic_cast<const GroupExtrude &>(*m_current_group);
             if (group->m_uuid == extrude.m_source_group) {
-                std::ofstream log("/tmp/dune3d-visibility-debug.log", std::ios::app);
-                log << "renderer source_sketch=" << static_cast<std::string>(group->m_uuid) << " checked="
-                    << m_doc_view->group_is_visible(group->m_uuid) << " accepted="
-                    << group_is_visible(group->m_uuid) << " current_group="
-                    << static_cast<std::string>(m_current_group->m_uuid) << '\n';
+                debug_log(DebugCategory::RENDER,
+                          "renderer source_sketch=" + static_cast<std::string>(group->m_uuid) + " checked="
+                                  + std::to_string(m_doc_view->group_is_visible(group->m_uuid)) + " accepted="
+                                  + std::to_string(group_is_visible(group->m_uuid)) + " current_group="
+                                  + static_cast<std::string>(m_current_group->m_uuid));
             }
         }
         if (!group_is_visible(group->m_uuid))
@@ -457,13 +457,16 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             const auto profile_debug_signature = std::format("paths={} cells={}", sketch_paths.paths.size(),
                                                               sketch_paths.cells.size());
             if (profile_debug_signature != last_profile_debug_signature) {
-                std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-                log << "renderer " << profile_debug_signature << '\n';
-                for (size_t i = 0; i < sketch_paths.cells.size(); i++) {
-                    log << "cell " << i << " boundary=" << sketch_paths.cells.at(i).boundary << " holes=";
-                    for (const auto hole : sketch_paths.cells.at(i).holes)
-                        log << hole << ',';
-                    log << '\n';
+                if (debug_enabled(DebugCategory::RENDER)) {
+                    debug_log(DebugCategory::RENDER, "renderer " + profile_debug_signature);
+                    for (size_t i = 0; i < sketch_paths.cells.size(); i++) {
+                        std::string holes;
+                        for (const auto hole : sketch_paths.cells.at(i).holes)
+                            holes += std::to_string(hole) + ',';
+                        debug_log(DebugCategory::RENDER,
+                                  "cell " + std::to_string(i) + " boundary="
+                                          + std::to_string(sketch_paths.cells.at(i).boundary) + " holes=" + holes);
+                    }
                 }
                 last_profile_debug_signature = profile_debug_signature;
             }
@@ -508,9 +511,9 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                     selection_signature += std::format("{},", index);
                 selection_signature += std::format(" active={}", has_selected_profiles);
                 if (selection_signature != last_selection_signature) {
-                    std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-                    log << "renderer " << selection_signature << std::format(" active={}", has_selected_profiles)
-                        << '\n';
+                    debug_log(DebugCategory::RENDER,
+                              "renderer " + selection_signature
+                                      + std::format(" active={}", has_selected_profiles));
                     last_selection_signature = selection_signature;
                 }
             }
@@ -614,12 +617,10 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                     const auto vref = m_ca.add_face_group({profile}, {0, 0, 0},
                                                           glm::quat_identity<float, glm::defaultp>(),
                                                           ICanvas::FaceColor::SKETCH_PROFILE);
-                    {
-                        std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-                        log << std::format("renderer submit profile={} selected={} layer={} vertices={} triangles={}\n",
-                                           profile_idx, profile_selected, profile_layer, profile.vertices.size(),
-                                           profile.triangle_indices.size());
-                    }
+                    debug_log(DebugCategory::RENDER,
+                              std::format("renderer submit profile={} selected={} layer={} vertices={} triangles={}",
+                                          profile_idx, profile_selected, profile_layer, profile.vertices.size(),
+                                          profile.triangle_indices.size()));
                     m_ca.add_selectable(vref, SelectableRef{SelectableRef::Type::SKETCH_PROFILE,
                                                             group->m_uuid, static_cast<unsigned int>(profile_idx)});
                 }

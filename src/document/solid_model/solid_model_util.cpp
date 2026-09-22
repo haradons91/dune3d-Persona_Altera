@@ -18,7 +18,7 @@
 #include <NCollection_Array1.hxx>
 #include <Geom_BezierCurve.hxx>
 #include <gp_Circ.hxx>
-#include <fstream>
+#include "util/debug.hpp"
 #include <format>
 #include <limits>
 
@@ -375,8 +375,7 @@ FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu
         unsigned int path_index = 0;
         for (auto &path : paths.paths) {
             const auto current_path = path_index++;
-            {
-                std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
+            if (debug_enabled(DebugCategory::MODEL)) {
                 glm::dvec2 minimum{std::numeric_limits<double>::max()};
                 glm::dvec2 maximum{std::numeric_limits<double>::lowest()};
                 double area = 0;
@@ -389,9 +388,10 @@ FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu
                     const auto &b = path.at((i + 1) % path.size()).first.p;
                     area += a.x * b.y - b.x * a.y;
                 }
-                log << std::format("facebuilder path={} selected={} entities={} area={} bounds=({},{})->({},{})\n",
-                                   current_path, !source_paths || source_paths->contains(current_path), path.size(),
-                                   area, minimum.x, minimum.y, maximum.x, maximum.y);
+                debug_log(DebugCategory::MODEL,
+                          std::format("facebuilder path={} selected={} entities={} area={} bounds=({},{})->({},{})",
+                                      current_path, !source_paths || source_paths->contains(current_path),
+                                      path.size(), area, minimum.x, minimum.y, maximum.x, maximum.y));
             }
             if ((!source_paths || source_paths->contains(current_path)) && path_is_valid(path))
                 cpaths.emplace_back(path_to_clipper(path, current_path));
@@ -416,16 +416,6 @@ FaceBuilder FaceBuilder::from_document(const Document &doc, const UUID &wrkpl_uu
     }
     else {
         clipper.AddSubject(cpaths);
-    }
-    if (0) {
-        std::ofstream ofs("/tmp/paths.txt");
-        for (auto &path : cpaths) {
-            for (auto &p : path) {
-                ofs << p.x << " " << p.y << " " << p.z << std::endl;
-            }
-            ofs << path.front().x << " " << path.front().y << " " << path.front().z << std::endl;
-            ofs << std::endl;
-        }
     }
     clipper.SetZCallback([](const Clipper2Lib::PointD &e1bot, const Clipper2Lib::PointD &e1top,
                             const Clipper2Lib::PointD &e2bot, const Clipper2Lib::PointD &e2top,

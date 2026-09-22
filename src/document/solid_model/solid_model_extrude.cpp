@@ -8,7 +8,6 @@
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRep_Builder.hxx>
-#include <fstream>
 #include <format>
 
 namespace dune3d {
@@ -90,17 +89,15 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupE
         }
 
         if (face_count == 0) {
-            std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-            log << std::format("extrude facebuilder faces=0 source_profiles={} source_paths={}\n",
-                               group.m_source_profiles.size(), group.m_source_paths.size());
+            debug_log(DebugCategory::EXTRUDE,
+                      std::format("extrude facebuilder faces=0 source_profiles={} source_paths={}",
+                                  group.m_source_profiles.size(), group.m_source_paths.size()));
             group.m_sweep_messages.emplace_back(GroupStatusMessage::Status::ERR, "no faces");
             return nullptr;
         }
-        {
-            std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-            log << std::format("extrude facebuilder faces={} holes={} source_profiles={} source_paths={}\n", face_count,
-                               has_hole, group.m_source_profiles.size(), group.m_source_paths.size());
-        }
+        debug_log(DebugCategory::EXTRUDE,
+                  std::format("extrude facebuilder faces={} holes={} source_profiles={} source_paths={}", face_count,
+                              has_hole, group.m_source_profiles.size(), group.m_source_paths.size()));
 
         if (glm::length(dvec) < 1e-6) {
             group.m_sweep_messages.emplace_back(GroupStatusMessage::Status::ERR, "zero length extrusion vector");
@@ -116,13 +113,11 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupE
         std::ostringstream os;
         e.Print(os);
         group.m_sweep_messages.emplace_back(GroupStatusMessage::Status::ERR, "exception: " + os.str());
-        std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-        log << "extrude OCC exception: " << os.str() << '\n';
+        debug_log(DebugCategory::EXTRUDE, "extrude OCC exception: " + os.str());
     }
     catch (const std::exception &e) {
         group.m_sweep_messages.emplace_back(GroupStatusMessage::Status::ERR, std::string{"exception: "} + e.what());
-        std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-        log << "extrude std exception: " << e.what() << '\n';
+        debug_log(DebugCategory::EXTRUDE, std::string{"extrude std exception: "} + e.what());
     }
     catch (...) {
         group.m_sweep_messages.emplace_back(GroupStatusMessage::Status::ERR, "unknown exception");

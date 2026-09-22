@@ -12,7 +12,7 @@
 #include "core/tool_id.hpp"
 #include "in_tool_action/in_tool_action.hpp"
 #include "tool_common_constrain_impl.hpp"
-#include <fstream>
+#include "util/debug.hpp"
 #include <format>
 #include <array>
 #include <algorithm>
@@ -23,9 +23,7 @@ namespace dune3d {
 namespace {
 void sketch_dimension_debug_log(const std::string &message)
 {
-    static std::ofstream log("/tmp/dune3d-sketch-dimension-debug.log", std::ios::app);
-    log << message << '\n';
-    log.flush();
+    debug_log(DebugCategory::UI, message);
 }
 
 std::string describe_selection(const std::set<SelectableRef> &selection)
