@@ -1,5 +1,6 @@
 #include "dune3d_application.hpp"
 #include "util/exception_util.hpp"
+#include "util/debug.hpp"
 
 #ifdef HAVE_WAYLAND_PROXY
 #include "wayland-proxy.h"
@@ -7,6 +8,7 @@
 
 int main(int argc, char *argv[])
 {
+    dune3d::configure_debug_flags(argc, argv);
 
 #ifdef HAVE_WAYLAND_PROXY
     // WaylandProxy::SetVerbose(false);
