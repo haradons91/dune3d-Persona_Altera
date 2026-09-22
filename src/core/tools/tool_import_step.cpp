@@ -1,5 +1,8 @@
 #include "tool_import_step.hpp"
 #include "document/document.hpp"
+#include "document/group/group.hpp"
+#include "document/group/group_sketch.hpp"
+#include "document/group/group_step.hpp"
 #include "document/entity/entity_step.hpp"
 #include "document/constraint/constraint_lock_rotation.hpp"
 #include "editor/editor_interface.hpp"
@@ -16,7 +19,7 @@ namespace dune3d {
 
 ToolBase::CanBegin ToolImportSTEP::can_begin()
 {
-    return can_create_entity();
+    return can_create_entity() || get_group().get_type() == Group::Type::REFERENCE;
 }
 
 ToolResponse ToolImportSTEP::begin(const ToolArgs &args)
@@ -104,14 +107,24 @@ ToolResponse ToolImportSTEP::update(const ToolArgs &args)
     else if (args.type == ToolEventType::DATA) {
         if (auto data = dynamic_cast<const ToolDataPath *>(args.data.get())) {
             if (data->path != std::filesystem::path{}) {
-                m_step = &add_entity<EntitySTEP>();
+                const auto after_group = get_group().get_type() == Group::Type::REFERENCE
+                                               ? get_group().find_body(get_doc()).group.m_uuid
+                                               : get_group().m_uuid;
+                auto &import_group = get_doc().insert_group<GroupStep>(UUID::random(), after_group);
+                import_group.m_name = data->path.stem().string();
+                import_group.m_body.emplace();
+                m_step = &get_doc().add_entity<EntitySTEP>(UUID::random());
+                m_step->m_group = import_group.m_uuid;
+                get_doc().set_group_generate_pending(import_group.m_uuid);
                 auto dir = m_core.get_current_document_directory();
                 if (auto rel = get_relative_filename(data->path, dir))
                     m_step->m_path = *rel;
                 else
                     m_step->m_path = data->path;
                 m_step->update_imported(dir);
-                m_step->m_origin = m_intf.get_cursor_pos();
+                m_step->m_origin = {0, 0, 0};
+                m_step->m_include_in_solid_model = true;
+                return ToolResponse::commit();
             }
             else {
                 return ToolResponse::end();

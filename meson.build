@@ -117,6 +117,7 @@ src_common = files(
   'src/document/group/group.cpp',
   'src/document/group/igroup_solid_model.cpp',
   'src/document/group/group_sketch.cpp',
+  'src/document/group/group_step.cpp',
   'src/document/group/group_reference.cpp',
   'src/document/group/group_extrude.cpp',
   'src/document/group/group_local_operation.cpp',

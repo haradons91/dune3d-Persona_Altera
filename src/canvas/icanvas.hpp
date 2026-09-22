@@ -59,6 +59,7 @@ public:
     enum class FaceColor {
         AS_IS,
         SOLID_MODEL,
+        SOLID_MODEL_TRANSPARENT,
         OTHER_BODY_SOLID_MODEL,
         SKETCH_PLANE,
         SKETCH_PLANE_HIGHLIGHT,
@@ -73,6 +74,7 @@ public:
                                    std::shared_ptr<const PictureData> data) = 0;
 
     virtual void add_selectable(const VertexRef &vref, const SelectableRef &sref) = 0;
+    virtual void add_hover_selectable(const VertexRef &vref, const SelectableRef &sref) = 0;
     virtual void set_selection_invisible(bool selection_invisible) = 0;
 
     virtual void save() = 0;
@@ -80,6 +82,7 @@ public:
 
     // tracked by save/restore
     virtual void set_vertex_inactive(bool inactive) = 0;
+    virtual void set_vertex_hover_only(bool hover_only) = 0;
     virtual void set_vertex_constraint(bool c) = 0;
     virtual void set_vertex_construction(bool c) = 0;
     virtual void set_no_points(bool c) = 0;

@@ -36,6 +36,7 @@ public:
     bool m_connect_curvature_comb = true;
     bool m_render_sketch_plane_selector = false;
     bool m_render_sketch_grid = false;
+    bool m_render_attached_sketch_body_transparent = false;
     bool m_render_extrusion_editor = false;
     bool m_show_dimension_points = false;
     std::optional<UUID> m_sketch_plane_hovered;

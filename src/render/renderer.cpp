@@ -20,6 +20,7 @@
 #include "util/fs_util.hpp"
 #include "util/arc_util.hpp"
 #include "util/paths.hpp"
+#include "util/debug.hpp"
 #include "util/template_util.hpp"
 #include "logger/logger.hpp"
 #include "canvas/bitmap_font_util.hpp"
@@ -319,10 +320,18 @@ void Renderer::draw_sketch_grid(const EntityWorkplane &wrkpl)
 bool Renderer::group_is_visible(const UUID &uu) const
 {
     auto &group = m_doc->get_group(uu);
-    if (!m_doc_view->group_is_visible(uu))
-        return false;
+    const auto group_visible = m_doc_view->group_is_visible(uu);
     auto body = group.find_body(*m_doc);
-    if (m_current_body_group != &body.group && !m_doc_view->body_is_visible(body.group.m_uuid))
+    const auto body_visible = m_doc_view->body_is_visible(body.group.m_uuid);
+    debug_log(DebugCategory::RENDER,
+              "group=" + static_cast<std::string>(uu) + " type="
+                      + std::to_string(static_cast<int>(group.get_type()))
+                      + " group_visible=" + std::to_string(group_visible)
+                      + " body=" + static_cast<std::string>(body.group.m_uuid)
+                      + " body_visible=" + std::to_string(body_visible));
+    if (!group_visible)
+        return false;
+    if (!body_visible)
         return false;
     return true;
 }
@@ -338,6 +347,7 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                       const IWorkspaceView &wrk_view, const std::filesystem::path &containing_dir,
                       std::optional<SelectableRef> sr)
 {
+    DUNE3D_TRACE(DebugCategory::RENDER);
     m_doc = &doc;
     m_doc_view = &doc_view;
     m_workspace_view = &wrk_view;
@@ -404,9 +414,11 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             bool have_profile_point = false;
             const auto sketch_paths = paths::Paths::from_document(doc, extrude.m_wrkpl, extrude.m_source_group);
             for (size_t profile_idx = 0; profile_idx < sketch_paths.paths.size(); profile_idx++) {
-                if ((!extrude.m_source_paths.empty() && !extrude.m_source_paths.contains(profile_idx))
-                    || (extrude.m_source_paths.empty() && extrude.m_source_path
-                        && profile_idx != *extrude.m_source_path))
+                if ((!extrude.m_source_profiles.empty() && !extrude.m_source_profiles.contains(profile_idx))
+                    || (extrude.m_source_profiles.empty() && !extrude.m_source_paths.empty()
+                        && !extrude.m_source_paths.contains(profile_idx))
+                    || (extrude.m_source_profiles.empty() && extrude.m_source_paths.empty()
+                        && extrude.m_source_path && profile_idx != *extrude.m_source_path))
                     continue;
                 const auto &path = sketch_paths.paths.at(profile_idx);
                 if (path.size() == 1) {
@@ -497,7 +509,8 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                 selection_signature += std::format(" active={}", has_selected_profiles);
                 if (selection_signature != last_selection_signature) {
                     std::ofstream log("/tmp/dune3d-profile-debug.log", std::ios::app);
-                    log << "renderer " << selection_signature << '\n';
+                    log << "renderer " << selection_signature << std::format(" active={}", has_selected_profiles)
+                        << '\n';
                     last_selection_signature = selection_signature;
                 }
             }
@@ -551,55 +564,44 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             };
             for (const auto profile_idx : profile_order) {
                 const bool profile_selected = m_selected_sketch_profiles.contains(profile_idx);
-                if (has_selected_profiles && !profile_selected)
-                    continue;
                 face::Face profile;
                 profile.color = face::Color{0.2, 0.65, 1.0};
                 profile.vertices = make_profile_vertices(profile_idx);
                 if (profile.vertices.size() >= 3) {
-                    const auto cell = std::ranges::find_if(sketch_paths.cells, [profile_idx](const auto &candidate) {
-                        return candidate.boundary == profile_idx && !candidate.holes.empty();
-                    });
+                    // Tessellate every closed profile.  Each boundary is
+                    // rendered independently; nested profiles remain in the
+                    // depth stack so the outer region can be picked around
+                    // them without painting over their selected state.
                     std::vector<TessVertex> tess_vertices;
                     TessOutput tess_output;
-                    if (cell != sketch_paths.cells.end()) {
-                        auto add_contour = [&](const std::vector<face::Vertex> &contour) {
-                            const auto first = tess_vertices.size();
-                            for (const auto &vertex : contour) {
-                                tess_vertices.push_back({vertex.x, vertex.y, vertex.z, profile.vertices.size()});
-                                profile.vertices.push_back(vertex);
-                            }
-                            return std::pair{first, tess_vertices.size()};
-                        };
-                        profile.vertices.clear();
-                        std::vector<std::pair<size_t, size_t>> contours;
-                        contours.push_back(add_contour(make_profile_vertices(cell->boundary)));
-                        for (const auto hole : cell->holes)
-                            contours.push_back(add_contour(make_profile_vertices(hole)));
-
-                        GLUtesselator *tess = gluNewTess();
-                        gluTessCallback(tess, GLU_TESS_BEGIN_DATA, reinterpret_cast<void (*)()>(&tess_begin));
-                        gluTessCallback(tess, GLU_TESS_VERTEX_DATA, reinterpret_cast<void (*)()>(&tess_vertex));
-                        gluTessCallback(tess, GLU_TESS_END_DATA, reinterpret_cast<void (*)()>(&tess_end));
-                        gluTessCallback(tess, GLU_TESS_ERROR_DATA, reinterpret_cast<void (*)()>(&tess_error));
-                        gluTessProperty(tess, GLU_TESS_WINDING_RULE, GLU_TESS_WINDING_ODD);
-                        gluTessBeginPolygon(tess, &tess_output);
-                        for (const auto [begin, end] : contours) {
-                            gluTessBeginContour(tess);
-                            for (size_t i = begin; i < end; i++) {
-                                auto &vertex = tess_vertices.at(i);
-                                gluTessVertex(tess, &vertex.x, &vertex);
-                            }
-                            gluTessEndContour(tess);
-                        }
-                        gluTessEndPolygon(tess);
-                        gluDeleteTess(tess);
-                        profile.triangle_indices = std::move(tess_output.triangles);
+                    const auto contour = make_profile_vertices(profile_idx);
+                    profile.vertices.clear();
+                    for (const auto &vertex : contour) {
+                        tess_vertices.push_back({vertex.x, vertex.y, vertex.z, profile.vertices.size()});
+                        profile.vertices.push_back(vertex);
                     }
+
+                    GLUtesselator *tess = gluNewTess();
+                    gluTessCallback(tess, GLU_TESS_BEGIN_DATA, reinterpret_cast<void (*)()>(&tess_begin));
+                    gluTessCallback(tess, GLU_TESS_VERTEX_DATA, reinterpret_cast<void (*)()>(&tess_vertex));
+                    gluTessCallback(tess, GLU_TESS_END_DATA, reinterpret_cast<void (*)()>(&tess_end));
+                    gluTessCallback(tess, GLU_TESS_ERROR_DATA, reinterpret_cast<void (*)()>(&tess_error));
+                    gluTessBeginPolygon(tess, &tess_output);
+                    gluTessBeginContour(tess);
+                    for (auto &vertex : tess_vertices)
+                        gluTessVertex(tess, &vertex.x, &vertex);
+                    gluTessEndContour(tess);
+                    gluTessEndPolygon(tess);
+                    gluDeleteTess(tess);
+                    profile.triangle_indices = std::move(tess_output.triangles);
                     auto offset = glm::vec3(get_sketch_geometry_offset());
                     // Keep enclosed profiles in front of their containing
-                    // profile in both the visible and pick passes.
-                    offset -= glm::vec3(m_ca.get_cam_normal()) * static_cast<float>(profile_layer) * 1e-3f;
+                    // profile in both the visible and pick passes.  The
+                    // camera normal points toward the camera, so increasing
+                    // the offset moves later (smaller) profiles toward the
+                    // viewer.  Reversing this made the outer profile win
+                    // every pick over a nested profile.
+                    offset += glm::vec3(m_ca.get_cam_normal()) * static_cast<float>(profile_layer) * 1e-3f;
                     for (auto &vertex : profile.vertices)
                         vertex += face::Vertex{offset.x, offset.y, offset.z};
                     const auto normal = workplane.get_normal_vector();
@@ -619,7 +621,7 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                                            profile.triangle_indices.size());
                     }
                     m_ca.add_selectable(vref, SelectableRef{SelectableRef::Type::SKETCH_PROFILE,
-                                                            group->m_uuid, profile_idx});
+                                                            group->m_uuid, static_cast<unsigned int>(profile_idx)});
                 }
                 profile_layer++;
             }
@@ -652,6 +654,8 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             const auto is_current = std::ranges::any_of(
                     body_groups.groups, [current_group](auto group) { return group->m_uuid == current_group; });
             auto color = is_current ? ICanvas::FaceColor::SOLID_MODEL : ICanvas::FaceColor::OTHER_BODY_SOLID_MODEL;
+            if (is_current && m_render_attached_sketch_body_transparent)
+                color = ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT;
             if (body_groups.body.m_color.has_value())
                 color = ICanvas::FaceColor::AS_IS;
             set_chunk_from_group(*last_solid_model_group);
@@ -663,6 +667,67 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                     m_ca.add_selectable(vref, SelectableRef{SelectableRef::Type::SOLID_MODEL_FACE,
                                                             last_solid_model_group->m_uuid, face_idx++});
                 }
+
+                m_ca.save();
+                m_ca.set_vertex_hover_only(true);
+                const auto hover_geometry_offset = glm::dvec3(m_ca.get_cam_normal()) * 1e-3;
+                const auto snap_edge_endpoint = [last_solid_model](const glm::dvec3 &endpoint) {
+                    glm::dvec3 snapped = endpoint;
+                    double best_distance = std::numeric_limits<double>::max();
+                    for (const auto &face : last_solid_model->m_faces) {
+                        for (const auto &vertex : face.vertices) {
+                            const glm::dvec3 corner{vertex.x, vertex.y, vertex.z};
+                            const double distance = glm::length(corner - endpoint);
+                            if (distance < best_distance) {
+                                best_distance = distance;
+                                snapped = corner;
+                            }
+                        }
+                    }
+                    return snapped;
+                };
+                for (const auto &[edge_idx, path] : last_solid_model->m_edges) {
+                    if (path.size() < 2)
+                        continue;
+                    for (size_t i = 1; i < path.size(); i++) {
+                        auto from = path.at(i - 1);
+                        auto to = path.at(i);
+                        if (i == 1)
+                            from = snap_edge_endpoint(from);
+                        if (i + 1 == path.size())
+                            to = snap_edge_endpoint(to);
+                        if (debug_enabled(DebugCategory::RENDER)) {
+                            debug_log(DebugCategory::RENDER,
+                                      std::format("solid edge={} segment={} from=({:.6f},{:.6f},{:.6f}) "
+                                                   "to=({:.6f},{:.6f},{:.6f})",
+                                                   edge_idx, i, from.x, from.y, from.z, to.x, to.y, to.z));
+                        }
+                        const auto vref = m_ca.draw_line(from + hover_geometry_offset, to + hover_geometry_offset);
+                        m_ca.add_selectable(vref, SelectableRef{SelectableRef::Type::SOLID_MODEL_EDGE,
+                                                               last_solid_model_group->m_uuid, edge_idx});
+                    }
+                }
+
+                std::vector<glm::dvec3> vertices;
+                for (const auto &face : last_solid_model->m_faces) {
+                    for (const auto &vertex : face.vertices) {
+                        const glm::dvec3 point{vertex.x, vertex.y, vertex.z};
+                        if (std::ranges::any_of(vertices, [&point](const auto &other) {
+                                return glm::length(other - point) <= 1e-6;
+                            }))
+                            continue;
+                        vertices.push_back(point);
+                    }
+                }
+                for (unsigned int vertex_idx = 0; vertex_idx < vertices.size(); vertex_idx++) {
+                    const auto vertex_ref =
+                            m_ca.draw_point(vertices.at(vertex_idx) + hover_geometry_offset, IconID::POINT_CIRCLE);
+                    m_ca.add_selectable(vertex_ref,
+                                        SelectableRef{SelectableRef::Type::SOLID_MODEL_VERTEX,
+                                                      last_solid_model_group->m_uuid, vertex_idx});
+                }
+
+                m_ca.restore();
             }
             else {
                 const auto vref = m_ca.add_face_group(last_solid_model->m_faces, {0, 0, 0},
@@ -786,10 +851,22 @@ void Renderer::visit(const EntityLine3D &line)
 
 void Renderer::visit(const EntityLine2D &line)
 {
+    // Sketch geometry, including chamfers, must not inherit the thin/thinner
+    // style used by grid and dimension helpers rendered earlier in the pass.
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(line.m_wrkpl));
     const auto offset = get_sketch_geometry_offset();
     const auto p1 = wrkpl.transform(line.m_p1) + offset;
     const auto p2 = wrkpl.transform(line.m_p2) + offset;
+    if (line.m_selection_invisible) {
+        // Tool previews still need their selection-invisible copy for hover
+        // handling, but should be drawn once through the normal line path so
+        // the preview has the same width as committed sketch geometry.
+        m_ca.save();
+        m_ca.set_selection_invisible(false);
+        m_ca.draw_line(p1, p2);
+        m_ca.restore();
+    }
     m_ca.add_selectable(m_ca.draw_line(p1, p2), SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 0});
     m_ca.add_selectable(m_ca.draw_point(p1), SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 1});
     m_ca.add_selectable(m_ca.draw_point(p2), SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 2});
@@ -805,26 +882,42 @@ void Renderer::visit(const EntityPoint2D &point)
 namespace {
 class ArcDiscretizer {
 public:
-    ArcDiscretizer(const EntityArc2D &arc)
+    ArcDiscretizer(const EntityArc2D &arc, double world_per_pixel)
     {
         m_center = arc.m_center;
         m_radius = glm::length(m_center - arc.m_from);
         const auto a0 = c2pi(angle(arc.m_from - m_center));
         const auto a1 = c2pi(angle(arc.m_to - m_center));
-        m_segments = 64;
-
-        m_dphi = c2pi(a1 - a0);
-        if (m_dphi < 1e-2)
-            m_dphi = 2 * M_PI;
-        m_dphi /= m_segments;
+        const auto sweep = c2pi(a1 - a0);
+        world_per_pixel = std::max(world_per_pixel, 1e-9);
+        // Bound the sagitta error to roughly a quarter pixel.  This keeps
+        // small arcs inexpensive while automatically refining large or
+        // closely zoomed arcs.  The renderer still uses finite limits so a
+        // malformed or extremely large arc cannot create unbounded work.
+        const auto max_sagitta = static_cast<double>(world_per_pixel) * 0.05;
+        unsigned int segments = 8;
+        if (m_radius > max_sagitta) {
+            const auto cosine = std::clamp(1.0 - max_sagitta / m_radius, -1.0, 1.0);
+            const auto sagitta_angle = 2.0 * std::acos(cosine);
+            const auto max_chord = static_cast<double>(world_per_pixel) * 1.0;
+            const auto chord_angle =
+                    2.0 * std::asin(std::clamp(max_chord / (2.0 * m_radius), 0.0, 1.0));
+            const auto max_angle = std::min(sagitta_angle, chord_angle);
+            if (max_angle > 1e-6)
+                segments = static_cast<unsigned int>(std::ceil(sweep / max_angle));
+        }
+        m_segments = std::clamp(segments, 8u, 1024u);
+        m_dphi = sweep / m_segments;
         m_a0 = a0;
     }
 
     bool next(glm::dvec2 &a, glm::dvec2 &b)
     {
-        auto phi = m_a0 + m_dphi * m_i;
+        const auto segment = m_i;
+        auto phi = m_a0 + m_dphi * segment;
+        auto phi_end = m_a0 + m_dphi * (segment + 1);
         a = m_center + euler(m_radius, phi);
-        b = m_center + euler(m_radius, phi + m_dphi);
+        b = m_center + euler(m_radius, phi_end);
         m_i++;
         return m_i <= m_segments + (m_include_last ? 1 : 0);
     }
@@ -848,11 +941,12 @@ private:
 
 void Renderer::visit(const EntityArc2D &arc)
 {
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(arc.m_wrkpl));
     const auto offset = get_sketch_geometry_offset();
 
     {
-        ArcDiscretizer ad{arc};
+        ArcDiscretizer ad{arc, m_ca.get_world_units_per_pixel()};
 
         glm ::dvec2 p0, p1;
         while (ad.next(p0, p1)) {
@@ -866,7 +960,7 @@ void Renderer::visit(const EntityArc2D &arc)
         m_ca.set_line_style(ICanvas::LineStyle::THIN);
 
         const auto curvature = 1 / arc.get_radius() * m_curvature_comb_scale;
-        ArcDiscretizer ad{arc};
+        ArcDiscretizer ad{arc, m_ca.get_world_units_per_pixel()};
         ad.set_include_last(true);
         glm::dvec2 p0, p1;
         glm::dvec2 last_comb_pt = {NAN, NAN};
@@ -1052,6 +1146,9 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
     if (m_render_sketch_plane_selector && is_reference_plane)
         return;
     draw_sketch_grid(wrkpl);
+    // Keep the workplane as a functional coordinate system, but do not draw
+    // its border, label, origin marker, or normal indicator.
+    return;
     if (!wrkpl.m_visible) {
         return;
     }
@@ -1124,9 +1221,22 @@ void Renderer::visit(const EntitySTEP &en)
     if (en.m_imported) {
         if (any_of(display, EntityViewSTEP::Display::SOLID, EntityViewSTEP::Display::SOLID_WIREFRAME)
             && !en.m_include_in_solid_model)
-            m_ca.add_selectable(m_ca.add_face_group(en.m_imported->result.faces, en.m_origin, en.m_normal,
-                                                    ICanvas::FaceColor::AS_IS),
-                                sr);
+        {
+            if (m_render_sketch_plane_selector) {
+                unsigned int face_idx = 0;
+                for (const auto &face : en.m_imported->result.faces) {
+                    const auto vref = m_ca.add_face_group({face}, en.m_origin, en.m_normal,
+                                                          ICanvas::FaceColor::AS_IS);
+                    m_ca.add_selectable(vref, SelectableRef{SelectableRef::Type::SOLID_MODEL_FACE, en.m_uuid,
+                                                            face_idx++});
+                }
+            }
+            else {
+                m_ca.add_selectable(m_ca.add_face_group(en.m_imported->result.faces, en.m_origin, en.m_normal,
+                                                        ICanvas::FaceColor::AS_IS),
+                                    sr);
+            }
+        }
 
         if (any_of(display, EntityViewSTEP::Display::WIREFRAME, EntityViewSTEP::Display::SOLID_WIREFRAME)) {
             for (const auto &path : en.m_imported->result.edges) {

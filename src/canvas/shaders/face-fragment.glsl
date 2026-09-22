@@ -40,7 +40,7 @@ void main() {
   gl_FragDepth =  gl_FragCoord.z *(1+0.0001);
   vec3 color = color_to_fragment;
   if(FLAG_IS_SET(flags, VERTEX_FLAG_HOVER | VERTEX_FLAG_SELECTED))
-      color = mix(color, get_color(flags), .5);
+      color = mix(color, vec3(0.72, 0.72, 0.72), .5);
   outputColor = vec4(color*(shade), override_alpha);
   select = outputColor*select_alpha_to_frag;
   pick = pick_base;

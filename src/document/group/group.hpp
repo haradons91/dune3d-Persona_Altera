@@ -37,6 +37,7 @@ enum class GroupType {
     INVALID,
     REFERENCE,
     SKETCH,
+    STEP,
     EXTRUDE,
     LOFT,
     LATHE,

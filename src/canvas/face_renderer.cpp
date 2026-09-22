@@ -190,20 +190,36 @@ void FaceRenderer::render()
                     glUniform1f(m_override_alpha_loc, selected ? 0.48f : (hovered ? 0.30f : 0.16f));
                 }
                 else {
-                    const auto colorp = (group.color == ICanvas::FaceColor::SOLID_MODEL)
+                    const auto colorp = (group.color == ICanvas::FaceColor::SOLID_MODEL
+                                         || group.color == ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT)
                                                 ? ColorP::SOLID_MODEL
                                                 : ColorP::OTHER_BODY_SOLID_MODEL;
                     const auto color = m_ca.m_appearance.get_color(colorp);
-                    gl_color_to_uniform_3f(m_override_color_loc, color);
-                    glUniform1f(m_override_alpha_loc, 1.0f);
+                    const bool transparent = group.color == ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT;
+                    const bool face_hovered = (group.flags & (Canvas::VertexFlags::HOVER
+                                                              | Canvas::VertexFlags::SELECTED))
+                                              != Canvas::VertexFlags::DEFAULT;
+                    if (transparent)
+                        glUniform3f(m_override_color_loc, 0.55f, 0.55f, 0.55f);
+                    else if (group.color == ICanvas::FaceColor::SOLID_MODEL && face_hovered)
+                        glUniform3f(m_override_color_loc, 0.72f, 0.72f, 0.72f);
+                    else
+                        gl_color_to_uniform_3f(m_override_color_loc, color);
+                    glUniform1f(m_override_alpha_loc,
+                                transparent ? 0.50f : 1.0f);
                 }
             }
             glm::mat3 normal_mat = glm::transpose(glm::toMat3(group.normal));
 
             glUniformMatrix3fv(m_normal_mat_loc, 1, GL_FALSE, glm::value_ptr(normal_mat));
+            const bool transparent = group.color == ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT;
+            if (transparent)
+                glDepthMask(GL_FALSE);
             glDrawElementsBaseVertex(GL_TRIANGLES, group.length, GL_UNSIGNED_INT,
                                      (void *)((group.offset + chunk.m_index_offset) * sizeof(unsigned int)),
                                      chunk.m_face_offset);
+            if (transparent)
+                glDepthMask(GL_TRUE);
             group_idx++;
         }
     }

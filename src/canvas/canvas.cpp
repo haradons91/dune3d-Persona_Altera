@@ -683,6 +683,12 @@ void Canvas::animate_to_cam_quat(const glm::quat &q)
     m_quat_z_animator.target = target_quat.z;
 }
 
+void Canvas::stop_camera_animation()
+{
+    for (auto animator : m_animators)
+        animator->stop();
+}
+
 void Canvas::animate_to_cam_quat_rel(const glm::quat &q)
 {
     if (!m_enable_animations) {
@@ -851,9 +857,17 @@ void Canvas::update_hover_selection()
             }
             clear_flags(mask);
             if (m_hover_selection.has_value()) {
-                for (const auto &vref : m_selectable_to_vertex_map.at(m_hover_selection.value())) {
-                    auto &flags = get_vertex_flags(vref);
-                    flags |= mask;
+                if (m_selectable_to_vertex_map.contains(m_hover_selection.value())) {
+                    for (const auto &vref : m_selectable_to_vertex_map.at(m_hover_selection.value())) {
+                        auto &flags = get_vertex_flags(vref);
+                        flags |= mask;
+                    }
+                }
+                if (m_hover_selectable_to_vertex_map.contains(m_hover_selection.value())) {
+                    for (const auto &vref : m_hover_selectable_to_vertex_map.at(m_hover_selection.value())) {
+                        auto &flags = get_vertex_flags(vref);
+                        flags |= mask;
+                    }
                 }
             }
             m_push_flags =
@@ -1194,13 +1208,16 @@ void Canvas::render_all(std::vector<pick_buf_t> &pick_buf)
 
     update_mats();
 
+    glEnablei(GL_BLEND, 0);
+    glEnablei(GL_BLEND, 2);
     m_face_renderer.render();
     GL_CHECK_ERROR
     // glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    glEnablei(GL_BLEND, 0);
-    glEnablei(GL_BLEND, 2);
-    m_icon_renderer.render();
     m_line_renderer.render();
+    // Render icons after lines so a vertex at an exact edge intersection wins
+    // the pick test. This makes corner hover resolve to the vertex itself;
+    // edge hover remains available away from the endpoint.
+    m_icon_renderer.render();
 
     m_glyph_renderer.render();
     m_glyph_3d_renderer.render();
@@ -1259,10 +1276,15 @@ void Canvas::peel_selection()
         render_all(pick_buf);
     }
 
-    // The first profile pick is the same profile reported by hover. Keep
-    // that ordering when committing the click; reversing it would select the
-    // containing outer profile after hovering an inner circle or triangle.
-    std::optional<SelectableRef> picked_profile;
+    // Prefer the profile already reported by hover.  During selection
+    // peeling, depth ordering can expose the containing outer profile before
+    // the nested profile that is actually under the cursor.
+    std::optional<SelectableRef> hovered_profile;
+    if (m_hover_selection && m_hover_selection->type == SelectableRef::Type::SKETCH_PROFILE)
+        hovered_profile = m_hover_selection;
+    profile_debug(std::format("click hover_profile={} point={} peeled_count={}", hovered_profile.has_value(),
+                              hovered_profile ? hovered_profile->point : 0, peeled_picks.size()));
+    std::optional<SelectableRef> picked_profile = hovered_profile;
     for (const auto pick : peeled_picks) {
         if (auto sr = get_selectable_ref_for_pick(pick); sr) {
             profile_debug(std::format("peeled type={} point={}", static_cast<int>(sr->type), sr->point));
@@ -1277,6 +1299,8 @@ void Canvas::peel_selection()
         const auto state = get_display()->get_default_seat()->get_keyboard()->get_modifier_state();
         const bool additive = (state & (Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::CONTROL_MASK))
                               != Gdk::ModifierType{};
+        profile_debug(std::format("click picked_profile={} additive={} existing_selection={}", picked_profile->point,
+                                  additive, get_selection().size()));
         if (!additive)
             sel.clear();
         if (sel.contains(*picked_profile))
@@ -1511,10 +1535,14 @@ void Canvas::queue_pick(const std::filesystem::path &pick_path)
 
 void Canvas::clear()
 {
+    // Keep logical selection IDs while render chunks and their vertex flags
+    // are recreated during a canvas update.
+    m_selection_to_restore = get_selection();
     for (auto &chunk : m_chunks) {
         chunk.clear();
     }
     m_selectable_to_vertex_map.clear();
+    m_hover_selectable_to_vertex_map.clear();
     m_vertex_to_selectable_map.clear();
     m_vertex_type_picks.clear();
     m_push_flags = PF_ALL;
@@ -1534,6 +1562,7 @@ void Canvas::clear_chunks(unsigned int first_chunk)
          /* no increment */) {
         if (it->first.chunk >= first_chunk) {
             m_selectable_to_vertex_map.erase(it->second);
+            m_hover_selectable_to_vertex_map.erase(it->second);
             it = m_vertex_to_selectable_map.erase(it);
         }
         else {
@@ -1600,6 +1629,8 @@ void Canvas::apply_flags(VertexFlags &flags)
         flags |= VertexFlags::CONSTRAINT;
     if (m_state.vertex_construction)
         flags |= VertexFlags::CONSTRUCTION;
+    if (m_state.vertex_hover_only)
+        flags |= VertexFlags::HOVER_ONLY;
 }
 
 void Canvas::apply_line_flags(VertexFlags &flags)
@@ -1790,6 +1821,15 @@ void Canvas::add_selectable(const VertexRef &vref, const SelectableRef &sref)
         sr = m_override_selectable.value();
     m_vertex_to_selectable_map.emplace(vref, sr);
     m_selectable_to_vertex_map[sr].push_back(vref);
+    if (m_selection_to_restore.contains(sr))
+        get_vertex_flags(vref) |= VertexFlags::SELECTED;
+}
+
+void Canvas::add_hover_selectable(const VertexRef &vref, const SelectableRef &sref)
+{
+    if (vref.type == VertexType::SELECTION_INVISIBLE)
+        return;
+    m_hover_selectable_to_vertex_map[sref].push_back(vref);
 }
 
 Canvas::VertexFlags &Canvas::get_vertex_flags(const VertexRef &vref)
@@ -1799,11 +1839,16 @@ Canvas::VertexFlags &Canvas::get_vertex_flags(const VertexRef &vref)
 
 void Canvas::set_selection(const std::set<SelectableRef> &sel, bool emit)
 {
+    m_selection_to_restore = sel;
+    std::string selection_dump = "selection profiles=";
     for (const auto &selection : sel) {
-        if (selection.type == SelectableRef::Type::SKETCH_PROFILE)
+        if (selection.type == SelectableRef::Type::SKETCH_PROFILE) {
+            selection_dump += std::format("{}:{} ", static_cast<std::string>(selection.item), selection.point);
             profile_debug(std::format("set selection profile item={} point={} emit={}",
                                       static_cast<std::string>(selection.item), selection.point, emit));
+        }
     }
+    profile_debug(selection_dump + std::format("total={} emit={}", sel.size(), emit));
     if (std::ranges::any_of(sel, [](const auto &sr) {
             return sr.type == SelectableRef::Type::SKETCH_PROFILE;
         })) {
@@ -1902,6 +1947,12 @@ std::set<SelectableRef> Canvas::get_selection() const
         }
         chunk_id++;
     }
+    // During a canvas rebuild the old chunks are temporarily gone, but the
+    // logical selection is still being restored as new selectable geometry is
+    // registered. Keep reporting that selection in the meantime so renderers
+    // can rebuild their selected-state dependent geometry correctly.
+    if (r.empty() && !m_selection_to_restore.empty())
+        return m_selection_to_restore;
     return r;
 }
 

@@ -362,6 +362,10 @@ std::string get_selectable_ref_description(IDocumentProvider &prv, const UUID &c
         label = "Solid model face";
     } break;
 
+    case SelectableRef::Type::SOLID_MODEL_VERTEX: {
+        label = "Solid model vertex";
+    } break;
+
     case SelectableRef::Type::SKETCH_PROFILE: {
         label = "Sketch profile";
     } break;

@@ -18,6 +18,7 @@ flat out uint pick_to_frag;
 flat out vec3 color_to_frag;
 flat out float select_alpha_to_frag;
 flat out float depth_shift_to_frag;
+flat out uint flags_to_frag;
 smooth out vec2 texcoord_to_fragment;
 
 ##ubo
@@ -39,9 +40,12 @@ vec2 scale_size(vec2 v)
 void main() {
 	if(test_peel(pick_to_geom[0]))
 		return;
-	color_to_frag = get_color(flags_to_geom[0]);
+	color_to_frag = FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_HOVER_ONLY)
+	                        ? vec3(0.22, 0.22, 0.22)
+	                        : get_color(flags_to_geom[0]);
 	select_alpha_to_frag = get_select_alpha(flags_to_geom[0]);
 	depth_shift_to_frag = get_depth_shift(flags_to_geom[0]);
+	flags_to_frag = flags_to_geom[0];
 	
 	vec4 o = origin_to_geom[0];
     o /= o.w;

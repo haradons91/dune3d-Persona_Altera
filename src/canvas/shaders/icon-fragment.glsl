@@ -7,6 +7,7 @@ flat in uint pick_to_frag;
 flat in vec3 color_to_frag;
 flat in float select_alpha_to_frag;
 flat in float depth_shift_to_frag;
+flat in uint flags_to_frag;
 uniform sampler2D tex;
 smooth in vec2 texcoord_to_fragment;
 uniform float texture_size;
@@ -21,8 +22,11 @@ void main() {
   
   float sample = texture(tex, texcoord_to_fragment).r;
   vec4 colora = vec4(color, sample);
+  if (FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_HOVER_ONLY)
+      && !FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_HOVER | VERTEX_FLAG_SELECTED))
+    colora.a = 0.0;
   gl_FragDepth =  gl_FragCoord.z *(1-0.001 + depth_shift_to_frag);
-  if(colora.a < 0.1)
+  if(colora.a < 0.1 && !FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_HOVER_ONLY))
       discard;
 
   outputColor = vec4(colora.rgb, colora.a);

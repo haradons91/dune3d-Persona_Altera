@@ -3,6 +3,7 @@
 #include "solid_model_occ.hpp"
 #include "document/group/group_extrude.hpp"
 #include "util/paths.hpp"
+#include "util/debug.hpp"
 
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
@@ -16,6 +17,10 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupE
 {
     group.m_sweep_messages.clear();
     auto mod = std::make_shared<SolidModelOcc>();
+    debug_log(DebugCategory::MODEL,
+              std::format("extrude group={} source={} operation={} dvec=({},{},{})",
+                          static_cast<std::string>(group.m_uuid), static_cast<std::string>(group.m_source_group),
+                          static_cast<int>(group.m_operation), group.m_dvec.x, group.m_dvec.y, group.m_dvec.z));
 
 
     glm::dvec3 offset = {0, 0, 0};

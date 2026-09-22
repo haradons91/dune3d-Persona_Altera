@@ -58,9 +58,14 @@ public:
     std::vector<VertexRef> draw_bitmap_text_3d(glm::vec3 p, const glm::quat &norm, float size,
                                                const std::string &rtext) override;
     void add_selectable(const VertexRef &vref, const SelectableRef &sref) override;
+    void add_hover_selectable(const VertexRef &vref, const SelectableRef &sref) override;
     void set_vertex_inactive(bool inactive) override
     {
         m_state.vertex_inactive = inactive;
+    }
+    void set_vertex_hover_only(bool hover_only) override
+    {
+        m_state.vertex_hover_only = hover_only;
     }
     void set_vertex_constraint(bool c) override
     {
@@ -165,6 +170,7 @@ public:
     void animate_to_cam_quat(const glm::quat &quat);
     void animate_to_cam_quat_rel(const glm::quat &quat);
     void animate_to_center_abs(const glm::vec3 &center);
+    void stop_camera_animation();
 
     glm::quat get_tilt_snapped_quat(const glm::quat &q) const;
 
@@ -283,6 +289,7 @@ private:
     BoxSelection m_box_selection;
     SelectionTextureRenderer m_selection_texture_renderer;
     std::vector<BaseRenderer *> m_all_renderers;
+    std::set<SelectableRef> m_selection_to_restore;
     unsigned int m_pick_base = 1;
 
     GLint get_samples() const;
@@ -432,6 +439,7 @@ private:
 
     std::map<VertexRef, SelectableRef> m_vertex_to_selectable_map;
     std::map<SelectableRef, std::vector<VertexRef>> m_selectable_to_vertex_map;
+    std::map<SelectableRef, std::vector<VertexRef>> m_hover_selectable_to_vertex_map;
 
 
     VertexFlags &get_vertex_flags(const VertexRef &vref);
@@ -497,6 +505,7 @@ private:
         glm::mat4 transform;
         bool selection_invisible = false;
         bool vertex_inactive = false;
+        bool vertex_hover_only = false;
         bool vertex_constraint = false;
         bool vertex_construction = false;
         bool no_points = false;

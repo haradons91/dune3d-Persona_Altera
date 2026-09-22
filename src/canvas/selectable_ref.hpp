@@ -5,7 +5,16 @@
 namespace dune3d {
 class SelectableRef {
 public:
-    enum class Type { ENTITY, CONSTRAINT, SOLID_MODEL_EDGE, SOLID_MODEL_FACE, SKETCH_PROFILE, EXTRUSION_HANDLE, DOCUMENT };
+    enum class Type {
+        ENTITY,
+        CONSTRAINT,
+        SOLID_MODEL_EDGE,
+        SOLID_MODEL_FACE,
+        SOLID_MODEL_VERTEX,
+        SKETCH_PROFILE,
+        EXTRUSION_HANDLE,
+        DOCUMENT
+    };
     Type type;
     UUID item;
     unsigned int point;
@@ -23,6 +32,11 @@ public:
     bool is_solid_model_edge() const
     {
         return type == Type::SOLID_MODEL_EDGE;
+    }
+
+    bool is_solid_model_vertex() const
+    {
+        return type == Type::SOLID_MODEL_VERTEX;
     }
 
     bool is_document() const

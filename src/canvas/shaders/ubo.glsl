@@ -8,6 +8,7 @@
 #define VERTEX_FLAG_SCREEN (1u << 6)
 #define VERTEX_FLAG_LINE_THIN (1u << 7)
 #define VERTEX_FLAG_LINE_THINNER (1u << 8)
+#define VERTEX_FLAG_HOVER_ONLY (1u << 9)
 #define VERTEX_FLAG_COLOR_MASK (VERTEX_FLAG_SELECTED | VERTEX_FLAG_HOVER | VERTEX_FLAG_INACTIVE | VERTEX_FLAG_CONSTRAINT | VERTEX_FLAG_CONSTRUCTION | VERTEX_FLAG_HIGHLIGHT)
 
 #define FLAG_IS_SET(x, flag) (((x) & (flag)) != 0u)
@@ -26,9 +27,9 @@ vec3 get_color(uint flags)
 
 float get_depth_shift(uint flags)
 {
-    if((flags & (VERTEX_FLAG_SELECTED)) != uint(0))
-        return -0.0005;
-    return 0.;
+	if((flags & (VERTEX_FLAG_SELECTED)) != uint(0))
+		return -0.0005;
+	return 0.;
 }
 
 float get_select_alpha(uint flags)

@@ -10,7 +10,9 @@
 #include "group/group_extrude.hpp"
 #include "group/group_reference.hpp"
 #include "group/group_sketch.hpp"
+#include "group/group_step.hpp"
 #include "system/system.hpp"
+#include "util/debug.hpp"
 #include "logger/logger.hpp"
 #include "logger/log_util.hpp"
 #include <ranges>
@@ -96,6 +98,19 @@ Document::Document(const json &j, const std::filesystem::path &containing_dir) :
     for (const auto &[uu, it] : j.at("groups").items()) {
         load_and_log(m_groups, "Group", uu, it);
     }
+    // Documents created before GroupStep used a sketch group as the
+    // container for imported STEP entities.  Upgrade those containers while
+    // loading so the tree and timeline expose the correct group type.
+    for (auto &[group_uuid, group] : m_groups) {
+        auto *sketch = dynamic_cast<GroupSketch *>(group.get());
+        if (!sketch || dynamic_cast<GroupStep *>(group.get()))
+            continue;
+        const bool contains_step = std::ranges::any_of(m_entities, [group_uuid](const auto &entry) {
+            return entry.second->m_group == group_uuid && entry.second->get_type() == Entity::Type::STEP;
+        });
+        if (contains_step)
+            group = std::make_unique<GroupStep>(*sketch);
+    }
     update_groups_sorted();
 
     if (m_groups.size())
@@ -178,10 +193,30 @@ void Document::update_groups_sorted()
 
 std::vector<Document::BodyGroups> Document::get_groups_by_body() const
 {
+    DUNE3D_TRACE(DebugCategory::MODEL);
     std::vector<Document::BodyGroups> r;
+    const auto is_connected_extrusion = [this](const Group &group) {
+        const auto *extrude = dynamic_cast<const GroupExtrude *>(&group);
+        if (!extrude)
+            return false;
+        if (extrude->m_operation == IGroupSolidModel::Operation::DIFFERENCE)
+            return true;
+        if (!m_groups.contains(extrude->m_source_group))
+            return false;
+        const auto *sketch = dynamic_cast<const GroupSketch *>(&get_group(extrude->m_source_group));
+        return sketch && sketch->m_attached_to_face;
+    };
+    const Group *logical_body_root = nullptr;
     for (auto group : get_groups_sorted()) {
-        if (group->m_body) {
+        if (group->m_body && !is_connected_extrusion(*group)) {
             r.emplace_back(group->m_body.value());
+            logical_body_root = group;
+        }
+        else if ((!logical_body_root || logical_body_root->get_type() == Group::Type::REFERENCE)
+                 && dynamic_cast<const IGroupSolidModel *>(group)
+                 && dynamic_cast<const IGroupSolidModel *>(group)->get_solid_model()) {
+            r.emplace_back(group->find_body(*this).body);
+            logical_body_root = group;
         }
         assert(r.size());
         r.back().groups.push_back(group);

@@ -46,7 +46,9 @@ public:
     bool m_show_points = false;
 
     std::shared_ptr<const ImportedSTEP> m_imported;
-    bool m_include_in_solid_model = false;
+    // Imported STEP geometry is a body by default, so features created on
+    // its faces can use it as the solid-model argument for cuts.
+    bool m_include_in_solid_model = true;
 
     void update_imported(const std::filesystem::path &containing_dir);
 

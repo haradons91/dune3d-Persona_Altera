@@ -47,6 +47,8 @@
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepAlgoAPI_Common.hxx>
+#include "util/debug.hpp"
+#include <format>
 
 
 namespace dune3d {
@@ -419,6 +421,11 @@ bool SolidModelOcc::update_acc_finish(const Document &doc, const Group &group)
 {
     auto operation = dynamic_cast<const IGroupSolidModel &>(group).get_operation();
     const auto last_solid_model = dynamic_cast<const SolidModelOcc *>(get_last_solid_model(doc, group));
+    debug_log(DebugCategory::MODEL,
+              std::format("accumulate group={} operation={} tool_shape={} last_model={} last_acc={}",
+                          static_cast<std::string>(group.m_uuid), static_cast<int>(operation), !m_shape.IsNull(),
+                          last_solid_model != nullptr,
+                          last_solid_model != nullptr && !last_solid_model->m_shape_acc.IsNull()));
     update_acc(operation, last_solid_model);
 
     if (m_shape_acc.IsNull()) {

@@ -65,6 +65,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Group::Type, {
                                                   {Group::Type::INVALID, "invalid"},
                                                   {Group::Type::REFERENCE, "reference"},
                                                   {Group::Type::SKETCH, "sketch"},
+                                                  {Group::Type::STEP, "step"},
                                                   {Group::Type::EXTRUDE, "extrude"},
                                                   {Group::Type::FILLET, "fillet"},
                                                   {Group::Type::CHAMFER, "chamfer"},
@@ -97,6 +98,8 @@ std::string Group::get_type_name(Type type)
     switch (type) {
     case Type::SKETCH:
         return "Sketch";
+    case Type::STEP:
+        return "STEP";
     case Type::CHAMFER:
         return "Chamfer";
     case Type::EXTRUDE:
@@ -145,6 +148,8 @@ std::unique_ptr<Group> Group::new_from_json(const UUID &uu, const json &j)
         return std::make_unique<GroupReference>(uu, j);
     case Type::SKETCH:
         return std::make_unique<GroupSketch>(uu, j);
+    case Type::STEP:
+        return std::make_unique<GroupStep>(uu, j);
     case Type::EXTRUDE:
         return std::make_unique<GroupExtrude>(uu, j);
     case Type::FILLET:
@@ -182,11 +187,28 @@ std::unique_ptr<Group> Group::new_from_json(const UUID &uu, const json &j)
 Group::BodyAndGroup Group::find_body(const Document &doc) const
 {
     const Group *body_group = nullptr;
+    const Group *body_owner = nullptr;
+    const auto is_connected_extrusion = [&doc](const Group &group) {
+        const auto *extrude = dynamic_cast<const GroupExtrude *>(&group);
+        if (!extrude)
+            return false;
+        if (extrude->m_operation == IGroupSolidModel::Operation::DIFFERENCE)
+            return true;
+        if (!doc.get_groups().contains(extrude->m_source_group))
+            return false;
+        const auto *sketch = dynamic_cast<const GroupSketch *>(&doc.get_group(extrude->m_source_group));
+        return sketch && sketch->m_attached_to_face;
+    };
     for (auto group : doc.get_groups_sorted()) {
-        if (group->m_body)
-            body_group = group;
+        if (group->m_body && !is_connected_extrusion(*group))
+            body_group = body_owner = group;
+        else if (!body_group || body_group->get_type() == Group::Type::REFERENCE) {
+            const auto *solid_group = dynamic_cast<const IGroupSolidModel *>(group);
+            if (solid_group && solid_group->get_solid_model())
+                body_group = group;
+        }
         if (group == this)
-            return {body_group->m_body.value(), *body_group};
+            return {body_owner->m_body.value(), *body_group};
     }
     throw std::runtime_error("body not found");
 }
