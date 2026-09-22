@@ -97,12 +97,24 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     }
 
     m_header_bar = refBuilder->get_widget<Gtk::HeaderBar>("titlebar");
+    m_window_command_bar = refBuilder->get_widget<Gtk::Box>("window_command_bar");
+    m_window_undo_redo_box = refBuilder->get_widget<Gtk::Box>("window_undo_redo_box");
+    m_window_document_tabs = refBuilder->get_widget<Gtk::Box>("window_document_tabs");
+    m_window_new_document_tab_button = refBuilder->get_widget<Gtk::Button>("window_new_document_tab_button");
+    // The plus button is part of the custom document-tab strip.  Disable the
+    // GTK theme's native button frame so it cannot replace the tab shape
+    // supplied by dune3d.css.
+    m_window_new_document_tab_button->set_has_frame(false);
+    m_window_new_document_tab_button->add_css_class("document-tab");
+    m_window_new_document_tab_button->add_css_class("new-document-tab");
     m_title_label = refBuilder->get_widget<Gtk::Label>("title_label");
     m_subtitle_label = refBuilder->get_widget<Gtk::Label>("subtitle_label");
 
     m_open_button = refBuilder->get_widget<Gtk::Button>("open_button");
     m_open_popover = refBuilder->get_widget<Gtk::Popover>("open_popover");
     m_open_menu_button = refBuilder->get_widget<Gtk::MenuButton>("open_menu_button");
+    m_open_popover->popdown();
+    m_open_menu_button->set_active(false);
     m_new_button = refBuilder->get_widget<Gtk::Button>("new_button");
     m_save_button = refBuilder->get_widget<Gtk::Button>("save_button");
     m_save_as_button = refBuilder->get_widget<Gtk::Button>("save_as_button");
@@ -116,6 +128,7 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_ribbon_btn_sketch = refBuilder->get_widget<Gtk::Button>("ribbon_btn_sketch");
     m_ribbon_create_group = refBuilder->get_widget<Gtk::Box>("ribbon_create_group");
     m_ribbon_create_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_create_menu_button");
+    m_ribbon_insert_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_insert_menu_button");
     m_ribbon_modify_group = refBuilder->get_widget<Gtk::Box>("ribbon_modify_group");
     m_ribbon_sketch_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_group");
     m_ribbon_sketch_create_menu_button =
@@ -144,7 +157,6 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_ribbon_btn_polygon = refBuilder->get_widget<Gtk::Button>("ribbon_btn_polygon");
     m_ribbon_btn_dimension_create = refBuilder->get_widget<Gtk::Button>("ribbon_btn_dimension_create");
 
-    m_ribbon_btn_dimension = refBuilder->get_widget<Gtk::Button>("ribbon_btn_dimension");
     m_ribbon_sketch_btn_fillet = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_fillet");
     m_ribbon_sketch_btn_chamfer = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_chamfer");
     m_ribbon_body_btn_measure = refBuilder->get_widget<Gtk::Button>("ribbon_body_btn_measure");
@@ -178,6 +190,11 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
 
 
     m_workspace_notebook = refBuilder->get_widget<Gtk::Notebook>("workspace_notebook");
+    m_timeline_items_box = refBuilder->get_widget<Gtk::Box>("timeline_items_box");
+    // Workspace-view tabs are separate from document tabs and were appearing
+    // directly above the feature timeline.  Document tabs now live in the
+    // header, so keep the notebook available internally but hide its strip.
+    m_workspace_notebook->set_visible(false);
 
     m_workspace_add_button = Gtk::make_managed<Gtk::Button>();
     m_workspace_add_button->set_has_frame(false);
@@ -382,7 +399,7 @@ void Dune3DAppWindow::show_extrude_dimension(double height)
 }
 void Dune3DAppWindow::update_extrude_dimension(double height)
 {
-    m_rectangle_dimensions->set_extrude_dimension(height);
+    m_rectangle_dimensions->set_extrude_dimension(height, true);
 }
 void Dune3DAppWindow::hide_extrude_dimension()
 {
@@ -393,6 +410,11 @@ void Dune3DAppWindow::hide_extrude_dimension()
 void Dune3DAppWindow::commit_extrude_dimension()
 {
     m_rectangle_dimensions->commit_extrude_dimension();
+}
+void Dune3DAppWindow::focus_extrude_dimension()
+{
+    if (m_rectangle_dimensions && m_rectangle_dimensions_active)
+        Glib::signal_idle().connect_once([this] { m_rectangle_dimensions->focus_width(); });
 }
 void Dune3DAppWindow::position_extrude_dimension(glm::dvec2 base, glm::dvec2 tip)
 {

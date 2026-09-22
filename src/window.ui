@@ -27,90 +27,127 @@ dim-label</property>
             </child>
           </object>
         </property>
-        <child>
-          <object class="GtkBox" id="top_box">
-            <property name="css-classes">linked</property>
-            <child>
-              <object class="GtkButton" id="open_button">
-                <property name="label">Open</property>
-              </object>
-            </child>
-            <child>
-              <object class="GtkMenuButton" id="open_menu_button">
-                <property name="popover">
-                  <object class="GtkPopover" id="open_popover">
-                    <child>
-                      <object class="GtkBox">
-                        <property name="orientation">vertical</property>
-                        <child>
-                          <object class="GtkSearchEntry" id="open_recent_search_entry"/>
-                        </child>
-                        <child>
-                          <object class="GtkScrolledWindow">
-                            <property name="has-frame">True</property>
-                            <property name="hscrollbar-policy">never</property>
-                            <property name="max-content-height">500</property>
-                            <property name="min-content-height">100</property>
-                            <property name="propagate-natural-height">True</property>
-                            <child>
-                              <object class="GtkListBox" id="open_recent_listbox">
-                                <property name="selection-mode">none</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                    </child>
-                  </object>
-                </property>
-              </object>
-            </child>
-          </object>
-        </child>
-        <child type="end">
-          <object class="GtkMenuButton" id="hamburger_menu_button">
-            <property name="icon-name">open-menu-symbolic</property>
-          </object>
-        </child>
-        <child type="start">
-          <object class="GtkButton" id="new_button">
-            <property name="icon-name">document-new-symbolic</property>
-            <property name="tooltip-text">Create new document</property>
-          </object>
-        </child>
-        <child>
-          <object class="GtkButton" id="pick_button">
-            <property name="label">Pick</property>
-            <property name="tooltip-text">Dump pick bufffer</property>
-          </object>
-        </child>
-        <child type="end">
-          <object class="GtkBox">
-            <property name="css-classes">linked</property>
-            <child>
-              <object class="GtkButton" id="save_button">
-                <property name="label">Save</property>
-              </object>
-            </child>
-            <child>
-              <object class="GtkButton" id="save_as_button">
-                <property name="icon-name">document-save-as-symbolic</property>
-                <property name="tooltip-text">Save As</property>
-              </object>
-            </child>
-            <child>
-              <object class="GtkButton" id="screenshot_button">
-                <property name="label">Screenshot</property>
-                <property name="tooltip-text">Save a screenshot of the Dune3D window</property>
-              </object>
-            </child>
-          </object>
-        </child>
       </object>
     </property>
     <child>
       <object class="GtkBox">
         <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkBox" id="window_command_bar">
+            <property name="orientation">horizontal</property>
+            <property name="spacing">4</property>
+            <property name="margin-start">8</property>
+            <property name="margin-end">8</property>
+            <property name="margin-top">4</property>
+            <property name="margin-bottom">4</property>
+            <child>
+              <object class="GtkBox">
+                <property name="css-classes">linked</property>
+                <child>
+                  <object class="GtkButton" id="open_button">
+                    <property name="label">Open</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="open_menu_button">
+                    <property name="popover">
+                      <object class="GtkPopover" id="open_popover">
+                        <property name="visible">false</property>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <child>
+                              <object class="GtkSearchEntry" id="open_recent_search_entry"/>
+                            </child>
+                            <child>
+                              <object class="GtkScrolledWindow">
+                                <property name="has-frame">True</property>
+                                <property name="hscrollbar-policy">never</property>
+                                <property name="max-content-height">500</property>
+                                <property name="min-content-height">100</property>
+                                <property name="propagate-natural-height">True</property>
+                                <child>
+                                  <object class="GtkListBox" id="open_recent_listbox">
+                                    <property name="selection-mode">none</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="new_button">
+                    <property name="icon-name">document-new-symbolic</property>
+                    <property name="tooltip-text">Create new document</property>
+                    <property name="visible">false</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="save_button">
+                    <property name="label">Save</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="save_as_button">
+                    <property name="icon-name">document-save-as-symbolic</property>
+                    <property name="tooltip-text">Save As</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox" id="window_undo_redo_box">
+                    <property name="css-classes">linked</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox" id="window_document_tabs">
+                    <property name="css-classes">document-tab-strip</property>
+                    <property name="spacing">0</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="window_new_document_tab_button">
+                    <property name="label">+</property>
+                    <property name="tooltip-text">Create new document</property>
+                    <property name="css-classes">document-tab new-document-tab</property>
+                    <property name="has-frame">false</property>
+                    <property name="valign">center</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="pick_button">
+                    <property name="label">Pick</property>
+                    <property name="tooltip-text">Dump pick bufffer</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkBox">
+                <property name="hexpand">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkBox">
+                <property name="css-classes">linked</property>
+                <child>
+                  <object class="GtkButton" id="screenshot_button">
+                    <property name="label">Screenshot</property>
+                    <property name="tooltip-text">Save a screenshot of the Dune3D window</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="hamburger_menu_button">
+                    <property name="icon-name">open-menu-symbolic</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
         <child>
           <object class="GtkBox" id="fusion_ribbon_bar">
             <property name="css-classes">fusion-ribbon-bar</property>
@@ -314,7 +351,7 @@ dim-label</property>
                             <property name="spacing">2</property>
                             <child>
                               <object class="GtkImage">
-                                <property name="icon-name">action-draw-line-circle-symbolic</property>
+                                <property name="icon-name">action-fillet-symbolic</property>
                                 <property name="icon-size">large</property>
                               </object>
                             </child>
@@ -338,7 +375,7 @@ dim-label</property>
                             <property name="spacing">2</property>
                             <child>
                               <object class="GtkImage">
-                                <property name="icon-name">action-draw-line-rectangle-symbolic</property>
+                                <property name="icon-name">action-chamfer-symbolic</property>
                                 <property name="icon-size">large</property>
                               </object>
                             </child>
@@ -525,7 +562,7 @@ dim-label</property>
                             <property name="spacing">2</property>
                             <child>
                               <object class="GtkImage">
-                                <property name="icon-name">action-draw-line-rectangle-symbolic</property>
+                                <property name="icon-name">action-dimension-symbolic</property>
                                 <property name="icon-size">large</property>
                               </object>
                             </child>
@@ -580,30 +617,6 @@ dim-label</property>
                     <property name="orientation">horizontal</property>
                     <property name="spacing">4</property>
                     <child>
-                      <object class="GtkButton" id="ribbon_btn_dimension">
-                        <property name="css-classes">fusion-ribbon-btn</property>
-                        <property name="tooltip-text">Constrain Distance</property>
-                        <child>
-                          <object class="GtkBox">
-                            <property name="orientation">vertical</property>
-                            <property name="spacing">2</property>
-                            <child>
-                              <object class="GtkImage">
-                                <property name="icon-name">action-draw-line-rectangle-symbolic</property>
-                                <property name="icon-size">large</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkLabel">
-                                <property name="css-classes">fusion-ribbon-btn-label</property>
-                                <property name="label">Dimension</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                    </child>
-                    <child>
                       <object class="GtkButton" id="ribbon_sketch_btn_fillet">
                         <property name="css-classes">fusion-ribbon-btn</property>
                         <property name="tooltip-text">Create Fillet</property>
@@ -611,7 +624,7 @@ dim-label</property>
                           <object class="GtkBox">
                             <property name="orientation">vertical</property>
                             <property name="spacing">2</property>
-                            <child><object class="GtkImage"><property name="icon-name">action-draw-line-circle-symbolic</property><property name="icon-size">large</property></object></child>
+                            <child><object class="GtkImage"><property name="icon-name">action-fillet-symbolic</property><property name="icon-size">large</property></object></child>
                             <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-btn-label</property><property name="label">Fillet</property></object></child>
                           </object>
                         </child>
@@ -625,7 +638,7 @@ dim-label</property>
                           <object class="GtkBox">
                             <property name="orientation">vertical</property>
                             <property name="spacing">2</property>
-                            <child><object class="GtkImage"><property name="icon-name">action-draw-line-rectangle-symbolic</property><property name="icon-size">large</property></object></child>
+                            <child><object class="GtkImage"><property name="icon-name">action-chamfer-symbolic</property><property name="icon-size">large</property></object></child>
                             <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-btn-label</property><property name="label">Chamfer</property></object></child>
                           </object>
                         </child>
@@ -682,6 +695,28 @@ dim-label</property>
                   </object>
                 </child>
                 <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-group-label</property><property name="label">INSPECT</property></object></child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkBox" id="ribbon_insert_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkMenuButton" id="ribbon_insert_menu_button">
+                    <property name="css-classes">fusion-ribbon-group-label fusion-ribbon-create-menu</property>
+                    <property name="has-frame">False</property>
+                    <property name="tooltip-text">Insert external geometry and components</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">horizontal</property>
+                        <property name="spacing">3</property>
+                        <property name="halign">center</property>
+                        <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-create-label</property><property name="label">INSERT</property></object></child>
+                        <child><object class="GtkImage"><property name="icon-name">pan-down-symbolic</property><property name="pixel-size">10</property></object></child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
               </object>
             </child>
             <child>
@@ -787,6 +822,7 @@ dim-label</property>
                       <object class="GtkBox" id="welcome_box">
                         <property name="css-classes">background
 welcome-box</property>
+                        <property name="visible">false</property>
                         <property name="halign">center</property>
                         <property name="margin-bottom">100</property>
                         <property name="margin-top">100</property>
@@ -1103,6 +1139,40 @@ blah</property>
                   <object class="GtkNotebook" id="workspace_notebook">
                     <property name="show-border">False</property>
                     <property name="tab-pos">bottom</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox" id="timeline_panel">
+                    <property name="height-request">92</property>
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">2</property>
+                    <child>
+                      <object class="GtkSeparator"/>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="label">Timeline</property>
+                        <property name="margin-start">8</property>
+                        <property name="xalign">0</property>
+                        <style><class name="dim-label"/></style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">automatic</property>
+                        <property name="vscrollbar-policy">never</property>
+                        <property name="hexpand">True</property>
+                        <child>
+                          <object class="GtkBox" id="timeline_items_box">
+                            <property name="margin-bottom">6</property>
+                            <property name="margin-end">8</property>
+                            <property name="margin-start">8</property>
+                            <property name="margin-top">2</property>
+                            <property name="spacing">4</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
                   </object>
                 </child>
               </object>

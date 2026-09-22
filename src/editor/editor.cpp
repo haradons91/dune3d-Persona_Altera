@@ -15,9 +15,11 @@
 #include "group_editor/group_editor.hpp"
 #include "render/renderer.hpp"
 #include "document/entity/entity_workplane.hpp"
+#include "document/entity/entity_step.hpp"
 #include "document/group/group_reference.hpp"
 #include "document/group/group_extrude.hpp"
 #include "document/group/group_sketch.hpp"
+#include "document/solid_model/solid_model.hpp"
 #include "logger/logger.hpp"
 #include "document/constraint/constraint.hpp"
 #include "util/fs_util.hpp"
@@ -31,6 +33,7 @@
 #include "dialogs/rectangle_dimensions_window.hpp"
 #include "system/system.hpp"
 #include "logger/log_util.hpp"
+#include "util/debug.hpp"
 #include "nlohmann/json.hpp"
 #include "buffer.hpp"
 #include <iostream>
@@ -69,6 +72,134 @@ Editor::Editor(Dune3DAppWindow &win, Preferences &prefs)
 
 Editor::~Editor() = default;
 
+void Editor::ensure_new_document()
+{
+    if (!m_core.has_documents())
+        trigger_action(ActionID::NEW_DOCUMENT);
+}
+
+void Editor::update_document_tabs()
+{
+    auto &tabs = m_win.get_window_document_tabs();
+    while (auto child = tabs.get_first_child())
+        tabs.remove(*child);
+
+    const auto documents = m_core.get_documents();
+    std::set<UUID> current_documents;
+    for (auto doc : documents)
+        current_documents.insert(doc->get_uuid());
+
+    for (auto doc : documents) {
+        if (std::find(m_document_tab_order.begin(), m_document_tab_order.end(), doc->get_uuid())
+            == m_document_tab_order.end())
+            m_document_tab_order.push_back(doc->get_uuid());
+    }
+    std::erase_if(m_document_tab_order, [&current_documents](const UUID &uuid) {
+        return !current_documents.contains(uuid);
+    });
+
+    if (documents.empty())
+        return;
+
+    const auto current_uuid = m_core.get_current_idocument_info().get_uuid();
+    for (const auto &uuid : m_document_tab_order) {
+        auto doc = std::find_if(documents.begin(), documents.end(), [&uuid](auto candidate) {
+            return candidate->get_uuid() == uuid;
+        });
+        if (doc == documents.end())
+            continue;
+        auto tab_pair = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
+        tab_pair->add_css_class("document-tab-pair");
+        if (uuid == current_uuid)
+            tab_pair->add_css_class("active");
+        auto tab = Gtk::make_managed<Gtk::ToggleButton>();
+        auto close_button = Gtk::make_managed<Gtk::Button>();
+        close_button->set_icon_name("window-close-symbolic");
+        close_button->set_tooltip_text("Close document");
+        close_button->set_has_frame(false);
+        close_button->set_focusable(false);
+        close_button->add_css_class("document-tab-close");
+        tab->set_label((*doc)->get_name());
+        tab->set_active(uuid == current_uuid);
+        tab->add_css_class("document-tab");
+        close_button->signal_clicked().connect([this, uuid] {
+            // Closing can rebuild the tab row, so wait until this button's
+            // signal has finished dispatching before removing its widget.
+            Glib::signal_idle().connect_once([this, uuid] {
+                const auto documents = m_core.get_documents();
+                if (std::ranges::any_of(documents, [&uuid](auto doc) { return doc->get_uuid() == uuid; }))
+                    close_document(uuid, nullptr, nullptr);
+            });
+        });
+        tab->signal_clicked().connect([this, uuid, tab] {
+            UUID target_workspace_view;
+            for (const auto &[workspace_uuid, workspace_view] : m_workspace_views) {
+                if (workspace_view.m_current_document == uuid) {
+                    target_workspace_view = workspace_uuid;
+                    break;
+                }
+            }
+            if (target_workspace_view) {
+                set_current_workspace_view(target_workspace_view);
+            }
+            show_workspace_browser(uuid);
+            auto &tabs = m_win.get_window_document_tabs();
+            for (auto pair = tabs.get_first_child(); pair; pair = pair->get_next_sibling()) {
+                if (auto other_tab = dynamic_cast<Gtk::ToggleButton *>(pair))
+                    other_tab->set_active(other_tab == tab);
+                else if (auto tab_pair = dynamic_cast<Gtk::Box *>(pair)) {
+                    if (auto other_tab = dynamic_cast<Gtk::ToggleButton *>(tab_pair->get_first_child()))
+                        other_tab->set_active(other_tab == tab);
+                    tab_pair->set_css_classes({"document-tab-pair"});
+                    if (tab_pair->get_first_child() == tab)
+                        tab_pair->add_css_class("active");
+                }
+            }
+        });
+        tab_pair->append(*tab);
+        tab_pair->append(*close_button);
+        tabs.append(*tab_pair);
+    }
+}
+
+void Editor::update_timeline()
+{
+    DUNE3D_TRACE(DebugCategory::TIMELINE);
+    auto &timeline = m_win.get_timeline_items_box();
+    while (auto child = timeline.get_first_child())
+        timeline.remove(*child);
+
+    if (!m_core.has_documents())
+        return;
+
+    const auto current_uuid = m_core.get_current_idocument_info().get_uuid();
+    const auto &doc = m_core.get_current_document();
+    const auto current_group = m_core.get_current_group();
+    for (auto group : doc.get_groups_sorted()) {
+        if (group->get_type() == Group::Type::REFERENCE)
+            continue;
+        bool imported_step_group = group->get_type() == Group::Type::STEP;
+        for (const auto &[entity_uuid, entity] : doc.m_entities) {
+            if (entity->m_group == group->m_uuid && dynamic_cast<const EntitySTEP *>(entity.get())) {
+                imported_step_group = true;
+                break;
+            }
+        }
+        auto feature = Gtk::make_managed<Gtk::ToggleButton>();
+        feature->set_label(imported_step_group ? (group->m_name.empty() ? "STEP" : group->m_name)
+                                               : (group->m_name.empty() ? group->get_type_name() : group->m_name));
+        feature->set_active(group->m_uuid == current_group);
+        feature->set_tooltip_text(imported_step_group ? "Imported STEP body" : group->get_type_name());
+        feature->add_css_class("dune3d-timeline-feature");
+        feature->signal_clicked().connect([this, current_uuid, uu = group->m_uuid] {
+            on_workspace_browser_group_selected(current_uuid, uu);
+            if (m_workspace_browser)
+                m_workspace_browser->select_group(uu);
+        });
+        timeline.append(*feature);
+    }
+}
+
 void Editor::init()
 {
     m_win.init_rectangle_dimensions(*this);
@@ -102,13 +233,22 @@ void Editor::init()
     init_actions();
     init_tool_popover();
     init_canvas();
+    update_document_tabs();
 
     m_core.signal_needs_save().connect([this] {
         update_action_sensitivity();
-        m_workspace_browser->update_needs_save();
+        if (m_workspace_browser)
+            m_workspace_browser->update_needs_save();
         update_workspace_view_names();
     });
-    get_canvas().signal_selection_changed().connect([this] { update_action_sensitivity(); });
+    get_canvas().signal_selection_changed().connect([this] {
+        update_action_sensitivity();
+        const auto &selection = get_canvas().get_selection();
+        if (std::ranges::any_of(selection, [](const auto &item) {
+                return item.type == SelectableRef::Type::SKETCH_PROFILE;
+            }))
+            canvas_update_keep_selection();
+    });
 
     m_win.signal_close_request().connect(
             [this] {
@@ -143,28 +283,31 @@ void Editor::init()
         }
         m_win.get_workspace_notebook().set_visible(m_core.has_documents());
         CanvasUpdater canvas_updater{*this};
-        m_workspace_browser->update_documents(get_current_document_views());
+        for (auto doc : m_core.get_documents())
+            ensure_workspace_browser(doc->get_uuid());
+        if (m_core.has_documents())
+            show_workspace_browser(m_core.get_current_idocument_info().get_uuid());
         update_group_editor();
         update_workplane_label();
         update_action_sensitivity();
-        m_workspace_browser->set_sensitive(m_core.has_documents());
-        m_win.set_welcome_box_visible(!m_core.has_documents());
+        // Keep the welcome overlay hidden after startup; closing the last
+        // document should not reopen the Open Recent panel.
+        m_win.set_welcome_box_visible(false);
         update_version_info();
         update_action_bar_buttons_sensitivity();
         update_action_bar_visibility();
         update_selection_editor();
         update_title();
+        update_document_tabs();
+        update_timeline();
     });
 
     attach_action_button(m_win.get_welcome_open_button(), ActionID::OPEN_DOCUMENT);
     attach_action_button(m_win.get_welcome_new_button(), ActionID::NEW_DOCUMENT);
+    attach_action_button(m_win.get_window_new_document_tab_button(), ActionID::NEW_DOCUMENT);
 
-    create_action_bar_button(ToolID::DRAW_CONTOUR);
-    create_action_bar_button(ToolID::DRAW_RECTANGLE);
-    create_action_bar_button(ToolID::DRAW_CIRCLE_2D);
-    create_action_bar_button(ToolID::DRAW_REGULAR_POLYGON);
-    create_action_bar_button(ToolID::DRAW_TEXT);
-    create_action_bar_button(ToolID::DRAW_WORKPLANE);
+    // Drawing tools are provided by the ribbon. Keep the perspective
+    // viewport free of the duplicate floating tool buttons.
 
     init_view_options();
 
@@ -1084,6 +1227,29 @@ void Editor::init_header_bar()
         auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
         m_win.get_ribbon_sketch_create_menu_button().set_popover(*popover);
     }
+    {
+        auto menu = Gio::Menu::create();
+        auto actions = Gio::SimpleActionGroup::create();
+        actions->add_action("insert_image", [this] { trigger_action(ToolID::IMPORT_PICTURE); });
+        actions->add_action("insert_step", [this] { trigger_action(ToolID::IMPORT_STEP); });
+        actions->add_action("insert_dxf", [this] { trigger_action(ToolID::IMPORT_DXF); });
+        actions->add_action("insert_mesh", [this] { trigger_action(ToolID::IMPORT_STL); });
+        actions->add_action("insert_component", [this] { trigger_action(ToolID::LINK_DOCUMENT); });
+        auto insert_svg = actions->add_action("insert_svg", [] {});
+        auto derive = actions->add_action("derive", [] {});
+        insert_svg->set_enabled(false);
+        derive->set_enabled(false);
+        m_win.insert_action_group("ribbon_insert", actions);
+        menu->append("Insert Image", "ribbon_insert.insert_image");
+        menu->append("Insert SVG", "ribbon_insert.insert_svg");
+        menu->append("Insert Step", "ribbon_insert.insert_step");
+        menu->append("Insert DXF", "ribbon_insert.insert_dxf");
+        menu->append("Insert Mesh", "ribbon_insert.insert_mesh");
+        menu->append("Insert Component", "ribbon_insert.insert_component");
+        menu->append("Insert Derive", "ribbon_insert.derive");
+        auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_insert_menu_button().set_popover(*popover);
+    }
 
     attach_action_button(m_win.get_open_button(), ActionID::OPEN_DOCUMENT);
     attach_action_sensitive(m_win.get_open_menu_button(), ActionID::OPEN_DOCUMENT);
@@ -1109,7 +1275,6 @@ void Editor::init_header_bar()
     attach_action_button(m_win.get_ribbon_btn_polygon(), ToolID::DRAW_REGULAR_POLYGON);
     attach_action_button(m_win.get_ribbon_btn_dimension_create(), ToolID::CONSTRAIN_DISTANCE);
 
-    attach_action_button(m_win.get_ribbon_btn_dimension(), ToolID::CONSTRAIN_DISTANCE);
     attach_action_button(m_win.get_ribbon_sketch_btn_fillet(), ToolID::SKETCH_FILLET);
     attach_action_button(m_win.get_ribbon_sketch_btn_chamfer(), ToolID::SKETCH_CHAMFER);
     attach_action_button(m_win.get_ribbon_body_btn_measure(), ToolID::MEASURE_DISTANCE);
@@ -1123,20 +1288,15 @@ void Editor::init_header_bar()
     update_sketch_mode_ui();
 
     {
-        auto undo_redo_box = Gtk::manage(new Gtk::Box(Gtk::Orientation::HORIZONTAL, 0));
-        undo_redo_box->add_css_class("linked");
-
         auto undo_button = create_action_button(ActionID::UNDO);
         undo_button->set_tooltip_text("Undo");
         undo_button->set_image_from_icon_name("edit-undo-symbolic");
-        undo_redo_box->append(*undo_button);
+        m_win.get_window_undo_redo_box().append(*undo_button);
 
         auto redo_button = create_action_button(ActionID::REDO);
         redo_button->set_tooltip_text("Redo");
         redo_button->set_image_from_icon_name("edit-redo-symbolic");
-        undo_redo_box->append(*redo_button);
-
-        m_win.get_header_bar().pack_start(*undo_redo_box);
+        m_win.get_window_undo_redo_box().append(*redo_button);
     }
 
     {
@@ -1560,6 +1720,12 @@ void Editor::render_document(const IDocumentInfo &doc)
                                                && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
     renderer.m_render_sketch_grid = m_sketch_editing
                                     && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
+    if (renderer.m_render_sketch_grid && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid()) {
+        if (const auto *sketch = dynamic_cast<const GroupSketch *>
+                                        (&doc.get_document().get_group(doc.get_current_group()));
+            sketch && sketch->m_attached_to_face)
+            renderer.m_render_attached_sketch_body_transparent = true;
+    }
     renderer.m_render_extrusion_editor = m_extrude_editing
                                          && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
     renderer.m_show_dimension_points = m_core.get_tool_id() == ToolID::CONSTRAIN_DISTANCE
@@ -1675,6 +1841,92 @@ glm::dvec3 Editor::get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal
     return get_canvas().get_cursor_pos_for_plane(origin, normal);
 }
 
+glm::dvec3 Editor::get_cursor_pos_for_workplane(const EntityWorkplane &workplane) const
+{
+    const auto cursor = get_canvas().get_cursor_pos_for_plane(workplane.m_origin, workplane.get_normal_vector());
+    if (!m_sketch_editing)
+        return cursor;
+
+    // Keep this in sync with Renderer::draw_sketch_grid.  The minor spacing
+    // is the snap spacing; major intersections are included automatically.
+    constexpr double default_camera_distance = 200.0;
+    const double zoom_ratio = std::max(get_canvas().get_cam_distance() / default_camera_distance, 1e-12);
+    const int zoom_steps = static_cast<int>(std::llround(std::log(zoom_ratio) / std::log(1.15)));
+    int grid_index = 13;
+    constexpr std::array<int, 8> zoom_out_thresholds = {10, 20, 33, 43, 53, 66, 76, 86};
+    constexpr std::array<int, 10> zoom_in_thresholds = {1, 19, 28, 28, 100, 100, 100, 100, 100, 100};
+    if (zoom_steps >= 0) {
+        for (const auto threshold : zoom_out_thresholds) {
+            if (zoom_steps >= threshold)
+                grid_index++;
+        }
+    }
+    else {
+        for (const auto threshold : zoom_in_thresholds) {
+            if (-zoom_steps >= threshold)
+                grid_index--;
+        }
+    }
+    constexpr std::array<double, 21> grid_intervals = {
+            0.0001, 0.0005, 0.0025, 0.005, 0.01, 0.05, 0.25, 0.5, 1.0, 2.5, 5.0,
+            12.5,   25.0,   50.0,   100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0};
+    grid_index = std::max(grid_index, 9);
+    const double label_spacing = grid_intervals.at(static_cast<size_t>(grid_index));
+    double major_spacing = label_spacing;
+    if (label_spacing == 25.0 && -zoom_steps >= 6)
+        major_spacing = 5.0;
+    else if (label_spacing == 12.5)
+        major_spacing = 2.5;
+    const double minor_spacing = major_spacing / 5.0;
+
+    const auto point = workplane.project(cursor);
+    const auto cursor_window = get_canvas().project_to_window(cursor);
+    constexpr double snap_radius = 8.0;
+    double best_distance = snap_radius;
+    std::optional<glm::dvec3> best_snap;
+    const auto consider_snap = [&](const glm::dvec3 &candidate) {
+        const auto candidate_window = get_canvas().project_to_window(candidate);
+        const auto distance = glm::length(candidate_window - cursor_window);
+        if (distance <= best_distance) {
+            best_distance = distance;
+            best_snap = candidate;
+        }
+    };
+
+    const glm::dvec2 snapped_point{std::round(point.x / minor_spacing) * minor_spacing,
+                                   std::round(point.y / minor_spacing) * minor_spacing};
+    if (snapped_point.x >= -300.0 && snapped_point.x <= 300.0 && snapped_point.y >= -300.0
+        && snapped_point.y <= 300.0)
+        consider_snap(workplane.transform(snapped_point));
+
+    // A face-attached sketch should also snap to the supporting body's
+    // corners.  The selected face is represented by the sketch workplane, so
+    // use solid-model vertices that lie on that plane.  This keeps snapping
+    // local to the face without changing the separate reference-plane picker.
+    if (m_core.has_documents()) {
+        const auto &doc = m_core.get_current_last_document();
+        auto &current_group = doc.get_group(m_core.get_current_group());
+        const auto *sketch = dynamic_cast<const GroupSketch *>(&current_group);
+        if (sketch && sketch->m_attached_to_face) {
+            const auto &body = current_group.find_body(doc).group;
+            const auto *solid_group = dynamic_cast<const IGroupSolidModel *>(&body);
+            if (solid_group && solid_group->get_solid_model()) {
+                const auto plane_normal = workplane.get_normal_vector();
+                for (const auto &face : solid_group->get_solid_model()->m_faces) {
+                    for (const auto &vertex : face.vertices) {
+                        const glm::dvec3 candidate{vertex.x, vertex.y, vertex.z};
+                        if (std::abs(glm::dot(candidate - workplane.m_origin, plane_normal)) > 1e-4)
+                            continue;
+                        consider_snap(candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    return best_snap.value_or(cursor);
+}
+
 void Editor::show_rectangle_dimensions(double width, double height)
 {
     m_win.show_rectangle_dimensions(width, height);
@@ -1696,9 +1948,22 @@ void Editor::update_extrude_dimension(double height)
     auto direction = glm::length(group.m_dvec) > 1e-9 ? glm::normalize(group.m_dvec)
                                                        : doc.get_entity<EntityWorkplane>(group.m_wrkpl).get_normal_vector();
     group.m_dvec = direction * height;
+    if (doc.get_groups().contains(group.m_source_group)) {
+        const auto *sketch = dynamic_cast<const GroupSketch *>(&doc.get_group(group.m_source_group));
+        if (sketch && sketch->m_attached_to_face) {
+            const auto normal = doc.get_entity<EntityWorkplane>(group.m_wrkpl).get_normal_vector();
+            group.m_operation = glm::dot(group.m_dvec, normal) < 0
+                                         ? IGroupSolidModel::Operation::DIFFERENCE
+                                         : IGroupSolidModel::Operation::UNION;
+        }
+    }
     doc.set_group_generate_pending(group.m_uuid);
     doc.update_pending();
     canvas_update_keep_selection();
+}
+void Editor::accept_extrude_dimension()
+{
+    finish_extrusion();
 }
 void Editor::hide_extrude_dimension()
 {
@@ -1800,6 +2065,7 @@ void Editor::handle_cursor_move()
         doc.set_group_generate_pending(group.m_uuid);
         doc.update_pending();
         m_extrude_drag_changed = true;
+        m_win.update_extrude_dimension(glm::length(group.m_dvec));
         canvas_update_keep_selection();
         return;
     }
@@ -2137,6 +2403,7 @@ void Editor::load_linked_documents(const UUID &uu_doc)
 
 void Editor::set_current_group(const UUID &uu_group)
 {
+    DUNE3D_TRACE(DebugCategory::UI);
     CanvasUpdater canvas_updater{*this};
 
     m_core.set_current_group(uu_group);

@@ -16,6 +16,7 @@ enum class SelectionMode;
 enum class ConstraintType;
 struct ItemsToDelete;
 class Buffer;
+class EntityWorkplane;
 
 class EditorInterface {
 public:
@@ -23,6 +24,7 @@ public:
     virtual glm::vec3 get_cam_normal() const = 0;
     virtual glm::quat get_cam_quat() const = 0;
     virtual glm::dvec3 get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal) const = 0;
+    virtual glm::dvec3 get_cursor_pos_for_workplane(const EntityWorkplane &workplane) const = 0;
     virtual void show_rectangle_dimensions(double width, double height) = 0;
     virtual void update_rectangle_dimensions(double width, double height) = 0;
     virtual void hide_rectangle_dimensions() = 0;
@@ -37,6 +39,7 @@ public:
     virtual void position_circle_dimension(glm::dvec3 center, glm::dvec3 left, glm::dvec3 right) = 0;
     virtual void show_extrude_dimension(double height) = 0;
     virtual void update_extrude_dimension(double height) = 0;
+    virtual void accept_extrude_dimension() = 0;
     virtual void hide_extrude_dimension() = 0;
     virtual void position_extrude_dimension(glm::dvec3 base, glm::dvec3 tip) = 0;
 

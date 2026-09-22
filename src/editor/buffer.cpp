@@ -49,6 +49,7 @@ Buffer::Buffer(Badge<Buffer>, const Document &doc, const std::set<SelectableRef>
 
         case SelectableRef::Type::SOLID_MODEL_EDGE:
         case SelectableRef::Type::SOLID_MODEL_FACE:
+        case SelectableRef::Type::SOLID_MODEL_VERTEX:
         case SelectableRef::Type::SKETCH_PROFILE:
         case SelectableRef::Type::EXTRUSION_HANDLE:
         case SelectableRef::Type::DOCUMENT:

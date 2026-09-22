@@ -39,7 +39,7 @@ public:
     void set_circle_dimension(double diameter);
     void reset_circle_dimension_editing();
     void position_circle_dimension(double x_min, double x_max, double y, double guide_width, double guide_height);
-    void set_extrude_dimension(double height);
+    void set_extrude_dimension(double height, bool force = false);
     void reset_extrude_dimension_editing();
     void commit_extrude_dimension();
     void position_extrude_dimension(double base_x, double base_y, double tip_x, double tip_y, double guide_width,

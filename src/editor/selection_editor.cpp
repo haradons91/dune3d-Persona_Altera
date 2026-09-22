@@ -202,7 +202,8 @@ public:
         int top = 0;
         grid_attach_label_and_widget(*this, "Path", *box, top);
 
-        const bool is_sketch_group = doc.get_group(step.m_group).get_type() == Group::Type::SKETCH;
+        const bool is_sketch_group = doc.get_group(step.m_group).get_type() == Group::Type::SKETCH
+                                     || doc.get_group(step.m_group).get_type() == Group::Type::STEP;
 
         auto include_in_solid_model_switch = Gtk::make_managed<Gtk::CheckButton>("In solid model");
         include_in_solid_model_switch->set_halign(Gtk::Align::START);

@@ -46,6 +46,7 @@ void Dune3DApplication::on_activate()
 {
     // The application has been started, so let's show a window.
     auto appwindow = create_appwindow();
+    appwindow->ensure_new_document();
     appwindow->present();
 }
 

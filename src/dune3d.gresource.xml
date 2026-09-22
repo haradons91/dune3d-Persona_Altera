@@ -41,6 +41,9 @@
     <file preprocess="xml-stripblanks">icons/scalable/actions/action-draw-contour-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/action-draw-line-rectangle-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/action-draw-line-circle-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/action-fillet-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/action-chamfer-symbolic.svg</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/action-dimension-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/action-draw-line-regular-polygon-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/action-draw-workplane-symbolic.svg</file>
     <file preprocess="xml-stripblanks">icons/scalable/actions/action-clip-less-symbolic.svg</file>

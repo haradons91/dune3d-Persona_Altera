@@ -13,7 +13,9 @@
 #include "document/constraint/constraint.hpp"
 #include "document/group/igroup_solid_model.hpp"
 #include "document/group/group_exploded_cluster.hpp"
+#include "document/group/group_extrude.hpp"
 #include "document/group/group_reference.hpp"
+#include "document/group/group_sketch.hpp"
 #include "document/group/igroup_source_group.hpp"
 #include "document/entity/entity_cluster.hpp"
 #include "util/selection_util.hpp"
@@ -22,6 +24,7 @@
 #include "core/tool_id.hpp"
 #include "buffer.hpp"
 #include "dialogs/rectangle_dimensions_window.hpp"
+#include "util/debug.hpp"
 #include <format>
 
 namespace dune3d {
@@ -133,14 +136,57 @@ void Editor::init_actions()
             m_selecting_sketch_plane = false;
             m_sketch_plane_grid.reset();
             m_sketch_plane_previous_cam_quat.reset();
+            m_sketch_plane_previous_cam_distance.reset();
             m_restore_sketch_plane_cam_on_undo = false;
-            m_sketch_plane_created_group.reset();
             m_win.get_sketch_plane_selector().set_visible(false);
             get_canvas().set_selection_mode(SelectionMode::NORMAL);
             m_workspace_browser->show_toast("");
             canvas_update();
             update_action_sensitivity();
             return;
+        }
+
+        if (m_sketch_finished_for_undo && m_core.has_documents()) {
+            const auto sketch_uuid = *m_sketch_finished_for_undo;
+            auto &doc = m_core.get_current_document();
+            if (doc.get_groups().contains(sketch_uuid)
+                && m_core.get_current_group() == sketch_uuid
+                && doc.get_group(sketch_uuid).get_type() == Group::Type::SKETCH) {
+                auto &doc_view = get_current_document_view();
+                m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+                m_sketch_plane_previous_cam_distance = get_canvas().get_cam_distance();
+                debug_log(DebugCategory::UI,
+                          std::format("ctrl-z enter sketch current_distance={:.6f} restore_distance={:.6f}",
+                                      *m_sketch_plane_previous_cam_distance,
+                                      *m_sketch_plane_previous_cam_distance));
+                m_sketch_previous_visibility = doc_view.m_group_views[sketch_uuid].m_visible;
+                doc_view.m_group_views[sketch_uuid].m_visible = true;
+                auto &sketch = doc.get_group(sketch_uuid);
+                if (sketch.m_active_wrkpl) {
+                    auto &workplane = doc.get_entity<EntityWorkplane>(sketch.m_active_wrkpl);
+                    workplane.m_visible = true;
+                    auto camera_quat = workplane.m_normal;
+                    const auto &reference = doc.get_reference_group();
+                    if (sketch.m_active_wrkpl == reference.get_workplane_zx_uuid())
+                        camera_quat = glm::quatLookAt(glm::dvec3(0, 1, 0), glm::dvec3(0, 0, 1));
+                    get_canvas().set_cam_distance(200.0, Canvas::ZoomCenter::SCREEN);
+                    get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
+                }
+                m_sketch_editing = true;
+                m_sketch_entered_by_undo = true;
+                m_sketch_finished_for_undo.reset();
+                update_sketch_mode_ui();
+                canvas_update();
+                return;
+            }
+            bool keep_sketch_undo_marker = false;
+            if (m_core.get_current_group() != sketch_uuid
+                && doc.get_group(m_core.get_current_group()).get_type() == Group::Type::EXTRUDE) {
+                const auto &extrude = dynamic_cast<const GroupExtrude &>(doc.get_group(m_core.get_current_group()));
+                keep_sketch_undo_marker = extrude.m_source_group == sketch_uuid;
+            }
+            if (!keep_sketch_undo_marker)
+                m_sketch_finished_for_undo.reset();
         }
 
         m_core.undo();
@@ -160,9 +206,36 @@ void Editor::init_actions()
             get_canvas().set_selection({}, false);
             get_canvas().set_selection_mode(SelectionMode::HOVER_ONLY);
             m_workspace_browser->show_toast("Select a reference plane for the sketch");
-            get_canvas().animate_to_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
+            get_canvas().stop_camera_animation();
+            get_canvas().set_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
+            if (m_sketch_plane_previous_cam_distance)
+                get_canvas().set_cam_distance(*m_sketch_plane_previous_cam_distance, Canvas::ZoomCenter::SCREEN);
+            if (m_sketch_finished_return_cam_distance)
+                get_canvas().set_cam_distance(*m_sketch_finished_return_cam_distance, Canvas::ZoomCenter::SCREEN);
+            debug_log(DebugCategory::UI,
+                      std::format("ctrl-z after sketch removal distance={:.6f}", get_canvas().get_cam_distance()));
+            const auto restore_distance = m_sketch_finished_return_cam_distance
+                                                  ? m_sketch_finished_return_cam_distance
+                                                  : m_sketch_plane_previous_cam_distance;
+            if (restore_distance) {
+                // animate_to_cam_quat() can leave a frame animation active;
+                // reapply the saved distance after that frame so the camera
+                // cannot drift back to the sketch zoom level.
+                Glib::signal_idle().connect_once([this, restore_distance] {
+                    if (m_selecting_sketch_plane) {
+                        get_canvas().set_cam_distance(*restore_distance, Canvas::ZoomCenter::SCREEN);
+                        debug_log(DebugCategory::UI,
+                                  std::format("ctrl-z post-animation distance={:.6f}",
+                                              get_canvas().get_cam_distance()));
+                    }
+                });
+            }
+            m_sketch_finished_return_cam_distance.reset();
             m_restore_sketch_plane_cam_on_undo = false;
-            m_sketch_plane_created_group.reset();
+            m_sketch_entered_by_undo = false;
+            m_sketch_redo_reenter_group = m_sketch_plane_created_group;
+            // Keep the UUID so Redo can find the group it is about to
+            // recreate and re-enter sketch view.
         }
         m_win.hide_delete_items_popup();
         if (m_core.has_documents()) {
@@ -179,15 +252,129 @@ void Editor::init_actions()
             update_selection_editor();
             update_action_sensitivity();
         }
+        // Undo can remove a feature group without going through the normal
+        // add/remove-group UI path. Keep the independent timeline in sync
+        // with the document and tree immediately after the model changes.
+        update_timeline();
         canvas_update();
     });
     connect_action(ActionID::REDO, [this](const auto &a) {
+        // The first Undo after Finish Sketch only changes editor mode; it
+        // does not change document history. Redo that transition back to the
+        // finished sketch's perspective view without calling core.redo().
+        if (m_sketch_entered_by_undo && m_sketch_plane_previous_cam_quat) {
+            if (m_core.has_documents() && m_sketch_plane_created_group
+                && m_core.get_current_document().get_groups().contains(*m_sketch_plane_created_group)) {
+                auto &doc = m_core.get_current_document();
+                auto &sketch = doc.get_group(*m_sketch_plane_created_group);
+                if (sketch.get_type() == Group::Type::SKETCH) {
+                    auto &sketch_group = dynamic_cast<GroupSketch &>(sketch);
+                    if (sketch_group.m_active_wrkpl)
+                        doc.get_entity<EntityWorkplane>(sketch_group.m_active_wrkpl).m_visible = false;
+                }
+                if (m_sketch_previous_visibility)
+                    get_current_document_view().m_group_views[*m_sketch_plane_created_group].m_visible =
+                            *m_sketch_previous_visibility;
+            }
+            m_sketch_entered_by_undo = false;
+            m_sketch_editing = false;
+            m_selecting_sketch_plane = false;
+            m_sketch_plane_grid.reset();
+            m_win.get_sketch_plane_selector().set_visible(false);
+            get_canvas().set_selection_mode(SelectionMode::NORMAL);
+            get_canvas().stop_camera_animation();
+            get_canvas().set_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
+            if (m_sketch_plane_previous_cam_distance)
+                get_canvas().set_cam_distance(*m_sketch_plane_previous_cam_distance,
+                                              Canvas::ZoomCenter::SCREEN);
+            if (m_sketch_plane_created_group)
+                m_sketch_finished_for_undo = *m_sketch_plane_created_group;
+            update_sketch_mode_ui();
+            update_timeline();
+            canvas_update();
+            return;
+        }
+        const auto sketch_group_to_restore = m_sketch_redo_reenter_group;
+        const auto groups_before_redo = m_core.has_documents()
+                                                 ? m_core.get_current_document().get_groups().size()
+                                                 : size_t{0};
         m_core.redo();
         m_win.hide_delete_items_popup();
+        bool reentered_sketch = false;
+        if (sketch_group_to_restore && m_core.has_documents()) {
+            auto &doc = m_core.get_current_document();
+            if (doc.get_groups().contains(*sketch_group_to_restore)) {
+                m_sketch_redo_reenter_group.reset();
+                m_core.set_current_group(*sketch_group_to_restore);
+                auto &group = doc.get_group(*sketch_group_to_restore);
+                if (group.get_type() != Group::Type::SKETCH)
+                    return;
+                auto &sketch = dynamic_cast<GroupSketch &>(group);
+                if (sketch.m_active_wrkpl) {
+                    // Redo recreates the sketch after its group was undone;
+                    // this transition should re-enter sketch mode.
+                    m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+                    m_sketch_plane_previous_cam_distance = get_canvas().get_cam_distance();
+                    m_sketch_finished_for_undo.reset();
+                    m_selecting_sketch_plane = false;
+                    m_sketch_editing = true;
+                    m_sketch_entered_by_undo = false;
+                    m_restore_sketch_plane_cam_on_undo = true;
+                    m_sketch_plane_grid = sketch.m_active_wrkpl;
+                    reentered_sketch = true;
+                    m_win.get_sketch_plane_selector().set_visible(false);
+                    get_canvas().set_selection_mode(SelectionMode::NORMAL);
+
+                    auto &workplane = doc.get_entity<EntityWorkplane>(sketch.m_active_wrkpl);
+                    workplane.m_visible = true;
+                    auto camera_quat = workplane.m_normal;
+                    const auto &reference = doc.get_reference_group();
+                    if (sketch.m_active_wrkpl == reference.get_workplane_zx_uuid())
+                        camera_quat = glm::quatLookAt(glm::dvec3(0, 1, 0), glm::dvec3(0, 0, 1));
+                    get_canvas().set_cam_distance(200.0, Canvas::ZoomCenter::SCREEN);
+                    get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
+                    update_sketch_mode_ui();
+                    canvas_update();
+                }
+            }
+        }
+        // If Redo advanced from the recreated sketch to its next feature,
+        // leave sketch mode and restore the saved finished-sketch view.
+        const bool redo_added_group = m_core.has_documents()
+                                      && m_core.get_current_document().get_groups().size() > groups_before_redo;
+        if (m_sketch_editing && redo_added_group && !reentered_sketch && m_core.has_documents()) {
+            auto &doc = m_core.get_current_document();
+            if (m_sketch_plane_created_group && doc.get_groups().contains(*m_sketch_plane_created_group)) {
+                auto &sketch = doc.get_group(*m_sketch_plane_created_group);
+                if (sketch.get_type() == Group::Type::SKETCH) {
+                    auto &sketch_group = dynamic_cast<GroupSketch &>(sketch);
+                    if (sketch_group.m_active_wrkpl)
+                        doc.get_entity<EntityWorkplane>(sketch_group.m_active_wrkpl).m_visible = false;
+                    if (m_sketch_previous_visibility)
+                        get_current_document_view().m_group_views[*m_sketch_plane_created_group].m_visible =
+                                *m_sketch_previous_visibility;
+                }
+            }
+            m_sketch_editing = false;
+            m_selecting_sketch_plane = false;
+            m_sketch_plane_grid.reset();
+            m_restore_sketch_plane_cam_on_undo = false;
+            m_sketch_previous_visibility.reset();
+            m_win.get_sketch_plane_selector().set_visible(false);
+            get_canvas().set_selection_mode(SelectionMode::NORMAL);
+            get_canvas().stop_camera_animation();
+            if (m_sketch_plane_previous_cam_quat)
+                get_canvas().set_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
+            if (m_sketch_plane_previous_cam_distance)
+                get_canvas().set_cam_distance(*m_sketch_plane_previous_cam_distance,
+                                              Canvas::ZoomCenter::SCREEN);
+        }
         CanvasUpdater canvas_updater{*this};
+        update_sketch_mode_ui();
         update_workplane_label();
         update_selection_editor();
         update_action_sensitivity();
+        update_timeline();
     });
 
     connect_action(ActionID::PREFERENCES, [this](const auto &a) {
@@ -765,6 +952,10 @@ bool Editor::handle_action_key(Glib::RefPtr<Gtk::EventControllerKey> controller,
                      | Gdk::ModifierType::ALT_MASK)) == Gdk::ModifierType::NO_MODIFIER_MASK) {
         m_win.commit_extrude_dimension();
         finish_extrusion();
+        return true;
+    }
+    if ((keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab) && m_extrude_editing) {
+        m_win.focus_extrude_dimension();
         return true;
     }
     if ((keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab)

@@ -2,9 +2,15 @@
 #include "core/core.hpp"
 #include "document/document.hpp"
 #include "document/group/group.hpp"
+#include "document/group/group_extrude.hpp"
+#include "document/group/group_sketch.hpp"
+#include "document/group/group_reference.hpp"
 #include "document/group/igroup_source_group.hpp"
+#include "document/entity/entity_step.hpp"
 #include "workspace/document_view.hpp"
 #include "util/fs_util.hpp"
+#include "util/debug.hpp"
+#include <fstream>
 #include <iostream>
 
 namespace dune3d {
@@ -27,6 +33,7 @@ public:
     Glib::Property<bool> m_source_group;
     UUID m_uuid;
     UUID m_doc;
+    bool m_is_body_label = false;
 
     // No idea why the ObjectBase::get_type won't work for us but
     // reintroducing the method and using the name used by gtkmm seems
@@ -73,6 +80,9 @@ public:
     Glib::Property<Gdk::RGBA> m_color;
 
     Glib::RefPtr<Gio::ListStore<GroupItem>> m_group_store;
+    bool m_is_document_folder = false;
+    bool m_is_origin_folder = false;
+    bool m_is_sketch_folder = false;
 
     // No idea why the ObjectBase::get_type won't work for us but
     // reintroducing the method and using the name used by gtkmm seems
@@ -87,7 +97,7 @@ public:
 
 private:
     BodyItem()
-        : Glib::ObjectBase("BodyItem"), m_name(*this, "name"), m_check_active(*this, "check_active", false),
+        : Glib::ObjectBase("BodyItem"), m_name(*this, "name"), m_check_active(*this, "check_active", true),
           m_expanded(*this, "expanded", true), m_check_sensitive(*this, "check_sensitive", true),
           m_solid_model_active(*this, "m_solid_model_active", true), m_has_color(*this, "has_color", false),
           m_color(*this, "color")
@@ -150,21 +160,135 @@ static Gdk::RGBA rgba_from_color(const Color &c)
 
 GType WorkspaceBrowser::DocumentItem::gtype;
 
+void WorkspaceBrowser::set_document(const UUID &document_uuid)
+{
+    m_document_uuid = document_uuid;
+}
+
+void WorkspaceBrowser::set_body_checked(const UUID &document_uuid, const UUID &body_uuid, bool checked)
+{
+    for (size_t i_doc = 0; i_doc < m_document_store->get_n_items(); i_doc++) {
+        auto &document = *m_document_store->get_item(i_doc);
+        if (document.m_uuid != document_uuid)
+            continue;
+        for (size_t i_body = 0; i_body < document.m_body_store->get_n_items(); i_body++) {
+            auto &body = *document.m_body_store->get_item(i_body);
+            if (!body.m_is_document_folder && !body.m_is_sketch_folder && body.m_uuid == body_uuid)
+                body.m_check_active = checked;
+        }
+    }
+}
+
+void WorkspaceBrowser::set_sketches_checked(const UUID &document_uuid, bool checked)
+{
+    for (size_t i_doc = 0; i_doc < m_document_store->get_n_items(); i_doc++) {
+        auto &document = *m_document_store->get_item(i_doc);
+        if (document.m_uuid != document_uuid)
+            continue;
+        for (size_t i_body = 0; i_body < document.m_body_store->get_n_items(); i_body++) {
+            auto &body = *document.m_body_store->get_item(i_body);
+            if (body.m_is_sketch_folder)
+                body.m_check_active = checked;
+        }
+    }
+}
+
 void WorkspaceBrowser::update_documents(const std::map<UUID, DocumentView> &doc_views)
 {
+    DUNE3D_TRACE(DebugCategory::TREE);
     block_signals();
     auto store = Gio::ListStore<DocumentItem>::create();
     for (auto doci : m_core.get_documents()) {
+        if (m_document_uuid && doci->get_uuid() != *m_document_uuid)
+            continue;
         auto mi = DocumentItem::create();
         mi->m_uuid = doci->get_uuid();
         mi->m_close_sensitive = doci->can_close();
-        Glib::RefPtr<BodyItem> body_item = BodyItem::create();
-        body_item->m_doc = mi->m_uuid;
-        body_item->m_name = "Missing";
-        for (auto gr : doci->get_document().get_groups_sorted()) {
-            if (gr->m_body.has_value()) {
+        // Fusion-style document-level folders. They are represented by the
+        // same expandable row type as bodies, but are not actual bodies.
+        for (const auto *name : {"Document Settings", "Named Views", "Origin"}) {
+            auto folder = BodyItem::create();
+            folder->m_doc = mi->m_uuid;
+            folder->m_name = name;
+            folder->m_is_document_folder = true;
+            if (std::string_view(name) == "Origin") {
+                folder->m_is_origin_folder = true;
+                folder->m_check_active = doci->get_document().get_reference_group().m_show_origin;
+                folder->m_check_sensitive = true;
+            }
+            mi->m_body_store->append(folder);
+        }
+        Glib::RefPtr<BodyItem> sketches;
+        const auto &doc = doci->get_document();
+        Glib::RefPtr<BodyItem> body_item;
+        unsigned int body_number = 1;
+        unsigned int cut_number = 1;
+        unsigned int join_number = 1;
+        const auto extrusion_is_connected = [&doc](const Group &group) {
+            const auto *extrude = dynamic_cast<const GroupExtrude *>(&group);
+            if (!extrude)
+                return false;
+            if (extrude->m_operation == IGroupSolidModel::Operation::DIFFERENCE)
+                return true;
+            if (!doc.get_groups().contains(extrude->m_source_group))
+                return false;
+            const auto *sketch = dynamic_cast<const GroupSketch *>(&doc.get_group(extrude->m_source_group));
+            return sketch && sketch->m_attached_to_face;
+        };
+        for (auto gr : doc.get_groups_sorted()) {
+            // Reference is an internal document group.  Its workplanes and
+            // origin remain available, but it is not shown as a tree item.
+            if (gr->get_type() == Group::Type::REFERENCE)
+                continue;
+            if (gr->get_type() == Group::Type::SKETCH) {
+                if (!sketches) {
+                    sketches = BodyItem::create();
+                    sketches->m_doc = mi->m_uuid;
+                    sketches->m_name = "Sketches";
+                    sketches->m_is_sketch_folder = true;
+                    sketches->m_check_active = true;
+                    mi->m_body_store->append(sketches);
+                }
+                auto gi = GroupItem::create();
+                gi->m_name = gr->m_name;
+                gi->m_uuid = gr->m_uuid;
+                gi->m_doc = doci->get_uuid();
+                sketches->m_group_store->append(gi);
+                continue;
+            }
+            if (gr->get_type() == Group::Type::STEP) {
                 body_item = BodyItem::create();
-                body_item->m_name = gr->m_body->m_name;
+                body_item->m_name = gr->m_name;
+                for (const auto &[entity_uuid, entity] : doc.m_entities) {
+                    (void)entity_uuid;
+                    if (entity->m_group != gr->m_uuid)
+                        continue;
+                    if (const auto *step = dynamic_cast<const EntitySTEP *>(entity.get()); step
+                        && !step->m_path.filename().empty()) {
+                        body_item->m_name = step->m_path.filename().string();
+                        break;
+                    }
+                }
+                body_item->m_has_color = gr->m_body->m_color.has_value();
+                if (gr->m_body->m_color.has_value())
+                    body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
+                body_item->m_uuid = gr->m_uuid;
+                body_item->m_doc = mi->m_uuid;
+                mi->m_body_store->append(body_item);
+
+                auto gi = GroupItem::create();
+                gi->m_name = "Body1";
+                gi->m_is_body_label = true;
+                gi->m_uuid = gr->m_uuid;
+                gi->m_doc = doci->get_uuid();
+                body_item->m_group_store->append(gi);
+                body_number++;
+                continue;
+            }
+            const bool connected_extrude = extrusion_is_connected(*gr);
+            if (gr->m_body.has_value() && !connected_extrude) {
+                body_item = BodyItem::create();
+                body_item->m_name = "Bodies";
                 body_item->m_has_color = gr->m_body->m_color.has_value();
                 if (gr->m_body->m_color.has_value())
                     body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
@@ -173,8 +297,29 @@ void WorkspaceBrowser::update_documents(const std::map<UUID, DocumentView> &doc_
                 mi->m_body_store->append(body_item);
             }
 
+            // Connected extrusions remain part of the existing body.  They
+            // stay available in the timeline, but do not create another
+            // feature/body row in the tree.
+            if (connected_extrude)
+                continue;
+
             auto gi = GroupItem::create();
-            gi->m_name = gr->m_name;
+            const bool is_body_group = gr->m_body.has_value() && !connected_extrude
+                                       && gr->get_type() != Group::Type::REFERENCE;
+            const bool is_first_extrusion_body = gr->get_type() == Group::Type::EXTRUDE && body_number == 1;
+            if (is_body_group || is_first_extrusion_body) {
+                gi->m_name = "Body" + std::to_string(body_number++);
+                gi->m_is_body_label = true;
+            }
+            else if (connected_extrude) {
+                const auto &extrude = dynamic_cast<const GroupExtrude &>(*gr);
+                if (extrude.m_operation == IGroupSolidModel::Operation::DIFFERENCE)
+                    gi->m_name = "Cut" + std::to_string(cut_number++);
+                else
+                    gi->m_name = "Join" + std::to_string(join_number++);
+            }
+            else
+                gi->m_name = gr->m_name;
             gi->m_uuid = gr->m_uuid;
             gi->m_doc = doci->get_uuid();
             body_item->m_group_store->append(gi);
@@ -197,6 +342,8 @@ void WorkspaceBrowser::block_signals()
     m_signal_group_checked.block();
     m_signal_document_checked.block();
     m_signal_body_checked.block();
+    m_signal_origin_checked.block();
+    m_signal_sketches_checked.block();
     m_signal_group_selected.block();
     m_signal_body_solid_model_checked.block();
     m_signal_body_expanded.block();
@@ -213,6 +360,8 @@ void WorkspaceBrowser::unblock_signals()
     m_signal_group_checked.unblock();
     m_signal_document_checked.unblock();
     m_signal_body_checked.unblock();
+    m_signal_origin_checked.unblock();
+    m_signal_sketches_checked.unblock();
     m_signal_group_selected.unblock();
     m_signal_body_solid_model_checked.unblock();
     m_signal_body_expanded.unblock();
@@ -251,6 +400,7 @@ void WorkspaceBrowser::update_name(DocumentItem &it_doc, IDocumentInfo &doci)
 
 void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &doc_views)
 {
+    DUNE3D_TRACE(DebugCategory::TREE);
     block_signals();
     for (size_t i_doc = 0; i_doc < m_document_store->get_n_items(); i_doc++) {
         auto &it_doc = *m_document_store->get_item(i_doc);
@@ -270,14 +420,42 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
         UUID body_uu = body.group.m_uuid;
         for (size_t i_body = 0; i_body < it_doc.m_body_store->get_n_items(); i_body++) {
             auto &it_body = *it_doc.m_body_store->get_item(i_body);
+            if (it_body.m_is_document_folder) {
+                if (it_body.m_is_origin_folder)
+                    it_body.m_check_active = doc.get_reference_group().m_show_origin;
+                continue;
+            }
+            if (it_body.m_is_sketch_folder) {
+                it_body.m_expanded = it_body.m_group_store->get_n_items() > 0;
+                it_body.m_check_sensitive = true;
+                for (size_t i_group = 0; i_group < it_body.m_group_store->get_n_items(); i_group++) {
+                    auto &it_group = *it_body.m_group_store->get_item(i_group);
+                    const bool is_current = doci.get_current_group() == it_group.m_uuid;
+                    it_body.m_expanded = it_body.m_expanded || is_current;
+                    it_group.m_active = is_current && is_current_doc;
+                    auto &gr = doc.get_group(it_group.m_uuid);
+                    it_group.m_dof = gr.m_dof;
+                    if (!it_group.m_is_body_label)
+                        it_group.m_name = gr.m_name;
+                    it_group.m_source_group = source_groups.contains(it_group.m_uuid);
+                    it_group.m_check_sensitive = it_body.m_check_active.get_value();
+                    it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
+                    auto msgs = gr.get_messages();
+                    it_group.m_status = GroupStatusMessage::summarize(msgs);
+                    Glib::ustring txt;
+                    for (auto &msg : msgs) {
+                        if (txt.size())
+                            txt += "\n";
+                        txt += msg.message;
+                    }
+                    it_group.m_status_message = txt;
+                }
+                continue;
+            }
             const bool is_current_body = body_uu == it_body.m_uuid && is_current_doc;
-            it_body.m_check_sensitive = (body_uu != it_body.m_uuid) || !is_current_doc;
-
-            if (is_current_body)
-                it_body.m_check_active = true;
-            else
-                it_body.m_check_active = doc_view.body_is_visible(it_body.m_uuid);
-
+            // The active body can also be hidden.  Keep its checkbox usable so
+            // the tree behaves consistently for the current and inactive body.
+            it_body.m_check_sensitive = true;
             it_body.m_solid_model_active = doc_view.body_solid_model_is_visible(it_body.m_uuid);
             it_body.m_expanded = doc_view.body_is_expanded(it_body.m_uuid) | is_current_body;
 
@@ -288,10 +466,19 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
                 it_group.m_active = is_current && is_current_doc;
                 auto &gr = doc.get_group(it_group.m_uuid);
                 it_group.m_dof = gr.m_dof;
-                it_group.m_name = gr.m_name;
+                if (!it_group.m_is_body_label)
+                    it_group.m_name = gr.m_name;
                 it_group.m_source_group = source_groups.contains(it_group.m_uuid);
-                it_group.m_check_sensitive = true;
-                it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
+                // The child remains actionable when its own visibility is
+                // off.  Only the Bodies parent should disable its children.
+                it_group.m_check_sensitive = it_body.m_check_active.get_value();
+                // Body1 is the visible label for the whole logical body.  It
+                // must reflect the body visibility rather than only the
+                // visibility of the first feature, otherwise later joined or
+                // cut features remain rendered when Body1 is unchecked.
+                it_group.m_check_active = it_group.m_is_body_label
+                                                  ? doc_view.body_is_visible(it_body.m_uuid)
+                                                  : doc_view.group_is_visible(it_group.m_uuid);
                 {
                     auto msgs = gr.get_messages();
                     it_group.m_status = GroupStatusMessage::summarize(msgs);
@@ -469,10 +656,23 @@ public:
         }
 
         m_checkbutton->signal_toggled().connect([this] {
-            if (m_body)
+            if (debug_enabled(DebugCategory::UI))
+                debug_log(DebugCategory::UI, "tree checkbox toggled");
+            if (m_body && m_body->m_is_origin_folder)
+                m_browser.signal_origin_checked().emit(m_body->m_doc, m_checkbutton->get_active());
+            else if (m_body && m_body->m_is_sketch_folder)
+                m_browser.signal_sketches_checked().emit(m_body->m_doc, m_checkbutton->get_active());
+            else if (m_body && !m_body->m_is_document_folder)
                 m_browser.signal_body_checked().emit(m_body->m_doc, m_body->m_uuid, m_checkbutton->get_active());
-            if (m_group)
-                m_browser.signal_group_checked().emit(m_group->m_doc, m_group->m_uuid, m_checkbutton->get_active());
+            if (m_group) {
+                debug_log(DebugCategory::UI,
+                          "tree checkbox group=" + static_cast<std::string>(m_group->m_uuid)
+                                  + " name=" + m_group->m_name.get_value()
+                                  + " body_label=" + std::to_string(m_group->m_is_body_label)
+                                  + " active=" + std::to_string(m_checkbutton->get_active()));
+                m_browser.signal_group_checked().emit(m_group->m_doc, m_group->m_uuid,
+                                                      m_checkbutton->get_active());
+            }
             if (m_doc)
                 m_browser.signal_document_checked().emit(m_doc->m_uuid, m_checkbutton->get_active());
         });
@@ -499,7 +699,7 @@ public:
         auto controller = Gtk::GestureClick::create();
         controller->set_button(3);
         controller->signal_pressed().connect([this](int n_press, double x, double y) {
-            if (!m_body)
+            if (!m_body || m_body->m_is_document_folder || m_body->m_is_sketch_folder)
                 return;
             const graphene_point_t pt_in{(float)x, (float)y};
             graphene_point_t pt_out;
@@ -528,6 +728,8 @@ public:
     void bind(DocumentItem &it)
     {
         m_doc = &it;
+        if (auto row_box = dynamic_cast<Gtk::Box *>(get_child()))
+            row_box->set_margin_start(0);
         m_browser.block_signals();
         m_checkbutton->set_visible(true);
         m_solid_toggle->set_visible(false);
@@ -562,6 +764,32 @@ public:
     {
         m_browser.block_signals();
         m_body = &it;
+        // All direct children of a document, including the Fusion-style
+        // folders, share the same indentation as a document's Body row.
+        if (auto row_box = dynamic_cast<Gtk::Box *>(get_child()))
+            row_box->set_margin_start(16);
+        if (it.m_is_document_folder || it.m_is_sketch_folder) {
+            m_checkbutton->set_visible(it.m_is_origin_folder || it.m_is_sketch_folder);
+            m_solid_toggle->set_visible(false);
+            m_dof_label->set_visible(false);
+            m_status_button->set_visible(false);
+            m_close_button->set_visible(false);
+            m_source_group_image->set_visible(false);
+            m_label->set_attributes(m_attrs_bold);
+            if (it.m_is_origin_folder || it.m_is_sketch_folder) {
+                m_bindings.push_back(Glib::Binding::bind_property_value(
+                        it.m_check_active.get_proxy(), m_checkbutton->property_active(),
+                        Glib::Binding::Flags::SYNC_CREATE));
+                m_bindings.push_back(Glib::Binding::bind_property_value(
+                        it.m_check_sensitive.get_proxy(), m_checkbutton->property_sensitive(),
+                        Glib::Binding::Flags::SYNC_CREATE));
+            }
+            m_bindings.push_back(Glib::Binding::bind_property_value(
+                    it.m_name.get_proxy(), m_label->property_label(), Glib::Binding::Flags::SYNC_CREATE));
+            get_list_row()->set_expanded(true);
+            m_browser.unblock_signals();
+            return;
+        }
         m_checkbutton->set_active(true);
         m_checkbutton->set_sensitive(true);
         m_solid_toggle->set_visible(true);
@@ -609,11 +837,22 @@ public:
     void bind(GroupItem &it)
     {
         m_browser.block_signals();
+        // Group rows are children of Body/Sketches rows and need a visible
+        // inset instead of sitting flush with their parent.
+        if (auto row_box = dynamic_cast<Gtk::Box *>(get_child()))
+            row_box->set_margin_start(16);
+        m_checkbutton->set_visible(true);
+        m_checkbutton->set_sensitive(true);
         m_solid_toggle->set_visible(false);
         m_dof_label->set_visible(true);
         m_status_button->set_visible(true);
         m_close_button->set_visible(false);
         m_group = &it;
+        m_bindings.push_back(Glib::Binding::bind_property_value(
+                it.m_check_active.get_proxy(), m_checkbutton->property_active(), Glib::Binding::Flags::SYNC_CREATE));
+        m_bindings.push_back(Glib::Binding::bind_property_value(
+                it.m_check_sensitive.get_proxy(), m_checkbutton->property_sensitive(),
+                Glib::Binding::Flags::SYNC_CREATE));
         m_bindings.push_back(Glib::Binding::bind_property_value(it.m_name.get_proxy(), m_label->property_label(),
                                                                 Glib::Binding::Flags::SYNC_CREATE));
         m_bindings.push_back(Glib::Binding::bind_property_value(
@@ -711,7 +950,8 @@ private:
     }
 };
 
-WorkspaceBrowser::WorkspaceBrowser(Core &core) : Gtk::Box(Gtk::Orientation::VERTICAL), m_core(core)
+WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid)
+    : Gtk::Box(Gtk::Orientation::VERTICAL), m_core(core), m_document_uuid(document_uuid)
 {
     m_document_store = Gio::ListStore<DocumentItem>::create();
 
@@ -935,6 +1175,7 @@ void WorkspaceBrowser::select_group(const UUID &doc_uu, const UUID &uu)
 
         auto &doc = m_core.get_idocument_info(doc_uu).get_document();
         const auto body_group = doc.get_group(uu).find_body(doc).group.m_uuid;
+        const bool is_sketch = doc.get_group(uu).get_type() == Group::Type::SKETCH;
         {
             for (size_t i = 0; i < n; i++) {
                 auto row = std::dynamic_pointer_cast<Gtk::TreeListRow>(m_selection_model->get_object(i));
@@ -943,7 +1184,8 @@ void WorkspaceBrowser::select_group(const UUID &doc_uu, const UUID &uu)
                 auto it = std::dynamic_pointer_cast<BodyItem>(row->get_item());
                 if (!it)
                     continue;
-                if (it->m_doc == doc_uu && it->m_uuid == body_group)
+                if (it->m_doc == doc_uu &&
+                    ((is_sketch && it->m_is_sketch_folder) || (!is_sketch && it->m_uuid == body_group)))
                     row->set_expanded(true);
             }
         }

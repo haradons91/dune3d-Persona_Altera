@@ -13,7 +13,11 @@ enum class WorkspaceBrowserAddGroupMode { WITH_BODY, WITHOUT_BODY };
 
 class WorkspaceBrowser : public Gtk::Box {
 public:
-    WorkspaceBrowser(Core &core);
+    WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid = {});
+
+    void set_document(const UUID &document_uuid);
+    void set_body_checked(const UUID &document_uuid, const UUID &body_uuid, bool checked);
+    void set_sketches_checked(const UUID &document_uuid, bool checked);
 
     void update_documents(const std::map<UUID, DocumentView> &doc_views);
     void update_current_group(const std::map<UUID, DocumentView> &doc_views);
@@ -58,6 +62,8 @@ public:
 
     using type_signal_group_checked = sigc::signal<void(UUID, UUID, bool)>;
     using type_signal_document_checked = sigc::signal<void(UUID, bool)>;
+    using type_signal_origin_checked = sigc::signal<void(UUID, bool)>;
+    using type_signal_sketches_checked = sigc::signal<void(UUID, bool)>;
     type_signal_group_checked signal_group_checked()
     {
         return m_signal_group_checked;
@@ -76,6 +82,16 @@ public:
     type_signal_document_checked signal_document_checked()
     {
         return m_signal_document_checked;
+    }
+
+    type_signal_origin_checked signal_origin_checked()
+    {
+        return m_signal_origin_checked;
+    }
+
+    type_signal_sketches_checked signal_sketches_checked()
+    {
+        return m_signal_sketches_checked;
     }
 
     using type_signal_delete_current_group = sigc::signal<void()>;
@@ -144,6 +160,7 @@ private:
     Gtk::Label *m_info_bar_label = nullptr;
 
     Core &m_core;
+    std::optional<UUID> m_document_uuid;
 
     type_signal_group_selected m_signal_group_selected;
     type_signal_group_selected m_signal_group_activated;
@@ -151,6 +168,8 @@ private:
     type_signal_group_checked m_signal_body_checked;
     type_signal_group_checked m_signal_body_solid_model_checked;
     type_signal_document_checked m_signal_document_checked;
+    type_signal_origin_checked m_signal_origin_checked;
+    type_signal_sketches_checked m_signal_sketches_checked;
 
     type_signal_delete_current_group m_signal_delete_current_group;
     type_signal_add_group m_signal_add_group;

@@ -127,6 +127,12 @@ void Editor::tool_process_one()
     if (!m_core.tool_is_active())
         get_canvas().set_selection_mode(m_last_selection_mode);
 
+    // Import and other tools can add groups without emitting the document
+    // tab signal. Keep the independent feature timeline synchronized when a
+    // tool commits or finishes.
+    if (!m_core.tool_is_active())
+        update_timeline();
+
     /*  if (m_core.tool_is_active()) {
           canvas->set_selection(m_core.get_tool_selection());
       }

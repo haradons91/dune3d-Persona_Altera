@@ -6,6 +6,7 @@
 #include "widgets/sketch_plane_selector.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "document/entity/entity_circle2d.hpp"
+#include "document/entity/entity_step.hpp"
 #include "document/constraint/constraint_lock_rotation.hpp"
 #include "util/selection_util.hpp"
 #include "canvas/canvas.hpp"
@@ -21,6 +22,7 @@
 #include "core/tool_data_create_circular_sweep_group.hpp"
 #include "util/glm_util.hpp"
 #include "util/paths.hpp"
+#include "util/debug.hpp"
 #include <fstream>
 #include <format>
 
@@ -31,7 +33,14 @@ constexpr float default_sketch_camera_distance = 200.0f;
 
 void Editor::init_workspace_browser()
 {
-    m_workspace_browser = Gtk::make_managed<WorkspaceBrowser>(m_core);
+    m_workspace_browser_stack = Gtk::make_managed<Gtk::Stack>();
+    m_workspace_browser_stack->set_vexpand(true);
+    m_win.get_left_bar().set_start_child(*m_workspace_browser_stack);
+}
+
+void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
+{
+    m_workspace_browser = &browser;
     m_workspace_browser->signal_close_document().connect([this](const UUID &doc_uu) {
         get_canvas().grab_focus();
         close_document(doc_uu, nullptr, nullptr);
@@ -48,6 +57,7 @@ void Editor::init_workspace_browser()
             auto &doc_view = get_current_document_view();
             if (!m_sketch_editing) {
                 m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+                m_sketch_plane_previous_cam_distance = get_canvas().get_cam_distance();
                 m_sketch_previous_visibility = doc_view.m_group_views[uu_group].m_visible;
             }
             // A hidden sketch must be visible while it is being edited, but
@@ -88,6 +98,10 @@ void Editor::init_workspace_browser()
     m_workspace_browser->signal_move_group().connect(sigc::mem_fun(*this, &Editor::on_move_group));
     m_workspace_browser->signal_document_checked().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_document_checked));
+    m_workspace_browser->signal_origin_checked().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_origin_checked));
+    m_workspace_browser->signal_sketches_checked().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_sketches_checked));
     m_workspace_browser->signal_group_checked().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_group_checked));
     m_workspace_browser->signal_body_checked().connect(
@@ -128,7 +142,27 @@ void Editor::init_workspace_browser()
         });
     });
 
-    m_win.get_left_bar().set_start_child(*m_workspace_browser);
+}
+
+void Editor::ensure_workspace_browser(const UUID &doc_uuid)
+{
+    if (m_workspace_browsers.contains(doc_uuid))
+        return;
+
+    auto browser = Gtk::make_managed<WorkspaceBrowser>(m_core, doc_uuid);
+    connect_workspace_browser(*browser);
+    m_workspace_browser_stack->add(*browser, static_cast<std::string>(doc_uuid));
+    m_workspace_browsers.emplace(doc_uuid, browser);
+}
+
+void Editor::show_workspace_browser(const UUID &doc_uuid)
+{
+    ensure_workspace_browser(doc_uuid);
+    m_workspace_browser = m_workspace_browsers.at(doc_uuid);
+    m_workspace_browser_stack->set_visible_child(*m_workspace_browser);
+    m_workspace_browser->set_sensitive(true);
+    if (m_workspace_views.contains(m_current_workspace_view))
+        m_workspace_browser->update_documents(get_current_document_views());
 }
 
 void Editor::on_workspace_browser_group_selected(const UUID &uu_doc, const UUID &uu_group)
@@ -144,10 +178,12 @@ void Editor::on_workspace_browser_group_selected(const UUID &uu_doc, const UUID 
     update_version_info();
     get_current_document_view().m_current_group = uu_group;
     set_current_group(uu_group);
+    update_timeline();
 }
 
 void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode add_group_mode)
 {
+    DUNE3D_TRACE(DebugCategory::EXTRUDE);
     if (m_core.tool_is_active())
         return;
     auto &doc = m_core.get_current_document();
@@ -160,6 +196,10 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         m_sketch_plane_grid.reset();
         m_sketch_grid_offset.reset();
         m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+        m_sketch_plane_previous_cam_distance = get_canvas().get_cam_distance();
+        m_sketch_finished_return_cam_distance.reset();
+        debug_log(DebugCategory::UI,
+                  std::format("sketch camera start distance={:.6f}", *m_sketch_plane_previous_cam_distance));
         m_restore_sketch_plane_cam_on_undo = false;
         m_sketch_plane_created_group.reset();
         m_sketch_plane_current_group = current_group.m_uuid;
@@ -201,8 +241,15 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         group.m_wrkpl = current_group.m_active_wrkpl;
         group.m_dvec = doc.get_entity<EntityWorkplane>(group.m_wrkpl).get_normal_vector();
         group.m_source_group = current_group.m_uuid;
+        // A sketch attached directly to a solid face is normally used for a
+        // pocket/cut.  Start in Difference so entering a depth through the
+        // extrusion editor or its textbox cuts the supporting body.  The
+        // extrusion drag logic changes this back to Union when the handle is
+        // moved away from the body.
+        if (const auto *sketch = dynamic_cast<const GroupSketch *>(&current_group);
+            sketch && sketch->m_attached_to_face)
+            group.m_operation = IGroupSolidModel::Operation::DIFFERENCE;
         bool have_profile_selection = false;
-        const auto source_cells = paths::Paths::from_document(doc, group.m_wrkpl, group.m_source_group).cells;
         std::set<unsigned int> selected_profiles;
         for (const auto &selection : get_canvas().get_selection()) {
             {
@@ -217,27 +264,9 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
             }
         }
         group.m_source_profiles = selected_profiles;
-        // Combine the selected planar cells using the same even-odd contour
-        // rule used by FaceBuilder.  A hole becomes solid when its profile is
-        // selected too, so its contour is toggled twice and cancels out.
-        for (const auto selected_profile : selected_profiles) {
-            auto cell = std::ranges::find_if(source_cells, [selected_profile](const auto &candidate) {
-                return candidate.boundary == selected_profile;
-            });
-            if (cell == source_cells.end()) {
-                group.m_source_paths.insert(selected_profile);
-                continue;
-            }
-            const auto toggle_path = [&group](unsigned int path) {
-                if (group.m_source_paths.contains(path))
-                    group.m_source_paths.erase(path);
-                else
-                    group.m_source_paths.insert(path);
-            };
-            toggle_path(cell->boundary);
-            for (const auto hole : cell->holes)
-                toggle_path(hole);
-        }
+        // Region selections stay as cells.  Do not expand them into boundary
+        // paths: doing so makes the outer region and its nested holes appear
+        // selected together in the extrusion preview.
         // If the profile face is occluded by sketch geometry, the canvas may
         // return the selected sketch edges instead.  Convert those edges back
         // to profile indices so Extrude still uses only the intended loops.
@@ -255,21 +284,6 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
                         }))
                         group.m_source_paths.insert(profile_idx);
                 }
-            }
-        }
-        // Selecting an outer region should retain enclosed sketch loops as
-        // holes.  FaceBuilder uses the even-odd rule, so include contained
-        // loops with the selected outer loop; selecting an inner loop alone
-        // still produces only that inner profile.
-        if (group.m_source_paths.size() == 1) {
-            const auto selected_idx = *group.m_source_paths.begin();
-            const auto source_paths = paths::Paths::from_document(doc, group.m_wrkpl, group.m_source_group);
-            if (selected_idx < source_paths.paths.size()) {
-                const auto cell = std::ranges::find_if(source_paths.cells, [selected_idx](const auto &candidate) {
-                    return candidate.boundary == selected_idx;
-                });
-                if (cell != source_paths.cells.end())
-                    group.m_source_paths.insert(cell->holes.begin(), cell->holes.end());
             }
         }
         {
@@ -391,8 +405,24 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
     if (new_group && group_type == Group::Type::EXTRUDE) {
         m_extrude_editing = true;
     }
-    if (new_group && add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY)
-        new_group->m_body.emplace();
+    if (new_group && (add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY
+                      || group_type == Group::Type::EXTRUDE)) {
+        // A connected extrusion modifies the existing body.  It must not
+        // become a new body merely because the tool was launched in
+        // WITH_BODY mode.
+        const auto *solid_group = dynamic_cast<const IGroupSolidModel *>(new_group);
+        const auto *source_sketch = dynamic_cast<const GroupSketch *>(&current_group);
+        const bool attached_to_existing_body = source_sketch && source_sketch->m_attached_to_face;
+        const bool connected_extrusion = solid_group
+                                          && (solid_group->get_operation()
+                                                      == IGroupSolidModel::Operation::DIFFERENCE
+                                              || attached_to_existing_body);
+        const bool starts_first_body = group_type == Group::Type::EXTRUDE
+                                       && !SolidModel::get_last_solid_model(doc, current_group,
+                                                                             SolidModel::IncludeGroup::YES);
+        if (!connected_extrusion && (add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY || starts_first_body))
+            new_group->m_body.emplace();
+    }
     finish_add_group(new_group);
 }
 
@@ -413,14 +443,16 @@ void Editor::finish_sketch_plane_selection(const UUID &plane)
     group.m_active_wrkpl = plane;
     m_sketch_grid_offset.reset();
     get_current_document_view().m_group_views[group.m_uuid].m_visible = true;
-    if (m_sketch_plane_add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY)
-        group.m_body.emplace();
+    // A sketch attached to a solid face belongs to that face's body.  Do not
+    // start a new body here, otherwise a following Difference extrusion has
+    // no prior solid model to use as its boolean argument.
 
     m_selecting_sketch_plane = false;
     m_sketch_plane_grid = plane;
     // Capture the view immediately before this plane selection so Undo can
     // return here even when plane selection was re-entered by Undo.
     m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+    m_sketch_plane_previous_cam_distance = get_canvas().get_cam_distance();
     m_restore_sketch_plane_cam_on_undo = true;
     m_win.get_sketch_plane_selector().set_visible(false);
     get_canvas().set_selection_mode(SelectionMode::NORMAL);
@@ -433,6 +465,8 @@ void Editor::finish_sketch_plane_selection(const UUID &plane)
         camera_quat = glm::quatLookAt(glm::dvec3(0, 1, 0), glm::dvec3(0, 0, 1));
     }
     get_canvas().set_cam_distance(default_sketch_camera_distance, Canvas::ZoomCenter::SCREEN);
+    debug_log(DebugCategory::UI,
+              std::format("sketch active distance={:.6f}", get_canvas().get_cam_distance()));
     get_canvas().animate_to_cam_quat(glm::quat(camera_quat));
     canvas_update();
     Glib::signal_idle().connect_once([this] {
@@ -447,14 +481,59 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
         return;
 
     auto &doc = m_core.get_current_document();
-    if (!doc.get_groups().contains(solid_group_uuid))
+    face::Faces transformed_step_faces;
+    const face::Faces *faces_ptr = nullptr;
+    EntitySTEP *step_entity = nullptr;
+    if (doc.get_groups().contains(solid_group_uuid)) {
+        auto &source_group = doc.get_group(solid_group_uuid);
+        const auto *solid_group = dynamic_cast<const IGroupSolidModel *>(&source_group);
+        if (!solid_group || !solid_group->get_solid_model())
+            return;
+        // Solid-model face selection identifies the imported group rather
+        // than the EntitySTEP directly.  Keep that group before dependent
+        // features so its body is available to a following cut.
+        const auto body_group = source_group.find_body(doc).group.m_uuid;
+        if (source_group.m_uuid != body_group) {
+            doc.reorder_group(source_group.m_uuid, body_group);
+            doc.set_group_generate_pending(source_group.m_uuid);
+        }
+        faces_ptr = &solid_group->get_solid_model()->m_faces;
+    }
+    else if ((step_entity = doc.get_entity_ptr<EntitySTEP>(solid_group_uuid)) && step_entity->m_imported) {
+        // Selecting a face of an imported STEP body makes that body the
+        // solid-model target for features created from the sketch.  This is
+        // also needed for documents created before imported bodies were
+        // included in the solid-model chain by default.
+        step_entity->m_include_in_solid_model = true;
+        // If the import was created while a later feature was selected, it
+        // can otherwise appear after the extrusion in feature order.  Move
+        // it to the beginning of its body before creating the attached
+        // sketch so it becomes the boolean argument.
+        const auto body_group = doc.get_group(step_entity->m_group).find_body(doc).group.m_uuid;
+        if (step_entity->m_group != body_group)
+            doc.reorder_group(step_entity->m_group, body_group);
+        doc.set_group_generate_pending(step_entity->m_group);
+        transformed_step_faces = step_entity->m_imported->result.faces;
+        for (auto &step_face : transformed_step_faces) {
+            for (auto &vertex : step_face.vertices) {
+                const auto transformed = step_entity->transform({vertex.x, vertex.y, vertex.z});
+                vertex = {static_cast<float>(transformed.x), static_cast<float>(transformed.y),
+                          static_cast<float>(transformed.z)};
+            }
+            for (auto &normal_vertex : step_face.normals) {
+                const auto transformed = glm::rotate(step_entity->m_normal,
+                                                     glm::dvec3(normal_vertex.x, normal_vertex.y, normal_vertex.z));
+                normal_vertex = {static_cast<float>(transformed.x), static_cast<float>(transformed.y),
+                                 static_cast<float>(transformed.z)};
+            }
+        }
+        faces_ptr = &transformed_step_faces;
+    }
+    else {
         return;
-    const auto &source_group = doc.get_group(solid_group_uuid);
-    const auto *solid_group = dynamic_cast<const IGroupSolidModel *>(&source_group);
-    if (!solid_group || !solid_group->get_solid_model())
-        return;
+    }
 
-    const auto &faces = solid_group->get_solid_model()->m_faces;
+    const auto &faces = *faces_ptr;
     if (face_idx >= faces.size())
         return;
     const auto &face = faces.at(face_idx);
@@ -498,7 +577,13 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     const auto camera_right = glm::normalize(glm::cross(camera_up, face_direction));
     const auto camera_quat = glm::quat_cast(glm::mat3(camera_right, camera_up, face_direction));
 
-    auto &group = doc.insert_group<GroupSketch>(UUID::random(), m_sketch_plane_current_group);
+    // A face sketch must follow the body whose face was selected.  The
+    // active group can still be Reference when plane selection began, which
+    // would otherwise place the sketch before the imported STEP feature.
+    const UUID sketch_after_group = doc.get_groups().contains(solid_group_uuid)
+                                            ? solid_group_uuid
+                                            : (step_entity ? step_entity->m_group : m_sketch_plane_current_group);
+    auto &group = doc.insert_group<GroupSketch>(UUID::random(), sketch_after_group);
     m_sketch_plane_created_group = group.m_uuid;
     group.m_attached_to_face = true;
     bool added = false;
@@ -518,7 +603,7 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
         lock_rotation.m_entity = workplane.m_uuid;
     }
     get_current_document_view().m_group_views[group.m_uuid].m_visible = true;
-    if (m_sketch_plane_add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY)
+    if (m_sketch_plane_add_group_mode == WorkspaceBrowserAddGroupMode::WITH_BODY && !group.m_attached_to_face)
         group.m_body.emplace();
 
     m_selecting_sketch_plane = false;
@@ -535,6 +620,7 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     // Capture the view immediately before this face/plane selection so Undo
     // can restore it on repeated plane-selection cycles.
     m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
+    m_sketch_plane_previous_cam_distance = get_canvas().get_cam_distance();
     m_restore_sketch_plane_cam_on_undo = true;
     m_win.get_sketch_plane_selector().set_visible(false);
     get_canvas().set_selection_mode(SelectionMode::NORMAL);
@@ -542,6 +628,8 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     m_sketch_editing = true;
     update_sketch_mode_ui();
     get_canvas().set_cam_distance(default_sketch_camera_distance, Canvas::ZoomCenter::SCREEN);
+    debug_log(DebugCategory::UI,
+              std::format("sketch active on face distance={:.6f}", get_canvas().get_cam_distance()));
     get_canvas().animate_to_cam_quat(camera_quat);
     canvas_update();
     Glib::signal_idle().connect_once([this] {
@@ -565,6 +653,13 @@ void Editor::finish_sketch()
             m_core.set_needs_save();
         }
     }
+    m_sketch_finished_for_undo = sketch.m_uuid;
+    m_sketch_finished_return_cam_distance = m_sketch_plane_previous_cam_distance;
+    debug_log(DebugCategory::UI,
+              std::format("sketch finish distance={:.6f} saved_start={}", get_canvas().get_cam_distance(),
+                           m_sketch_plane_previous_cam_distance
+                                   ? std::format("{:.6f}", *m_sketch_plane_previous_cam_distance)
+                                   : std::string("none")));
     m_sketch_editing = false;
     if (m_sketch_previous_visibility) {
         get_current_document_view().m_group_views[sketch.m_uuid].m_visible = *m_sketch_previous_visibility;
@@ -573,8 +668,16 @@ void Editor::finish_sketch()
     update_sketch_mode_ui();
     canvas_update();
     if (m_sketch_plane_previous_cam_quat) {
-        get_canvas().animate_to_cam_quat(*m_sketch_plane_previous_cam_quat);
+        const auto previous_cam_distance = m_sketch_plane_previous_cam_distance;
+        // Finish Sketch must return to the exact pre-sketch view. Stop any
+        // active camera animation first so its old zoom target cannot
+        // overwrite the saved distance on a later frame.
+        get_canvas().stop_camera_animation();
+        get_canvas().set_cam_quat(*m_sketch_plane_previous_cam_quat);
+        if (previous_cam_distance)
+            get_canvas().set_cam_distance(*previous_cam_distance, Canvas::ZoomCenter::SCREEN);
         m_sketch_plane_previous_cam_quat.reset();
+        m_sketch_plane_previous_cam_distance.reset();
     }
 }
 
@@ -601,10 +704,15 @@ void Editor::finish_extrusion()
     m_update_groups_after = UUID();
     update_sketch_mode_ui();
     canvas_update();
+    // Refresh the tree after hiding the source sketch so its checkbox matches
+    // the committed visibility state instead of the extrusion preview state.
+    if (m_workspace_browser)
+        m_workspace_browser->update_documents(get_current_document_views());
 }
 
 void Editor::finish_add_group(Group *new_group)
 {
+    DUNE3D_TRACE(DebugCategory::MODEL);
     if (!new_group)
         return;
     CanvasUpdater canvas_updater{*this};
@@ -615,12 +723,22 @@ void Editor::finish_add_group(Group *new_group)
     m_core.set_needs_save();
     m_core.rebuild("add group");
     m_workspace_browser->update_documents(get_current_document_views());
+    update_timeline();
+    if (group_type == Group::Type::EXTRUDE)
+        set_current_group(new_group->m_uuid);
     m_workspace_browser->select_group(new_group->m_uuid);
     if (any_of(group_type, Group::Type::FILLET, Group::Type::CHAMFER)) {
         trigger_action(ToolID::SELECT_EDGES);
     }
     else if (group_type == Group::Type::PIPE) {
         trigger_action(ToolID::SELECT_SPINE_ENTITIES);
+    }
+    else if (group_type == Group::Type::EXTRUDE) {
+        // The group rebuild can finish before the extrusion editor state is
+        // reflected in the ribbon and canvas. Refresh both so the handle and
+        // dimension textbox appear immediately.
+        update_sketch_mode_ui();
+        canvas_update();
     }
 }
 
@@ -694,10 +812,40 @@ void Editor::on_workspace_browser_document_checked(const UUID &uu_doc, bool chec
     update_workspace_view_names();
 }
 
+void Editor::on_workspace_browser_origin_checked(const UUID &uu_doc, bool checked)
+{
+    auto &doc = m_core.get_idocument_info(uu_doc).get_document();
+    auto &reference = doc.get_reference_group();
+    if (reference.m_show_origin == checked)
+        return;
+    reference.m_show_origin = checked;
+    m_core.set_needs_save();
+    m_workspace_browser->update_current_group(get_current_document_views());
+    canvas_update();
+}
+
+void Editor::on_workspace_browser_sketches_checked(const UUID &uu_doc, bool checked)
+{
+    CanvasUpdater canvas_updater{*this};
+    auto &doc = m_core.get_idocument_info(uu_doc).get_document();
+    auto &doc_view = get_current_document_views()[uu_doc];
+    for (const auto *group : doc.get_groups_sorted()) {
+        if (group->get_type() == Group::Type::SKETCH)
+            doc_view.m_group_views[group->m_uuid].m_visible = checked;
+    }
+    m_workspace_browser->set_sketches_checked(uu_doc, checked);
+    m_workspace_browser->update_current_group(get_current_document_views());
+}
+
 void Editor::on_workspace_browser_group_checked(const UUID &uu_doc, const UUID &uu_group, bool checked)
 {
     CanvasUpdater canvas_updater{*this};
-    get_current_document_views()[uu_doc].m_group_views[uu_group].m_visible = checked;
+    auto &doc = m_core.get_idocument_info(uu_doc).get_document();
+    auto &group = doc.get_group(uu_group);
+    if (group.m_body.has_value())
+        get_current_document_views()[uu_doc].m_body_views[uu_group].m_visible = checked;
+    else
+        get_current_document_views()[uu_doc].m_group_views[uu_group].m_visible = checked;
     std::ofstream log("/tmp/dune3d-visibility-debug.log", std::ios::app);
     log << "checkbox doc=" << static_cast<std::string>(uu_doc) << " group="
         << static_cast<std::string>(uu_group) << " checked=" << checked << '\n';
@@ -706,8 +854,13 @@ void Editor::on_workspace_browser_group_checked(const UUID &uu_doc, const UUID &
 
 void Editor::on_workspace_browser_body_checked(const UUID &uu_doc, const UUID &uu_group, bool checked)
 {
+    DUNE3D_TRACE(DebugCategory::UI);
     CanvasUpdater canvas_updater{*this};
+    debug_log(DebugCategory::UI,
+              "body checkbox doc=" + static_cast<std::string>(uu_doc) + " body="
+                      + static_cast<std::string>(uu_group) + " checked=" + std::to_string(checked));
     get_current_document_views()[uu_doc].m_body_views[uu_group].m_visible = checked;
+    m_workspace_browser->set_body_checked(uu_doc, uu_group, checked);
     m_workspace_browser->update_current_group(get_current_document_views());
 }
 

@@ -27,6 +27,10 @@ public:
 
     void open_file_view(const Glib::RefPtr<Gio::File> &file);
     bool has_file(const std::filesystem::path &path);
+    void ensure_new_document()
+    {
+        m_editor.ensure_new_document();
+    }
 
     Dune3DApplication &get_app()
     {
@@ -90,6 +94,26 @@ public:
         return *m_header_bar;
     }
 
+    Gtk::Box &get_window_command_bar()
+    {
+        return *m_window_command_bar;
+    }
+
+    Gtk::Box &get_window_undo_redo_box()
+    {
+        return *m_window_undo_redo_box;
+    }
+
+    Gtk::Box &get_window_document_tabs()
+    {
+        return *m_window_document_tabs;
+    }
+
+    Gtk::Button &get_window_new_document_tab_button()
+    {
+        return *m_window_new_document_tab_button;
+    }
+
     Gtk::MenuButton &get_hamburger_menu_button()
     {
         return *m_hamburger_menu_button;
@@ -120,6 +144,11 @@ public:
         return *m_workspace_notebook;
     }
 
+    Gtk::Box &get_timeline_items_box()
+    {
+        return *m_timeline_items_box;
+    }
+
     Gtk::Button &get_workspace_add_button()
     {
         return *m_workspace_add_button;
@@ -128,6 +157,7 @@ public:
     Gtk::Button &get_ribbon_btn_sketch() { return *m_ribbon_btn_sketch; }
     Gtk::Box &get_ribbon_create_group() { return *m_ribbon_create_group; }
     Gtk::MenuButton &get_ribbon_create_menu_button() { return *m_ribbon_create_menu_button; }
+    Gtk::MenuButton &get_ribbon_insert_menu_button() { return *m_ribbon_insert_menu_button; }
     Gtk::Box &get_ribbon_modify_group() { return *m_ribbon_modify_group; }
     Gtk::Box &get_ribbon_sketch_group() { return *m_ribbon_sketch_group; }
     Gtk::MenuButton &get_ribbon_sketch_create_menu_button() { return *m_ribbon_sketch_create_menu_button; }
@@ -155,7 +185,6 @@ public:
     Gtk::Button &get_ribbon_btn_polygon() { return *m_ribbon_btn_polygon; }
     Gtk::Button &get_ribbon_btn_dimension_create() { return *m_ribbon_btn_dimension_create; }
 
-    Gtk::Button &get_ribbon_btn_dimension() { return *m_ribbon_btn_dimension; }
     Gtk::Button &get_ribbon_sketch_btn_fillet() { return *m_ribbon_sketch_btn_fillet; }
     Gtk::Button &get_ribbon_sketch_btn_chamfer() { return *m_ribbon_sketch_btn_chamfer; }
     Gtk::Button &get_ribbon_body_btn_measure() { return *m_ribbon_body_btn_measure; }
@@ -179,6 +208,7 @@ public:
     void hide_extrude_dimension();
     void position_extrude_dimension(glm::dvec2 base, glm::dvec2 tip);
     void commit_extrude_dimension();
+    void focus_extrude_dimension();
     void commit_and_focus_next_rectangle_dimension();
     void focus_circle_dimension();
     bool rectangle_dimensions_visible() const;
@@ -271,6 +301,7 @@ private:
     Gtk::Button *m_ribbon_btn_sketch = nullptr;
     Gtk::Box *m_ribbon_create_group = nullptr;
     Gtk::MenuButton *m_ribbon_create_menu_button = nullptr;
+    Gtk::MenuButton *m_ribbon_insert_menu_button = nullptr;
     Gtk::Box *m_ribbon_modify_group = nullptr;
     Gtk::Box *m_ribbon_sketch_group = nullptr;
     Gtk::MenuButton *m_ribbon_sketch_create_menu_button = nullptr;
@@ -298,7 +329,6 @@ private:
     Gtk::Button *m_ribbon_btn_polygon = nullptr;
     Gtk::Button *m_ribbon_btn_dimension_create = nullptr;
 
-    Gtk::Button *m_ribbon_btn_dimension = nullptr;
     Gtk::Button *m_ribbon_sketch_btn_fillet = nullptr;
     Gtk::Button *m_ribbon_sketch_btn_chamfer = nullptr;
     Gtk::Button *m_ribbon_body_btn_measure = nullptr;
@@ -309,6 +339,10 @@ private:
     bool m_rectangle_dimensions_active = false;
 
     Gtk::HeaderBar *m_header_bar = nullptr;
+    Gtk::Box *m_window_command_bar = nullptr;
+    Gtk::Box *m_window_undo_redo_box = nullptr;
+    Gtk::Box *m_window_document_tabs = nullptr;
+    Gtk::Button *m_window_new_document_tab_button = nullptr;
     Gtk::Label *m_title_label = nullptr;
     Gtk::Label *m_subtitle_label = nullptr;
     Gtk::Popover *m_open_popover = nullptr;
@@ -347,6 +381,7 @@ private:
     Gtk::CheckButton *m_workplane_checkbutton = nullptr;
     Gtk::Label *m_workplane_label = nullptr;
     Gtk::Notebook *m_workspace_notebook = nullptr;
+    Gtk::Box *m_timeline_items_box = nullptr;
     Gtk::Button *m_workspace_add_button = nullptr;
 
     Gtk::MenuButton *m_view_options_button = nullptr;

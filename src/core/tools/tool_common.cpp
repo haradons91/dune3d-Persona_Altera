@@ -58,7 +58,7 @@ void ToolCommon::set_current_group_update_solid_model_pending()
 
 glm::dvec3 ToolCommon::get_cursor_pos_for_workplane(const EntityWorkplane &wrkpl) const
 {
-    return m_intf.get_cursor_pos_for_plane(wrkpl.m_origin, wrkpl.get_normal_vector());
+    return m_intf.get_cursor_pos_for_workplane(wrkpl);
 }
 
 bool ToolCommon::current_group_has_redundant_constraints()

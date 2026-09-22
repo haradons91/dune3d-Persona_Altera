@@ -36,6 +36,7 @@ public:
     Editor(Dune3DAppWindow &win, Preferences &prefs);
 
     void init();
+    void ensure_new_document();
 
 
     void tool_bar_set_actions(const std::vector<ActionLabelInfo> &labels) override;
@@ -46,6 +47,7 @@ public:
     glm::vec3 get_cam_normal() const override;
     glm::quat get_cam_quat() const override;
     glm::dvec3 get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal) const override;
+    glm::dvec3 get_cursor_pos_for_workplane(const EntityWorkplane &workplane) const override;
     void show_rectangle_dimensions(double width, double height) override;
     void update_rectangle_dimensions(double width, double height) override;
     void hide_rectangle_dimensions() override;
@@ -95,12 +97,17 @@ public:
 
 private:
     void init_workspace_browser();
+    void connect_workspace_browser(WorkspaceBrowser &browser);
+    void ensure_workspace_browser(const UUID &doc_uuid);
+    void show_workspace_browser(const UUID &doc_uuid);
     void init_properties_notebook();
     void init_header_bar();
     void init_actions();
     void init_tool_popover();
     void init_canvas();
     void init_view_options();
+    void update_document_tabs();
+    void update_timeline();
 
     void on_workspace_browser_group_selected(const UUID &uu_doc, const UUID &uu_group);
     void on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode add_group_mode);
@@ -108,6 +115,8 @@ private:
     void on_delete_current_group();
     void on_move_group(Document::MoveGroup op);
     void on_workspace_browser_document_checked(const UUID &uu_doc, bool checked);
+    void on_workspace_browser_origin_checked(const UUID &uu_doc, bool checked);
+    void on_workspace_browser_sketches_checked(const UUID &uu_doc, bool checked);
     void on_workspace_browser_group_checked(const UUID &uu_doc, const UUID &uu_group, bool checked);
     void on_workspace_browser_body_checked(const UUID &uu_doc, const UUID &uu_group, bool checked);
     void on_workspace_browser_body_solid_model_checked(const UUID &uu_doc, const UUID &uu_group, bool checked);
@@ -180,6 +189,7 @@ private:
     void finish_sketch_face_selection(const UUID &solid_group, unsigned int face);
     void finish_sketch();
     void finish_extrusion();
+    void accept_extrude_dimension() override;
 
     void apply_preferences();
 
@@ -205,10 +215,17 @@ private:
     double m_extrude_drag_start = 0;
     double m_extrude_initial_length = 0;
     std::optional<glm::quat> m_sketch_plane_previous_cam_quat;
+    std::optional<float> m_sketch_plane_previous_cam_distance;
     std::optional<UUID> m_sketch_plane_grid;
     bool m_restore_sketch_plane_cam_on_undo = false;
     std::optional<UUID> m_sketch_plane_created_group;
+    std::optional<UUID> m_sketch_redo_reenter_group;
     std::optional<glm::dvec3> m_sketch_grid_offset;
+    // Finishing a sketch changes editor state but does not create a document
+    // history entry. The first Undo uses this to re-enter the sketch.
+    std::optional<UUID> m_sketch_finished_for_undo;
+    bool m_sketch_entered_by_undo = false;
+    std::optional<float> m_sketch_finished_return_cam_distance;
     UUID m_sketch_plane_current_group;
     WorkspaceBrowserAddGroupMode m_sketch_plane_add_group_mode;
 
@@ -270,6 +287,9 @@ private:
     ToolPopover *m_tool_popover = nullptr;
 
     WorkspaceBrowser *m_workspace_browser = nullptr;
+    Gtk::Stack *m_workspace_browser_stack = nullptr;
+    std::map<UUID, WorkspaceBrowser *> m_workspace_browsers;
+    std::vector<UUID> m_document_tab_order;
 
     void update_workplane_label();
     void update_selection_mode_label();

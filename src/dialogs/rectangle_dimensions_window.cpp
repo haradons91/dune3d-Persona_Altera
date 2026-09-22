@@ -153,6 +153,9 @@ RectangleDimensionsWindow::RectangleDimensionsWindow(EditorInterface &intf, doub
         }
         if (m_extrude_mode) {
             m_interface.update_extrude_dimension(get_width());
+            // Finish after the GTK text action has completed, matching the
+            // Finish Extrude button without ending the action mid-edit.
+            Glib::signal_idle().connect_once([this] { m_interface.accept_extrude_dimension(); });
             return;
         }
         emit_dimensions(true, false);
@@ -205,12 +208,12 @@ void RectangleDimensionsWindow::set_circle_dimension(double diameter)
     m_updating = false;
 }
 
-void RectangleDimensionsWindow::set_extrude_dimension(double height)
+void RectangleDimensionsWindow::set_extrude_dimension(double height, bool force)
 {
     m_extrude_mode = true;
     m_circle_mode = false;
     m_height->set_visible(false);
-    if (m_extrude_user_editing)
+    if (m_extrude_user_editing && !force)
         return;
     m_updating = true;
     m_width->set_text(std::format("{:.3f}", height));
