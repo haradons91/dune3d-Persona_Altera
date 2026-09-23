@@ -85,7 +85,7 @@ void main() {
 	
 	pick_to_frag = pick_to_geom[0];
 	flags_to_frag = flags_to_geom[0];
-	hover_only_to_frag = (flags_to_geom[0] & (1u << 9)) != 0u ? 1u : 0u;
+	hover_only_to_frag = FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_HOVER_ONLY) ? 1u : 0u;
 	gl_Position = p0x-o;
 	EmitVertex();
 	

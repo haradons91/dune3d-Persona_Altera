@@ -36,7 +36,6 @@
 #include "util/debug.hpp"
 #include "nlohmann/json.hpp"
 #include "buffer.hpp"
-#include <iostream>
 #include <format>
 
 namespace dune3d {
@@ -1368,16 +1367,12 @@ void Editor::on_open_document(const ActionConnection &conn)
         try {
             auto file = dialog->open_finish(result);
             m_win.open_file_view(file);
-            // Notice that this is a std::string, not a Glib::ustring.
-            auto filename = file->get_path();
-            std::cout << "File selected: " << filename << std::endl;
         }
-        catch (const Gtk::DialogError &err) {
-            // Can be thrown by dialog->open_finish(result).
-            std::cout << "No file selected. " << err.what() << std::endl;
+        catch (const Gtk::DialogError &) {
+            // Thrown when the user cancels the dialog; nothing to do.
         }
         catch (const Glib::Error &err) {
-            std::cout << "Unexpected exception. " << err.what() << std::endl;
+            Logger::log_critical("error opening file dialog", Logger::Domain::EDITOR, err.what());
         }
     });
 }
@@ -1405,10 +1400,7 @@ void Editor::on_save_as(const ActionConnection &conn)
     dialog->save(m_win, [this, dialog](const Glib::RefPtr<Gio::AsyncResult> &result) {
         try {
             auto file = dialog->save_finish(result);
-            // open_file_view(file);
-            //  Notice that this is a std::string, not a Glib::ustring.
             auto filename = path_from_string(append_suffix_if_required(file->get_path(), ".d3ddoc"));
-            // std::cout << "File selected: " << filename << std::endl;
             m_win.get_app().add_recent_item(filename);
             m_core.save_as(filename);
             save_workspace_view(m_core.get_current_idocument_info().get_uuid());
@@ -1419,12 +1411,11 @@ void Editor::on_save_as(const ActionConnection &conn)
                 m_after_save_cb();
             m_after_save_cb = nullptr;
         }
-        catch (const Gtk::DialogError &err) {
-            // Can be thrown by dialog->open_finish(result).
-            std::cout << "No file selected. " << err.what() << std::endl;
+        catch (const Gtk::DialogError &) {
+            // Thrown when the user cancels the dialog; nothing to do.
         }
         catch (const Glib::Error &err) {
-            std::cout << "Unexpected exception. " << err.what() << std::endl;
+            Logger::log_critical("error opening save dialog", Logger::Domain::EDITOR, err.what());
         }
     });
 }

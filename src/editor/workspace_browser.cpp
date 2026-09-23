@@ -10,8 +10,6 @@
 #include "workspace/document_view.hpp"
 #include "util/fs_util.hpp"
 #include "util/debug.hpp"
-#include <fstream>
-#include <iostream>
 
 namespace dune3d {
 
@@ -1008,17 +1006,6 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
 
 
     m_view = Gtk::make_managed<Gtk::ListView>(m_selection_model, factory);
-    // m_view->set_single_click_activate(true);
-    /*  m_view->signal_activate().connect([this](guint index) {
-          auto it = m_model->get_row(index);
-          auto tr = std::dynamic_pointer_cast<Gtk::TreeListRow>(it);
-          if (!tr)
-              return;
-          if (auto gr = std::dynamic_pointer_cast<WorkspaceBrowser::GroupItem>(tr->get_item())) {
-              std::cout << "sel gr " << gr->m_name << std::endl;
-              m_signal_group_selected.emit(gr->m_doc, gr->m_uuid);
-          }
-      });*/
     m_selection_model->signal_selection_changed().connect([this](guint, guint) {
         auto sel = m_selection_model->get_selected_item();
         auto tr = std::dynamic_pointer_cast<Gtk::TreeListRow>(sel);

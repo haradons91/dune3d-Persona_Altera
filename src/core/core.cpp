@@ -17,7 +17,6 @@
 #include "tools/itool_constrain.hpp"
 #include "action/action_catalog.hpp"
 #include "util/debug.hpp"
-#include <iostream>
 
 namespace dune3d {
 
@@ -565,7 +564,6 @@ bool Core::maybe_end_tool(const ToolResponse &r)
         m_last_tool_selection = m_tool->m_selection;
         const auto ended_tool_id = m_tool->get_id();
         const auto current_group = r.get_current_group();
-        std::cout << "end tool" << std::endl;
         m_tool.reset();
         m_signal_tool_changed.emit();
         if (r.result == ToolResponse::Result::COMMIT) {

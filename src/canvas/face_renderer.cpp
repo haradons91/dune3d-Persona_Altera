@@ -167,6 +167,7 @@ void FaceRenderer::render()
         const auto &chunk = m_ca.m_chunks.at(chunk_id);
 
         for (const auto &group : chunk.m_face_groups) {
+            const bool transparent = group.color == ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT;
             glUniform1ui(m_pick_base_loc, m_type_pick_base + group_idx);
             glUniform1ui(m_flags_loc, static_cast<uint32_t>(group.flags));
             glUniform3fv(m_origin_loc, 1, glm::value_ptr(group.origin));
@@ -195,7 +196,6 @@ void FaceRenderer::render()
                                                 ? ColorP::SOLID_MODEL
                                                 : ColorP::OTHER_BODY_SOLID_MODEL;
                     const auto color = m_ca.m_appearance.get_color(colorp);
-                    const bool transparent = group.color == ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT;
                     const bool face_hovered = (group.flags & (Canvas::VertexFlags::HOVER
                                                               | Canvas::VertexFlags::SELECTED))
                                               != Canvas::VertexFlags::DEFAULT;
@@ -212,7 +212,6 @@ void FaceRenderer::render()
             glm::mat3 normal_mat = glm::transpose(glm::toMat3(group.normal));
 
             glUniformMatrix3fv(m_normal_mat_loc, 1, GL_FALSE, glm::value_ptr(normal_mat));
-            const bool transparent = group.color == ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT;
             if (transparent)
                 glDepthMask(GL_FALSE);
             glDrawElementsBaseVertex(GL_TRIANGLES, group.length, GL_UNSIGNED_INT,
