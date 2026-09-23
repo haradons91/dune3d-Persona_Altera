@@ -39,7 +39,12 @@ private:
     std::deque<std::shared_ptr<const HistoryItem>> redo_stack;
 
     unsigned int history_max = 50;
-    bool never_forgets = true;
+    // Standard undo/redo semantics: a new edit made after undoing discards
+    // the abandoned redo branch instead of folding it back into the undo
+    // stack. (The Preferences wiring for this toggle is dead/commented-out
+    // code in Editor::apply_preferences(), so this default is the only
+    // effective setting.)
+    bool never_forgets = false;
     void trim();
 };
 } // namespace dune3d
