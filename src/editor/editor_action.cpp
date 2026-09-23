@@ -176,6 +176,7 @@ void Editor::init_actions()
                 m_sketch_entered_by_undo = true;
                 m_sketch_finished_for_undo.reset();
                 update_sketch_mode_ui();
+                update_action_sensitivity();
                 canvas_update();
                 return;
             }
@@ -190,13 +191,38 @@ void Editor::init_actions()
         }
 
         m_core.undo();
+        // m_sketch_entered_by_undo is intentionally left set here (if it was):
+        // it marks that somewhere back in the undo stack there is still a
+        // pure-UI "re-entered the sketch" transition owed a matching Redo.
+        // That Redo should only fire once all *real* redo history ahead of
+        // it is exhausted -- see the ordering in the REDO handler below --
+        // not merely on the next Redo press, which must still be able to
+        // redo the real change just undone above.
 
         // A sketch's geometry is undone before the sketch group itself. Only
         // when the sketch group disappears should we return to plane choice
-        // and restore the camera from before New Sketch.
+        // and restore the camera from before New Sketch. This is a negative
+        // containment check, so it must also confirm we're still in the same
+        // document m_sketch_plane_created_group was created in -- otherwise
+        // it would spuriously read true after switching to an unrelated
+        // document that (trivially) doesn't contain that group either.
         const bool sketch_was_removed = m_sketch_plane_created_group.has_value() && m_core.has_documents()
+                                        && m_sketch_plane_created_group_doc
+                                        && *m_sketch_plane_created_group_doc
+                                                   == m_core.get_current_idocument_info().get_uuid()
                                         && !m_core.get_current_document().get_groups().contains(
                                                 *m_sketch_plane_created_group);
+        debug_log(DebugCategory::UI,
+                  std::format("ctrl-z after real undo sketch_was_removed={} restore_cam_on_undo={} "
+                              "entered_by_undo={} can_redo={} created_group={} current_group_type={}",
+                              sketch_was_removed, m_restore_sketch_plane_cam_on_undo, m_sketch_entered_by_undo,
+                              m_core.can_redo(),
+                              m_sketch_plane_created_group ? static_cast<std::string>(*m_sketch_plane_created_group)
+                                                            : std::string("none"),
+                              m_core.has_documents() ? static_cast<int>(m_core.get_current_document()
+                                                                                 .get_group(m_core.get_current_group())
+                                                                                 .get_type())
+                                                      : -1));
         if (sketch_was_removed && m_restore_sketch_plane_cam_on_undo
             && m_sketch_plane_previous_cam_quat) {
             m_sketch_editing = false;
@@ -207,7 +233,7 @@ void Editor::init_actions()
             get_canvas().set_selection_mode(SelectionMode::HOVER_ONLY);
             m_workspace_browser->show_toast("Select a reference plane for the sketch");
             get_canvas().stop_camera_animation();
-            get_canvas().set_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
+            get_canvas().animate_to_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
             if (m_sketch_plane_previous_cam_distance)
                 get_canvas().set_cam_distance(*m_sketch_plane_previous_cam_distance, Canvas::ZoomCenter::SCREEN);
             if (m_sketch_finished_return_cam_distance)
@@ -232,7 +258,12 @@ void Editor::init_actions()
             }
             m_sketch_finished_return_cam_distance.reset();
             m_restore_sketch_plane_cam_on_undo = false;
-            m_sketch_entered_by_undo = false;
+            // m_sketch_entered_by_undo is deliberately left as-is: if there
+            // was still an outer "re-entered via undo" transition owed a
+            // matching Redo (from further up the undo stack, before this
+            // sketch's own creation was undone), it remains owed after the
+            // group and its content are both redone -- see the ordering in
+            // the REDO handler.
             m_sketch_redo_reenter_group = m_sketch_plane_created_group;
             // Keep the UUID so Redo can find the group it is about to
             // recreate and re-enter sketch view.
@@ -259,10 +290,23 @@ void Editor::init_actions()
         canvas_update();
     });
     connect_action(ActionID::REDO, [this](const auto &a) {
+        debug_log(DebugCategory::UI,
+                  std::format("ctrl-y entry entered_by_undo={} have_cam_quat={} sketch_editing={} can_redo={} "
+                              "created_group={} redo_reenter_group={}",
+                              m_sketch_entered_by_undo, m_sketch_plane_previous_cam_quat.has_value(),
+                              m_sketch_editing, m_core.can_redo(),
+                              m_sketch_plane_created_group ? static_cast<std::string>(*m_sketch_plane_created_group)
+                                                            : std::string("none"),
+                              m_sketch_redo_reenter_group ? static_cast<std::string>(*m_sketch_redo_reenter_group)
+                                                          : std::string("none")));
         // The first Undo after Finish Sketch only changes editor mode; it
-        // does not change document history. Redo that transition back to the
-        // finished sketch's perspective view without calling core.redo().
-        if (m_sketch_entered_by_undo && m_sketch_plane_previous_cam_quat) {
+        // does not change document history. That transition is only owed a
+        // matching Redo once every *real* redo step ahead of it has been
+        // exhausted -- e.g. Finish, Undo (fake), Undo (real), Redo, Redo
+        // must redo the real change on the first Redo and only perform this
+        // transition on the second, once m_core.can_redo() is false again.
+        if (m_sketch_entered_by_undo && !m_core.can_redo() && m_sketch_plane_previous_cam_quat) {
+            debug_log(DebugCategory::UI, "ctrl-y taking undo-the-reentry branch (no core redo)");
             if (m_core.has_documents() && m_sketch_plane_created_group
                 && m_core.get_current_document().get_groups().contains(*m_sketch_plane_created_group)) {
                 auto &doc = m_core.get_current_document();
@@ -283,17 +327,26 @@ void Editor::init_actions()
             m_win.get_sketch_plane_selector().set_visible(false);
             get_canvas().set_selection_mode(SelectionMode::NORMAL);
             get_canvas().stop_camera_animation();
-            get_canvas().set_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
+            get_canvas().animate_to_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
             if (m_sketch_plane_previous_cam_distance)
                 get_canvas().set_cam_distance(*m_sketch_plane_previous_cam_distance,
                                               Canvas::ZoomCenter::SCREEN);
             if (m_sketch_plane_created_group)
                 m_sketch_finished_for_undo = *m_sketch_plane_created_group;
             update_sketch_mode_ui();
+            update_action_sensitivity();
             update_timeline();
             canvas_update();
+            debug_log(DebugCategory::UI,
+                      std::format("ctrl-y after undo-the-reentry sketch_editing={} distance={:.6f}", m_sketch_editing,
+                                  get_canvas().get_cam_distance()));
             return;
         }
+        debug_log(DebugCategory::UI,
+                  std::format("ctrl-y taking normal core-redo branch redo_reenter_group={}",
+                              m_sketch_redo_reenter_group
+                                      ? static_cast<std::string>(*m_sketch_redo_reenter_group)
+                                      : std::string("none")));
         const auto sketch_group_to_restore = m_sketch_redo_reenter_group;
         const auto groups_before_redo = m_core.has_documents()
                                                  ? m_core.get_current_document().get_groups().size()
@@ -312,13 +365,19 @@ void Editor::init_actions()
                 auto &sketch = dynamic_cast<GroupSketch &>(group);
                 if (sketch.m_active_wrkpl) {
                     // Redo recreates the sketch after its group was undone;
-                    // this transition should re-enter sketch mode.
+                    // this transition should re-enter sketch mode. Note:
+                    // m_sketch_entered_by_undo is deliberately left as-is
+                    // here too (see the matching comment in the UNDO
+                    // handler's sketch_was_removed branch) -- an outer
+                    // pending "leave sketch" transition, from further up the
+                    // undo stack than this sketch's own creation, is still
+                    // owed a matching Redo once this recreation and any
+                    // further content redo are both done.
                     m_sketch_plane_previous_cam_quat = get_canvas().get_cam_quat();
                     m_sketch_plane_previous_cam_distance = get_canvas().get_cam_distance();
                     m_sketch_finished_for_undo.reset();
                     m_selecting_sketch_plane = false;
                     m_sketch_editing = true;
-                    m_sketch_entered_by_undo = false;
                     m_restore_sketch_plane_cam_on_undo = true;
                     m_sketch_plane_grid = sketch.m_active_wrkpl;
                     reentered_sketch = true;
@@ -342,6 +401,11 @@ void Editor::init_actions()
         // leave sketch mode and restore the saved finished-sketch view.
         const bool redo_added_group = m_core.has_documents()
                                       && m_core.get_current_document().get_groups().size() > groups_before_redo;
+        debug_log(DebugCategory::UI,
+                  std::format("ctrl-y after core redo sketch_editing={} redo_added_group={} reentered_sketch={} "
+                              "groups_before={} groups_after={}",
+                              m_sketch_editing, redo_added_group, reentered_sketch, groups_before_redo,
+                              m_core.has_documents() ? m_core.get_current_document().get_groups().size() : 0));
         if (m_sketch_editing && redo_added_group && !reentered_sketch && m_core.has_documents()) {
             auto &doc = m_core.get_current_document();
             if (m_sketch_plane_created_group && doc.get_groups().contains(*m_sketch_plane_created_group)) {
@@ -364,7 +428,7 @@ void Editor::init_actions()
             get_canvas().set_selection_mode(SelectionMode::NORMAL);
             get_canvas().stop_camera_animation();
             if (m_sketch_plane_previous_cam_quat)
-                get_canvas().set_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
+                get_canvas().animate_to_cam_quat(glm::quat(*m_sketch_plane_previous_cam_quat));
             if (m_sketch_plane_previous_cam_distance)
                 get_canvas().set_cam_distance(*m_sketch_plane_previous_cam_distance,
                                               Canvas::ZoomCenter::SCREEN);
@@ -704,7 +768,11 @@ void Editor::update_action_sensitivity(const std::set<SelectableRef> &sel)
     // While the sketch-plane selector is active, Undo also acts as Escape so
     // it must remain available even when the document has no history yet.
     m_action_sensitivity[ActionID::UNDO] = m_core.can_undo() || m_selecting_sketch_plane;
-    m_action_sensitivity[ActionID::REDO] = m_core.can_redo();
+    // The first Undo after Finish Sketch only re-enters the sketch (a pure UI
+    // transition, tracked by m_sketch_entered_by_undo) without touching
+    // Core's history, so m_core.can_redo() alone would leave Redo disabled
+    // even though there is a pending transition for it to undo.
+    m_action_sensitivity[ActionID::REDO] = m_core.can_redo() || m_sketch_entered_by_undo;
     m_action_sensitivity[ActionID::SAVE_ALL] = m_core.get_needs_save_any();
     m_action_sensitivity[ActionID::SAVE] = m_core.has_documents();
     m_action_sensitivity[ActionID::SAVE_AS] = m_core.has_documents();

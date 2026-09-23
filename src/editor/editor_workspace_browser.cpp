@@ -183,9 +183,25 @@ void Editor::remove_workspace_browser(const UUID &doc_uuid)
 
 void Editor::reset_sketch_editing_state()
 {
+    // Leaving a document mid sketch/extrude-edit (e.g. switching tabs) is
+    // treated as implicitly finishing that edit -- camera restore and the
+    // "Undo re-enters" marker included -- rather than silently discarding
+    // it, so a later Undo after switching back still works exactly as if
+    // the user had clicked Finish Sketch/Finish Extrude themselves. This
+    // also cancels any in-progress tool (e.g. a not-yet-committed rectangle
+    // draw) via force_end_tool(), same as a manual Finish would.
+    if (m_sketch_editing)
+        finish_sketch(false);
+    else if (m_extrude_editing)
+        finish_extrusion();
+    else
+        force_end_tool();
+
     if (m_selecting_sketch_plane) {
         m_win.get_sketch_plane_selector().set_visible(false);
         get_canvas().set_selection_mode(SelectionMode::NORMAL);
+        if (m_workspace_browser)
+            m_workspace_browser->show_toast("");
     }
     m_selecting_sketch_plane = false;
     m_sketch_editing = false;
@@ -193,16 +209,20 @@ void Editor::reset_sketch_editing_state()
     m_extrude_dragging = false;
     m_extrude_drag_changed = false;
     m_sketch_previous_visibility.reset();
-    m_sketch_plane_previous_cam_quat.reset();
-    m_sketch_plane_previous_cam_distance.reset();
     m_sketch_plane_grid.reset();
-    m_restore_sketch_plane_cam_on_undo = false;
-    m_sketch_plane_created_group.reset();
-    m_sketch_redo_reenter_group.reset();
     m_sketch_grid_offset.reset();
-    m_sketch_finished_for_undo.reset();
-    m_sketch_entered_by_undo = false;
-    m_sketch_finished_return_cam_distance.reset();
+    // m_sketch_finished_for_undo, m_sketch_entered_by_undo,
+    // m_sketch_plane_previous_cam_quat/_distance, m_restore_sketch_plane_cam_on_undo,
+    // m_sketch_plane_created_group(_doc) and m_sketch_redo_reenter_group are
+    // intentionally NOT reset here: finish_sketch() above already set up
+    // m_sketch_finished_for_undo (and cleared the cam_quat/_distance pair it
+    // consumes) for this document's sketch, if any, and the rest must
+    // survive the switch so Undo/Redo can still walk all the way back
+    // through this sketch's creation and re-finish it later, exactly as if
+    // the user had never switched away. This is safe across documents:
+    // every place that consumes these re-validates against the *current*
+    // document (and, for the negative-containment sketch_was_removed check,
+    // against m_sketch_plane_created_group_doc) before acting.
     update_sketch_mode_ui();
 }
 
@@ -245,6 +265,7 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
                   std::format("sketch camera start distance={:.6f}", *m_sketch_plane_previous_cam_distance));
         m_restore_sketch_plane_cam_on_undo = false;
         m_sketch_plane_created_group.reset();
+        m_sketch_plane_created_group_doc.reset();
         m_sketch_plane_current_group = current_group.m_uuid;
         m_sketch_plane_add_group_mode = add_group_mode;
         get_canvas().grab_focus();
@@ -482,6 +503,7 @@ void Editor::finish_sketch_plane_selection(const UUID &plane)
 
     auto &group = doc.insert_group<GroupSketch>(UUID::random(), m_sketch_plane_current_group);
     m_sketch_plane_created_group = group.m_uuid;
+    m_sketch_plane_created_group_doc = m_core.get_current_idocument_info().get_uuid();
     group.m_active_wrkpl = plane;
     m_sketch_grid_offset.reset();
     get_current_document_view().m_group_views[group.m_uuid].m_visible = true;
@@ -627,6 +649,7 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
                                             : (step_entity ? step_entity->m_group : m_sketch_plane_current_group);
     auto &group = doc.insert_group<GroupSketch>(UUID::random(), sketch_after_group);
     m_sketch_plane_created_group = group.m_uuid;
+    m_sketch_plane_created_group_doc = m_core.get_current_idocument_info().get_uuid();
     group.m_attached_to_face = true;
     bool added = false;
     auto &workplane = doc.get_or_add_entity<EntityWorkplane>(UUID::random(), &added);
@@ -680,7 +703,7 @@ void Editor::finish_sketch_face_selection(const UUID &solid_group_uuid, unsigned
     });
 }
 
-void Editor::finish_sketch()
+void Editor::finish_sketch(bool animate)
 {
     if (!m_core.has_documents() || !force_end_tool())
         return;
@@ -695,6 +718,9 @@ void Editor::finish_sketch()
             m_core.set_needs_save();
         }
     }
+    // A fresh Finish Sketch supersedes any transition owed from an earlier
+    // re-entry into this (or another) sketch.
+    m_sketch_entered_by_undo = false;
     m_sketch_finished_for_undo = sketch.m_uuid;
     m_sketch_finished_return_cam_distance = m_sketch_plane_previous_cam_distance;
     debug_log(DebugCategory::UI,
@@ -711,11 +737,14 @@ void Editor::finish_sketch()
     canvas_update();
     if (m_sketch_plane_previous_cam_quat) {
         const auto previous_cam_distance = m_sketch_plane_previous_cam_distance;
-        // Finish Sketch must return to the exact pre-sketch view. Stop any
-        // active camera animation first so its old zoom target cannot
-        // overwrite the saved distance on a later frame.
+        // Finish Sketch returns to the pre-sketch view, animated to match
+        // entering a sketch. Distance still snaps immediately, mirroring
+        // the enter transition (which only animates orientation).
         get_canvas().stop_camera_animation();
-        get_canvas().set_cam_quat(*m_sketch_plane_previous_cam_quat);
+        if (animate)
+            get_canvas().animate_to_cam_quat(*m_sketch_plane_previous_cam_quat);
+        else
+            get_canvas().set_cam_quat(*m_sketch_plane_previous_cam_quat);
         if (previous_cam_distance)
             get_canvas().set_cam_distance(*previous_cam_distance, Canvas::ZoomCenter::SCREEN);
         m_sketch_plane_previous_cam_quat.reset();

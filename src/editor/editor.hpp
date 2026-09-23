@@ -188,7 +188,12 @@ private:
     void handle_click(unsigned int button, unsigned int n);
     void finish_sketch_plane_selection(const UUID &plane);
     void finish_sketch_face_selection(const UUID &solid_group, unsigned int face);
-    void finish_sketch();
+    // animate=false is used when finishing happens as a side effect of
+    // switching away to a different workspace view/document (see
+    // reset_sketch_editing_state()): the camera change must land
+    // synchronously so the canvas's live view-sync attributes the restored
+    // camera to the workspace view being left, not the one being entered.
+    void finish_sketch(bool animate = true);
     void finish_extrusion();
     void accept_extrude_dimension() override;
 
@@ -226,6 +231,11 @@ private:
     std::optional<UUID> m_sketch_plane_grid;
     bool m_restore_sketch_plane_cam_on_undo = false;
     std::optional<UUID> m_sketch_plane_created_group;
+    // Which document m_sketch_plane_created_group belongs to. Needed because
+    // the "was this group undone away" check below is a negative containment
+    // test (group not found in the *current* document) that would otherwise
+    // spuriously read true after switching to an unrelated document.
+    std::optional<UUID> m_sketch_plane_created_group_doc;
     std::optional<UUID> m_sketch_redo_reenter_group;
     std::optional<glm::dvec3> m_sketch_grid_offset;
     // Finishing a sketch changes editor state but does not create a document

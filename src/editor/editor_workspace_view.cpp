@@ -168,6 +168,19 @@ void Editor::set_current_workspace_view(const UUID &uu)
 {
     CanvasUpdater canvas_updater{*this};
 
+    // Finish any in-progress sketch/extrude edit in the view being left
+    // BEFORE m_current_workspace_view changes below. The canvas's live
+    // view-sync (signal_view_changed, connected in init_actions()) saves
+    // every camera change into whichever workspace view is *currently*
+    // selected; doing this after the switch would misattribute the
+    // restored camera to the view being entered instead of the one being
+    // left, so it would never be correctly restored on returning to it.
+    if (m_core.has_documents() && m_workspace_views.contains(uu)) {
+        const auto &target_wv = m_workspace_views.at(uu);
+        if (m_core.get_current_idocument_info().get_uuid() != target_wv.m_current_document)
+            reset_sketch_editing_state();
+    }
+
     m_current_workspace_view = uu;
     auto pages = m_win.get_workspace_notebook().get_pages();
 
@@ -199,8 +212,6 @@ void Editor::set_current_workspace_view(const UUID &uu)
         m_workspace_view_loading = false;
     }
     if (m_core.has_documents()) {
-        if (m_core.get_current_idocument_info().get_uuid() != wv.m_current_document)
-            reset_sketch_editing_state();
         m_core.set_current_document(wv.m_current_document);
         set_current_group(get_current_document_view().m_current_group);
         show_workspace_browser(m_core.get_current_idocument_info().get_uuid());
