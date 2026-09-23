@@ -592,14 +592,30 @@ void Canvas::rotate_gesture_update_cb(Gdk::EventSequence *seq)
     set_cam_quat(rz * rx * m_gesture_rotate_cam_quat_orig);
 }
 
-void Canvas::set_cam_quat(const glm::quat &q)
+void Canvas::set_cam_quat(const glm::quat &q, bool sync_animator)
 {
     m_cam_quat = glm::normalize(q);
+    // A direct (non-animated) set must win over any in-flight rotation
+    // animation: the per-frame tick callback reads the animators' own
+    // simulated position regardless of whether stop_camera_animation() was
+    // called first, so resync them here or a pending frame can silently
+    // overwrite this call's result back to the animation's old value. The
+    // tick callback itself (animate_step) passes sync_animator=false since
+    // it IS that simulated position; resyncing there would stop the
+    // animation after a single frame.
+    if (sync_animator) {
+        m_quat_w_animator.set(m_cam_quat.w);
+        m_quat_x_animator.set(m_cam_quat.x);
+        m_quat_y_animator.set(m_cam_quat.y);
+        m_quat_z_animator.set(m_cam_quat.z);
+    }
     queue_draw();
     m_signal_view_changed.emit();
 }
 
-void Canvas::set_cam_distance(float dist, ZoomCenter zoom_center)
+static float cam_dist_to_anim(float d);
+
+void Canvas::set_cam_distance(float dist, ZoomCenter zoom_center, bool sync_animator)
 {
     update_mats();
     glm::vec3 before = get_cursor_pos();
@@ -608,6 +624,9 @@ void Canvas::set_cam_distance(float dist, ZoomCenter zoom_center)
     glm::vec3 after = get_cursor_pos();
     if (zoom_center == ZoomCenter::CURSOR)
         set_center(get_center() - (after - before));
+    // See set_cam_quat() for why the tick callback passes sync_animator=false.
+    if (sync_animator)
+        m_zoom_animator.set(cam_dist_to_anim(dist));
     queue_draw();
     m_signal_view_changed.emit();
 }
@@ -2023,10 +2042,11 @@ int Canvas::animate_step(GdkFrameClock *frame_clock)
     }
 
     set_cam_quat(glm::quat(m_quat_w_animator.get_s(), m_quat_x_animator.get_s(), m_quat_y_animator.get_s(),
-                           m_quat_z_animator.get_s()));
+                           m_quat_z_animator.get_s()),
+                 false);
     const auto ca = glm::vec3{m_cx_animator.get_s_delta(), m_cy_animator.get_s_delta(), m_cz_animator.get_s_delta()};
     set_cam_distance(std::max(min_cam_distance, cam_dist_from_anim(m_zoom_animator.get_s())),
-                     m_animation_zoom_center);
+                     m_animation_zoom_center, false);
     set_center(get_center() + ca);
 
     if (stop)

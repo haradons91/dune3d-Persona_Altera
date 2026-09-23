@@ -52,6 +52,15 @@ void MSDAnimator::stop()
     running = false;
 }
 
+void MSDAnimator::set(double value)
+{
+    msd.reset(value);
+    target = value;
+    running = false;
+    start_time = 0;
+    m_last_s = value;
+}
+
 void MSDAnimator::set_params(const MSD::Params &p)
 {
     msd.params = p;

@@ -139,7 +139,10 @@ public:
         m_state.selection_invisible = selection_invisible;
     }
 
-    void set_cam_quat(const glm::quat &q);
+    // sync_animator resyncs the rotation animator to this value so a pending
+    // animation frame can't overwrite it afterwards; the animation system's
+    // own per-frame update passes false to avoid self-cancelling.
+    void set_cam_quat(const glm::quat &q, bool sync_animator = true);
 
     const glm::quat &get_cam_quat() const
     {
@@ -157,7 +160,8 @@ public:
     }
 
     enum class ZoomCenter { SCREEN, CURSOR };
-    void set_cam_distance(float dist, ZoomCenter zoom_center);
+    // See set_cam_quat() for sync_animator.
+    void set_cam_distance(float dist, ZoomCenter zoom_center, bool sync_animator = true);
     void animate_zoom(float factor, ZoomCenter zoom_center);
 
     glm::vec3 get_center() const

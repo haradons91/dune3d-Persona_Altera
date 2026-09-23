@@ -9,6 +9,11 @@ public:
     double get_s_delta();
     void start(double init = 0);
     void stop();
+    // Immediately jump to value and stop: unlike stop() alone, this also
+    // resyncs the underlying simulated position, so a tick callback that
+    // reads get_s() after a direct (non-animated) set can't still see the
+    // animator's stale in-flight value and clobber it on the next frame.
+    void set(double value);
     float target = 0;
     bool is_running() const;
 
