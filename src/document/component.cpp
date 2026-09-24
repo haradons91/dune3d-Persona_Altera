@@ -7,6 +7,10 @@ Component::Component(const UUID &uu) : m_uuid(uu)
 {
 }
 
+Component::Component(const UUID &uu, const UUID &reference_group_uuid) : m_uuid(uu), m_document(reference_group_uuid)
+{
+}
+
 Component::Component(const UUID &uu, const json &j, const std::filesystem::path &containing_dir)
     : m_uuid(uu), m_name(j.at("name").get<std::string>()), m_document(j.at("document"), containing_dir)
 {

@@ -21,6 +21,11 @@ using json = nlohmann::json;
 class Component {
 public:
     explicit Component(const UUID &uu);
+    // reference_group_uuid: see Document::Document(const UUID&) -- lets a
+    // component created by extracting groups out of an existing document
+    // share that document's Reference group UUID, so moved sketches' wrkpl
+    // references keep resolving without remapping.
+    explicit Component(const UUID &uu, const UUID &reference_group_uuid);
     explicit Component(const UUID &uu, const json &j, const std::filesystem::path &containing_dir);
     Component(const Component &other) = default; // Document's own copy ctor deep-clones m_document
 

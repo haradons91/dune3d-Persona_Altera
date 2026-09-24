@@ -590,10 +590,16 @@ bool Core::maybe_end_tool(const ToolResponse &r)
         const auto ended_tool_id = m_tool->get_id();
         const auto current_group = r.get_current_group();
         m_tool.reset();
+        // Apply the tool's requested current_group before emitting
+        // tool_changed: a listener (e.g. a canvas redraw) may run
+        // synchronously off this signal, and if the *previous* current
+        // group no longer exists in the document -- which a tool that
+        // moves its own current group elsewhere (e.g. "New Component from
+        // Body") can cause -- rendering with the stale UUID throws.
+        if (r.result == ToolResponse::Result::COMMIT && current_group)
+            set_current_group(current_group);
         m_signal_tool_changed.emit();
         if (r.result == ToolResponse::Result::COMMIT) {
-            if (current_group)
-                set_current_group(current_group);
             // const auto comment = action_catalog.at(tool_id_current).name;
             const auto comment = "tool";
             rebuild_internal(false, comment);

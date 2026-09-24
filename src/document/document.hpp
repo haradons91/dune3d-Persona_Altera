@@ -34,6 +34,7 @@ struct ItemsToDelete {
 class Document {
 public:
     Document();
+    explicit Document(const UUID &reference_group_uuid);
     explicit Document(const json &j, const std::filesystem::path &containing_dir);
     static Document new_from_file(const std::filesystem::path &path);
     Document(const Document &other);
@@ -168,6 +169,7 @@ public:
     const Component *get_component_ptr(const UUID &uu) const;
 
     Component &add_component(const UUID &uu);
+    Component &add_component(const UUID &uu, const UUID &reference_group_uuid);
 
     template <typename T = Group> const T &get_group(const UUID &uu) const
     {
@@ -221,6 +223,13 @@ public:
 
     void erase_invalid();
     void update_pending(const UUID &last_group = UUID(), const std::vector<EntityAndPoint> &dragged = {});
+
+    // Moves the given groups (and the entities/constraints owned by them)
+    // out of this Document and into dest, appended after dest's existing
+    // groups, re-indexed to keep dest's timeline contiguous. Used by "New
+    // Component from Selection" to splice a body's groups into a new
+    // Component's own Document. group_uuids order is preserved.
+    void extract_groups(const std::vector<UUID> &group_uuids, Document &dest);
 
     void set_group_generate_pending(const UUID &group);
     void set_group_solve_pending(const UUID &group);

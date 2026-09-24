@@ -43,6 +43,8 @@
 #include "tools/tool_constrain_symmetric_hv.hpp"
 #include "tools/tool_constrain_symmetric_line.hpp"
 #include "tools/tool_link_document.hpp"
+#include "tools/tool_create_component.hpp"
+#include "tools/tool_insert_occurrence.hpp"
 #include "tools/tool_constrain_distance_aligned.hpp"
 #include "tools/tool_import_dxf.hpp"
 #include "tools/tool_create_cluster.hpp"
@@ -356,6 +358,12 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
     case ToolID::CONVERT_TO_LINE_TANGENT_ON_BEZIER_CONSTRAINT:
     case ToolID::CONVERT_TO_LINE_PERPENDICULAR_ON_BEZIER_CONSTRAINT:
         return std::make_unique<ToolConvertPointOnBezierConstraint>(tool_id, *this, m_intf, flags);
+
+    case ToolID::CREATE_COMPONENT:
+        return std::make_unique<ToolCreateComponent>(tool_id, *this, m_intf, flags);
+
+    case ToolID::INSERT_OCCURRENCE:
+        return std::make_unique<ToolInsertOccurrence>(tool_id, *this, m_intf, flags);
     }
     throw std::runtime_error("unknown tool");
 }

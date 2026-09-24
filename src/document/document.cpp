@@ -69,9 +69,21 @@ unsigned int Document::get_app_version()
     return app_version;
 }
 
-Document::Document() : m_version(app_version)
+Document::Document() : Document(UUID::random())
 {
-    auto &grp = add_group<GroupReference>(UUID::random());
+}
+
+// Used when constructing a Component's Document so its Reference group can
+// share the *source* document's Reference group UUID (see
+// Document::extract_groups() callers): workplane UUIDs are derived from
+// their owning Reference group's UUID (hash_uuids), so a sketch moved into
+// the component keeps resolving its wrkpl reference correctly without any
+// remapping, as long as both Documents' Reference groups share a UUID.
+// Sharing a UUID across two independent Documents' own maps is safe -- it's
+// only ever looked up within its own Document's m_groups/m_entities.
+Document::Document(const UUID &reference_group_uuid) : m_version(app_version)
+{
+    auto &grp = add_group<GroupReference>(reference_group_uuid);
     grp.m_name = "Reference";
     grp.m_body.emplace();
 
@@ -172,6 +184,14 @@ Component &Document::add_component(const UUID &uu)
     return *p;
 }
 
+Component &Document::add_component(const UUID &uu, const UUID &reference_group_uuid)
+{
+    auto c = std::make_unique<Component>(uu, reference_group_uuid);
+    auto p = c.get();
+    m_components.emplace(uu, std::move(c));
+    return *p;
+}
+
 bool Document::apply_version_upgrades()
 {
     bool did_upgrade = false;
@@ -239,6 +259,41 @@ void Document::update_groups_sorted()
     m_groups_sorted_const.clear();
     m_groups_sorted_const.reserve(m_groups_sorted.size());
     m_groups_sorted_const.insert(m_groups_sorted_const.end(), m_groups_sorted.begin(), m_groups_sorted.end());
+}
+
+void Document::extract_groups(const std::vector<UUID> &group_uuids, Document &dest)
+{
+    int next_index = static_cast<int>(dest.get_groups_sorted().size());
+    for (const auto &uu : group_uuids) {
+        auto it = m_groups.find(uu);
+        if (it == m_groups.end())
+            continue;
+
+        for (auto eit = m_entities.begin(); eit != m_entities.end();) {
+            if (eit->second->m_group == uu) {
+                dest.m_entities.emplace(eit->first, std::move(eit->second));
+                eit = m_entities.erase(eit);
+            }
+            else {
+                ++eit;
+            }
+        }
+        for (auto cit = m_constraints.begin(); cit != m_constraints.end();) {
+            if (cit->second->m_group == uu) {
+                dest.m_constraints.emplace(cit->first, std::move(cit->second));
+                cit = m_constraints.erase(cit);
+            }
+            else {
+                ++cit;
+            }
+        }
+
+        it->second->set_index(Badge<Document>{}, next_index++);
+        dest.m_groups.emplace(uu, std::move(it->second));
+        m_groups.erase(it);
+    }
+    update_groups_sorted();
+    dest.update_groups_sorted();
 }
 
 std::vector<Document::BodyGroups> Document::get_groups_by_body() const

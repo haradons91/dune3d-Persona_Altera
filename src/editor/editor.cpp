@@ -1235,6 +1235,13 @@ void Editor::init_header_bar()
         auto derive = actions->add_action("derive", [] {});
         insert_svg->set_enabled(false);
         derive->set_enabled(false);
+        // New Component/Insert Occurrence are the first two actions of the
+        // in-project Component/Occurrence system -- placed here for now
+        // alongside "Insert Component" (linking an *external* file, a
+        // different, pre-existing feature) since there's no dedicated
+        // assembly panel yet.
+        actions->add_action("new_component", [this] { trigger_action(ToolID::CREATE_COMPONENT); });
+        actions->add_action("insert_occurrence", [this] { trigger_action(ToolID::INSERT_OCCURRENCE); });
         m_win.insert_action_group("ribbon_insert", actions);
         menu->append("Insert Image", "ribbon_insert.insert_image");
         menu->append("Insert SVG", "ribbon_insert.insert_svg");
@@ -1243,6 +1250,8 @@ void Editor::init_header_bar()
         menu->append("Insert Mesh", "ribbon_insert.insert_mesh");
         menu->append("Insert Component", "ribbon_insert.insert_component");
         menu->append("Insert Derive", "ribbon_insert.derive");
+        menu->append("New Component from Body", "ribbon_insert.new_component");
+        menu->append("Insert Occurrence", "ribbon_insert.insert_occurrence");
         auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
         m_win.get_ribbon_insert_menu_button().set_popover(*popover);
     }
