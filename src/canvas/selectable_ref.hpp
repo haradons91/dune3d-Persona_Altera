@@ -1,6 +1,7 @@
 #pragma once
 #include "util/uuid.hpp"
 #include "document/entity/entity_and_point.hpp"
+#include <vector>
 
 namespace dune3d {
 class SelectableRef {
@@ -18,6 +19,14 @@ public:
     Type type;
     UUID item;
     unsigned int point;
+    // Chain of EntityOccurrence UUIDs (outermost first) leading from the
+    // root Document to whichever Document actually owns `item` -- empty
+    // means item lives directly in the root Document, which is every
+    // SelectableRef constructed before Components/Occurrences existed and
+    // still the overwhelming majority today. Resolve with
+    // resolve_occurrence_path() (src/document/occurrence_path.hpp) rather
+    // than assuming `item` is always a root-document UUID.
+    std::vector<UUID> occurrence_path;
 
     bool is_entity() const
     {

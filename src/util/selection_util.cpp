@@ -12,6 +12,8 @@
 #include "canvas/selectable_ref.hpp"
 #include "core/idocument_info.hpp"
 #include "core/idocument_provider.hpp"
+#include "document/component.hpp"
+#include "document/occurrence_path.hpp"
 #include <format>
 #include <algorithm>
 
@@ -290,8 +292,24 @@ static std::string get_workplane_description(const Document &doc, const UUID &wr
 std::string get_selectable_ref_description(IDocumentProvider &prv, const UUID &current_doc, const SelectableRef &sr)
 {
     auto &doci = prv.get_idocument_info(current_doc);
-    const auto &doc = doci.get_document();
+    const Document *doc_ptr = &doci.get_document();
     const UUID current_group = doci.get_current_group();
+    std::string prefix;
+    if (!sr.occurrence_path.empty()) {
+        // resolve_occurrence_path never mutates; const_cast is safe here
+        // rather than threading non-const document access through just for
+        // this read-only description helper.
+        try {
+            auto loc = resolve_occurrence_path(const_cast<Document &>(*doc_ptr), sr.occurrence_path);
+            doc_ptr = &loc.doc;
+            if (loc.component)
+                prefix = loc.component->m_name + ": ";
+        }
+        catch (const std::exception &) {
+            return "occurrence item (stale reference)";
+        }
+    }
+    const auto &doc = *doc_ptr;
     std::string label;
     switch (sr.type) {
     case SelectableRef::Type::ENTITY: {
@@ -374,7 +392,7 @@ std::string get_selectable_ref_description(IDocumentProvider &prv, const UUID &c
         label = "Extrusion handle";
     } break;
     }
-    return label;
+    return prefix + label;
 }
 
 static std::set<EntityAndPoint> coincident_enps_from_enp(const Document &doc, const EntityAndPoint &enp,

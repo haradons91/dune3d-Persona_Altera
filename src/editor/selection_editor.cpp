@@ -11,6 +11,7 @@
 #include "document/entity/entity_picture.hpp"
 #include "document/constraint/constraint.hpp"
 #include "util/selection_util.hpp"
+#include "document/occurrence_path.hpp"
 #include "util/gtk_util.hpp"
 #include "util/fs_util.hpp"
 #include "util/text_render.hpp"
@@ -48,18 +49,31 @@ public:
         set_row_spacing(5);
         set_column_spacing(5);
         using ItemType = std::variant<Entity::Type, Constraint::Type>;
-        std::set<std::pair<SelectableRef::Type, UUID>> items;
-        for (const auto &sr : sel) {
-            items.emplace(sr.type, sr.item);
-        }
+        std::set<std::pair<SelectableRef::Type, UUID>> seen;
         std::map<ItemType, unsigned int> item_count;
-        for (const auto &[type, uu] : items) {
-            if (type == SelectableRef::Type::ENTITY) {
-                if (auto en = doc.get_entity_ptr(uu))
+        for (const auto &sr : sel) {
+            if (!seen.emplace(sr.type, sr.item).second)
+                continue;
+            // sr.item may live in a Component's own Document rather than
+            // this one -- resolve through occurrence_path first instead of
+            // assuming it's always in `doc` (stale paths are skipped, same
+            // as the existing get_..._ptr() null-check below already does
+            // for a missing item).
+            const Document *item_doc = &doc;
+            if (!sr.occurrence_path.empty()) {
+                try {
+                    item_doc = &resolve_occurrence_path(doc, sr.occurrence_path).doc;
+                }
+                catch (const std::exception &) {
+                    continue;
+                }
+            }
+            if (sr.type == SelectableRef::Type::ENTITY) {
+                if (auto en = item_doc->get_entity_ptr(sr.item))
                     item_count[en->get_type()]++;
             }
-            else if (type == SelectableRef::Type::CONSTRAINT) {
-                if (auto co = doc.get_constraint_ptr(uu))
+            else if (sr.type == SelectableRef::Type::CONSTRAINT) {
+                if (auto co = item_doc->get_constraint_ptr(sr.item))
                     item_count[co->get_type()]++;
             }
         }

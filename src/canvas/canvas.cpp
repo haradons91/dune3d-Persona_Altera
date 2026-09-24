@@ -1854,6 +1854,8 @@ void Canvas::add_selectable(const VertexRef &vref, const SelectableRef &sref)
     SelectableRef sr = sref;
     if (m_override_selectable.has_value())
         sr = m_override_selectable.value();
+    else if (!m_occurrence_path_stack.empty())
+        sr.occurrence_path = m_occurrence_path_stack.back();
     m_vertex_to_selectable_map.emplace(vref, sr);
     m_selectable_to_vertex_map[sr].push_back(vref);
     if (m_selection_to_restore.contains(sr))
@@ -2151,6 +2153,17 @@ void Canvas::unset_override_selectable()
         m_override_selectable_count--;
     if (m_override_selectable_count == 0)
         m_override_selectable.reset();
+}
+
+void Canvas::set_occurrence_path(const std::vector<UUID> &path)
+{
+    m_occurrence_path_stack.push_back(path);
+}
+
+void Canvas::clear_occurrence_path()
+{
+    if (!m_occurrence_path_stack.empty())
+        m_occurrence_path_stack.pop_back();
 }
 
 glm::vec3 Canvas::transform_point(glm::dvec3 p) const

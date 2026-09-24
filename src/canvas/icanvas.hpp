@@ -4,6 +4,8 @@
 #include "face.hpp"
 #include <glm/gtx/quaternion.hpp>
 #include <memory>
+#include <vector>
+#include "util/uuid.hpp"
 
 namespace dune3d {
 
@@ -105,6 +107,18 @@ public:
 
     virtual void set_override_selectable(const SelectableRef &sr) = 0;
     virtual void unset_override_selectable() = 0;
+
+    // Like set_override_selectable, but tags newly-added selectables with
+    // an occurrence path instead of collapsing them to a single ref --
+    // used by occurrence rendering (Renderer::visit(const EntityOccurrence&))
+    // so individual entities inside a placed component stay individually
+    // selectable (in the reported-location sense; edit-in-place is a later
+    // milestone), unlike EntityCluster/EntityDocument's existing
+    // collapse-to-one-ref behavior via set_override_selectable. Nestable:
+    // each call pushes a (deeper) path; clear pops it, so returning to an
+    // outer occurrence's render call restores its own (shallower) path.
+    virtual void set_occurrence_path(const std::vector<UUID> &path) = 0;
+    virtual void clear_occurrence_path() = 0;
 
     virtual void update_bbox() = 0;
     virtual glm::vec3 get_cam_normal() const = 0;

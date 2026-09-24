@@ -261,6 +261,8 @@ public:
 
     void set_override_selectable(const SelectableRef &sr) override;
     void unset_override_selectable() override;
+    void set_occurrence_path(const std::vector<UUID> &path) override;
+    void clear_occurrence_path() override;
 
     void set_transform(const glm::mat4 &transform) override;
     void set_transform_d(const glm::mat4 &rotation, const glm::dvec3 &origin) override;
@@ -514,6 +516,11 @@ private:
 
     std::optional<SelectableRef> m_override_selectable;
     unsigned int m_override_selectable_count = 0;
+
+    // Stack (not a ref-counted single value like m_override_selectable)
+    // since nested occurrence renders each push a deeper, distinct path --
+    // see set_occurrence_path().
+    std::vector<std::vector<UUID>> m_occurrence_path_stack;
 
     struct State {
         glm::mat4 transform;

@@ -370,8 +370,17 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
     if (m_first_group)
         first_group_index = doc.get_group(m_first_group).get_index();
 
-    if (sr)
+    // EntityDocument/EntityCluster (occurrence_path empty) still collapse
+    // everything inside to one outer ref via the override mechanism, as
+    // before. EntityOccurrence (occurrence_path non-empty) uses the newer
+    // path-tagging instead, so individual entities inside a placed
+    // component keep their own identity rather than collapsing -- sr is
+    // still passed in that case purely to drive m_is_current_document
+    // above.
+    if (sr && m_occurrence_path.empty())
         m_ca.set_override_selectable(*sr);
+    if (!m_occurrence_path.empty())
+        m_ca.set_occurrence_path(m_occurrence_path);
 
 
     if (m_solid_model_edge_select_mode) {
@@ -771,8 +780,10 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
     m_doc_view = nullptr;
     m_workspace_view = nullptr;
     m_current_group = nullptr;
-    if (sr)
+    if (sr && m_occurrence_path.empty())
         m_ca.unset_override_selectable();
+    if (!m_occurrence_path.empty())
+        m_ca.clear_occurrence_path();
 }
 
 void Renderer::render(const Entity &entity)

@@ -50,6 +50,7 @@ src_common = files(
   'src/util/uuid.cpp',
   'src/document/document.cpp',
   'src/document/component.cpp',
+  'src/document/occurrence_path.cpp',
   'src/document/entity/entity.cpp',
   'src/document/entity/entity_and_point.cpp',
   'src/document/entity/entity_line3d.cpp',

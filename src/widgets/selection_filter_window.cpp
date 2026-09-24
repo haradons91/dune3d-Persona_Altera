@@ -63,6 +63,12 @@ bool SelectionFilterWindow::can_select(const SelectableRef &sr) const
             return false;
         if (!m_current_group_only_cb->get_active())
             return true;
+        // "current group" is a root-document concept; an item inside a
+        // placed Occurrence doesn't have a meaningful relationship to it,
+        // and its item UUID isn't in the root document's map at all (using
+        // the throwing get_entity() here would crash). Don't filter it out.
+        if (!sr.occurrence_path.empty())
+            return true;
         const auto group = m_core.get_current_document().get_entity(sr.item).m_group;
         return group == m_core.get_current_group();
     }
@@ -70,6 +76,8 @@ bool SelectionFilterWindow::can_select(const SelectableRef &sr) const
         if (!m_constraints_cb->get_active())
             return false;
         if (!m_current_group_only_cb->get_active())
+            return true;
+        if (!sr.occurrence_path.empty())
             return true;
         const auto group = m_core.get_current_document().get_constraint(sr.item).m_group;
         return group == m_core.get_current_group();
