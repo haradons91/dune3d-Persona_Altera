@@ -10,6 +10,8 @@
 #include "document/entity/entity_line2d.hpp"
 #include "document/entity/entity_arc2d.hpp"
 #include "document/entity/entity_document.hpp"
+#include "document/entity/entity_circle2d.hpp"
+#include "document/component.hpp"
 #include "system/system.hpp"
 #include "util/fs_util.hpp"
 #include "util/picture_load.hpp"
@@ -157,9 +159,32 @@ static std::filesystem::path get_picture_dir_from_document_filename(const std::f
     return dn / path_from_string(wsn + "pic");
 }
 
+// Milestone 2 proof-of-concept for live-instancing: bump the radius of the
+// first circle found in the first Component's document, so a screenshot of
+// the resulting file shows whether every occurrence of that component
+// picked up the change. Temporary -- to be replaced by a real edit-in-place
+// UI (a later milestone); no user-facing trigger, opt-in via env var only.
+static void debug_bump_first_component_circle(Document &doc)
+{
+    if (!getenv("DUNE3D_DEBUG_BUMP_COMPONENT"))
+        return;
+    for (const auto &[comp_uu, unused] : doc.get_components()) {
+        auto *component = doc.get_component_ptr(comp_uu);
+        for (auto &[en_uu, en] : component->m_document.m_entities) {
+            if (auto *circle = dynamic_cast<EntityCircle2D *>(en.get())) {
+                circle->m_radius += 20;
+                component->m_document.set_group_solve_pending(circle->m_group);
+                component->m_document.update_pending();
+                return;
+            }
+        }
+    }
+}
+
 Core::DocumentInfo::DocumentInfo(const UUID &uu, const std::filesystem::path &path)
     : m_uuid(uu), m_path(path), m_doc(Document::new_from_file(path))
 {
+    debug_bump_first_component_circle(*m_doc);
     pictures_load(*m_doc, get_picture_dir_from_document_filename(m_path));
     history_push("init");
     m_current_group = m_doc->get_groups_sorted().back()->m_uuid;
