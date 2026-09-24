@@ -57,6 +57,17 @@ void main() {
 	vec4 p1x = p2_to_geom[0] / p2_to_geom[0].w;
 	
 	vec2 v = p1x.xy-p0x.xy;
+	// A zero-length segment (both endpoints coincide) is a deliberate "join
+	// patch": two consecutive segments of a tessellated curve (circle, arc)
+	// only ever meet at some angle, never perfectly collinear, so the cap
+	// extension below -- which only fully closes the gap for near-collinear
+	// joints -- leaves a visible gap at a sharp enough angle no matter how
+	// finely the curve is tessellated. A join patch plugs that gap directly
+	// with a line_width-sized square at the shared vertex. Pick an arbitrary
+	// direction here so the same cap/perpendicular math below still produces
+	// that square instead of propagating NaNs from normalize(vec2(0)).
+	if (dot(v, v) < 1e-12)
+		v = vec2(1.0, 0.0);
 	float width_scale = 1.0;
 	if(FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_LINE_THINNER))
 		width_scale = .25;

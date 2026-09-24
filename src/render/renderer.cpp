@@ -841,6 +841,9 @@ void Renderer::visit(const EntityLine3D &line)
         // while extrusion editing is active.
         return;
     }
+    // See EntityLine2D's visit(): must not inherit a leftover thin/thinner
+    // style from the grid/dimension-helper pass rendered earlier.
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
     m_ca.add_selectable(m_ca.draw_line(line.m_p1, line.m_p2),
                         SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 0});
     if (line.m_no_points)
@@ -881,6 +884,32 @@ void Renderer::visit(const EntityPoint2D &point)
 }
 
 namespace {
+// Shared by ArcDiscretizer and full-circle rendering: bound the sagitta error
+// to roughly a quarter pixel. This keeps small arcs/circles inexpensive
+// while automatically refining large or closely zoomed ones. A fixed segment
+// count (the previous approach for circles) looks fine at the zoom level it
+// was tuned for, but at other zooms/radii each chord subtends a large enough
+// angle that the line shader's same-direction cap extension (meant for
+// near-collinear joints) can't fully close the gap between segments,
+// showing up as a dashed-looking outline. Finite limits keep a malformed or
+// extremely large arc/circle from creating unbounded work.
+unsigned int adaptive_circular_segment_count(double radius, double sweep, double world_per_pixel)
+{
+    world_per_pixel = std::max(world_per_pixel, 1e-9);
+    const auto max_sagitta = static_cast<double>(world_per_pixel) * 0.05;
+    unsigned int segments = 8;
+    if (radius > max_sagitta) {
+        const auto cosine = std::clamp(1.0 - max_sagitta / radius, -1.0, 1.0);
+        const auto sagitta_angle = 2.0 * std::acos(cosine);
+        const auto max_chord = static_cast<double>(world_per_pixel) * 1.0;
+        const auto chord_angle = 2.0 * std::asin(std::clamp(max_chord / (2.0 * radius), 0.0, 1.0));
+        const auto max_angle = std::min(sagitta_angle, chord_angle);
+        if (max_angle > 1e-6)
+            segments = static_cast<unsigned int>(std::ceil(sweep / max_angle));
+    }
+    return std::clamp(segments, 8u, 1024u);
+}
+
 class ArcDiscretizer {
 public:
     ArcDiscretizer(const EntityArc2D &arc, double world_per_pixel)
@@ -890,24 +919,7 @@ public:
         const auto a0 = c2pi(angle(arc.m_from - m_center));
         const auto a1 = c2pi(angle(arc.m_to - m_center));
         const auto sweep = c2pi(a1 - a0);
-        world_per_pixel = std::max(world_per_pixel, 1e-9);
-        // Bound the sagitta error to roughly a quarter pixel.  This keeps
-        // small arcs inexpensive while automatically refining large or
-        // closely zoomed arcs.  The renderer still uses finite limits so a
-        // malformed or extremely large arc cannot create unbounded work.
-        const auto max_sagitta = static_cast<double>(world_per_pixel) * 0.05;
-        unsigned int segments = 8;
-        if (m_radius > max_sagitta) {
-            const auto cosine = std::clamp(1.0 - max_sagitta / m_radius, -1.0, 1.0);
-            const auto sagitta_angle = 2.0 * std::acos(cosine);
-            const auto max_chord = static_cast<double>(world_per_pixel) * 1.0;
-            const auto chord_angle =
-                    2.0 * std::asin(std::clamp(max_chord / (2.0 * m_radius), 0.0, 1.0));
-            const auto max_angle = std::min(sagitta_angle, chord_angle);
-            if (max_angle > 1e-6)
-                segments = static_cast<unsigned int>(std::ceil(sweep / max_angle));
-        }
-        m_segments = std::clamp(segments, 8u, 1024u);
+        m_segments = adaptive_circular_segment_count(m_radius, sweep, world_per_pixel);
         m_dphi = sweep / m_segments;
         m_a0 = a0;
     }
@@ -950,9 +962,25 @@ void Renderer::visit(const EntityArc2D &arc)
         ArcDiscretizer ad{arc, m_ca.get_world_units_per_pixel()};
 
         glm ::dvec2 p0, p1;
+        // See visit(EntityCircle2D) for why internal joints need a patch.
+        // The arc's own two endpoints aren't included: they aren't shared
+        // with another segment of this arc.
+        std::vector<glm::dvec2> joints;
+        bool first = true;
         while (ad.next(p0, p1)) {
             m_ca.add_selectable(m_ca.draw_line(wrkpl.transform(p0) + offset, wrkpl.transform(p1) + offset),
                                 SelectableRef{SelectableRef::Type::ENTITY, arc.m_uuid, 0});
+            if (!first)
+                joints.push_back(p0);
+            first = false;
+        }
+        if (joints.size()) {
+            AutoSaveRestore asr{*this};
+            m_ca.set_selection_invisible(true);
+            for (const auto &j : joints) {
+                const auto joint = wrkpl.transform(j) + offset;
+                m_ca.draw_line(joint, joint);
+            }
         }
     }
     if (arc.m_group == m_current_group->m_uuid && m_curvature_comb_scale > 0 && !m_state.no_curvature_combs) {
@@ -987,20 +1015,41 @@ void Renderer::visit(const EntityArc2D &arc)
 
 void Renderer::visit(const EntityCircle2D &circle)
 {
+    // See EntityLine2D's visit() for why this reset is needed.
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(circle.m_wrkpl));
     const auto offset = get_sketch_geometry_offset();
 
     {
-        unsigned int segments = 64;
+        // A fixed segment count (the previous approach) looks fine at the
+        // zoom/radius it was tuned for, but elsewhere each chord subtends a
+        // large enough angle that the line shader's cap extension (meant for
+        // near-collinear joints) can't fully close the gap between segments,
+        // making the outline look dashed. Use the same adaptive tessellation
+        // as arcs (see ArcDiscretizer) so a circle always looks solid.
+        const unsigned int segments =
+                adaptive_circular_segment_count(circle.m_radius, 2 * M_PI, m_ca.get_world_units_per_pixel());
 
         float dphi = 2 * M_PI;
         dphi /= segments;
         float a = 0;
-        while (segments--) {
+        for (unsigned int i = 0; i < segments; i++) {
             const auto p0 = circle.m_center + euler(circle.m_radius, a);
             const auto p1 = circle.m_center + euler(circle.m_radius, a + dphi);
             m_ca.add_selectable(m_ca.draw_line(wrkpl.transform(p0) + offset, wrkpl.transform(p1) + offset),
                                 SelectableRef{SelectableRef::Type::ENTITY, circle.m_uuid, 0});
+            a += dphi;
+        }
+        // Plug the gap the cap-extension approximation in line-geometry.glsl
+        // leaves at each joint, independent of tessellation/zoom (see
+        // adaptive_circular_segment_count's comment). Not independently
+        // selectable -- it's a rendering patch, not a distinct feature.
+        AutoSaveRestore asr{*this};
+        m_ca.set_selection_invisible(true);
+        a = 0;
+        for (unsigned int i = 0; i < segments; i++) {
+            const auto joint = wrkpl.transform(circle.m_center + euler(circle.m_radius, a)) + offset;
+            m_ca.draw_line(joint, joint);
             a += dphi;
         }
     }
@@ -1010,17 +1059,32 @@ void Renderer::visit(const EntityCircle2D &circle)
 }
 void Renderer::visit(const EntityCircle3D &circle)
 {
+    // See EntityLine2D's visit(): must not inherit a leftover thin/thinner
+    // style from the grid/dimension-helper pass rendered earlier.
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
     {
-        unsigned int segments = 64;
+        // See visit(EntityCircle2D) for why this is adaptive rather than a
+        // fixed segment count.
+        const unsigned int segments =
+                adaptive_circular_segment_count(circle.m_radius, 2 * M_PI, m_ca.get_world_units_per_pixel());
 
         float dphi = 2 * M_PI;
         dphi /= segments;
         float a = 0;
-        while (segments--) {
+        for (unsigned int i = 0; i < segments; i++) {
             const auto p0 = circle.m_center + glm::rotate(circle.m_normal, glm::dvec3(euler(circle.m_radius, a), 0));
             const auto p1 =
                     circle.m_center + glm::rotate(circle.m_normal, glm::dvec3(euler(circle.m_radius, a + dphi), 0));
             m_ca.add_selectable(m_ca.draw_line(p0, p1), SelectableRef{SelectableRef::Type::ENTITY, circle.m_uuid, 0});
+            a += dphi;
+        }
+        // See visit(EntityCircle2D) for why these join patches are needed.
+        AutoSaveRestore asr{*this};
+        m_ca.set_selection_invisible(true);
+        a = 0;
+        for (unsigned int i = 0; i < segments; i++) {
+            const auto joint = circle.m_center + glm::rotate(circle.m_normal, glm::dvec3(euler(circle.m_radius, a), 0));
+            m_ca.draw_line(joint, joint);
             a += dphi;
         }
     }
@@ -1031,6 +1095,9 @@ void Renderer::visit(const EntityCircle3D &circle)
 
 void Renderer::visit(const EntityArc3D &arc)
 {
+    // See EntityLine2D's visit(): must not inherit a leftover thin/thinner
+    // style from the grid/dimension-helper pass rendered earlier.
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
     auto un = glm::rotate(arc.m_normal, glm::dvec3(1, 0, 0));
     auto vn = glm::rotate(arc.m_normal, glm::dvec3(0, 1, 0));
 
@@ -1048,19 +1115,34 @@ void Renderer::visit(const EntityArc3D &arc)
         const auto radius0 = glm::length(from2);
         const auto a0 = c2pi(angle(from2));
         const auto a1 = c2pi(angle(to2));
-        unsigned int segments = 64;
 
-        float dphi = c2pi(a1 - a0);
-        if (dphi < 1e-2)
-            dphi = 2 * M_PI;
-        dphi /= segments;
+        float sweep = c2pi(a1 - a0);
+        if (sweep < 1e-2)
+            sweep = 2 * M_PI;
+        // See visit(EntityCircle2D) for why this is adaptive rather than a
+        // fixed segment count.
+        const unsigned int segments = adaptive_circular_segment_count(radius0, sweep, m_ca.get_world_units_per_pixel());
+        const float dphi = sweep / segments;
         float a = a0;
-        while (segments--) {
+        for (unsigned int i = 0; i < segments; i++) {
             const auto p0 = euler(radius0, a);
             const auto p1 = euler(radius0, a + dphi);
             m_ca.add_selectable(m_ca.draw_line(transform(p0), transform(p1)),
                                 SelectableRef{SelectableRef::Type::ENTITY, arc.m_uuid, 0});
             a += dphi;
+        }
+        // See visit(EntityCircle2D) for why internal joints need a patch.
+        // The arc's own two endpoints aren't included: they aren't shared
+        // with another segment of this arc.
+        if (segments > 1) {
+            AutoSaveRestore asr{*this};
+            m_ca.set_selection_invisible(true);
+            a = a0 + dphi;
+            for (unsigned int i = 1; i < segments; i++) {
+                const auto joint = transform(euler(radius0, a));
+                m_ca.draw_line(joint, joint);
+                a += dphi;
+            }
         }
     }
 
@@ -1307,6 +1389,9 @@ void Renderer::visit(const EntityDocument &en)
 
 void Renderer::visit(const EntityBezier2D &bezier)
 {
+    // See EntityLine2D's visit(): must not inherit a leftover thin/thinner
+    // style from the grid/dimension-helper pass rendered earlier.
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(bezier.m_wrkpl));
     const auto p1 = wrkpl.transform(bezier.m_p1);
     const auto p2 = wrkpl.transform(bezier.m_p2);
@@ -1360,6 +1445,9 @@ void Renderer::visit(const EntityBezier2D &bezier)
 
 void Renderer::visit(const EntityBezier3D &bezier)
 {
+    // See EntityLine2D's visit(): must not inherit a leftover thin/thinner
+    // style from the grid/dimension-helper pass rendered earlier.
+    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
     const auto sr = SelectableRef{SelectableRef::Type::ENTITY, bezier.m_uuid, 0};
     unsigned int steps = 64;
     glm::vec3 last = bezier.m_p1;
