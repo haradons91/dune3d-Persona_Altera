@@ -73,26 +73,27 @@ void main() {
 		width_scale = .25;
 	else if(FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_LINE_THIN))
 		width_scale = .5;
+	// screen maps pixel deltas to NDC deltas, and NDC is scaled differently
+	// in x and y (viewport aspect ratio, plus zoom for x/y independently in
+	// ortho mode). v is in NDC, so normalize(v)/its perpendicular are only
+	// actually unit-length/perpendicular *on screen* when that scaling is
+	// uniform. At other angles this understated the perpendicular width and
+	// skewed it away from true-perpendicular, so do this part of the math in
+	// real (isotropic) pixels instead, converting back to NDC only for the
+	// final offset.
+	mat3 screen_inv = inverse(screen);
+	vec2 v_px = (screen_inv * vec3(v, 0)).xy;
 	// Extend the segment by half its rendered width.  The line is emitted as
 	// a rectangle with butt caps; without this screen-space cap extension,
 	// adjacent angled edges leave a visible gap even when their 3D endpoints
 	// are identical.
-	vec2 cap = normalize(v) * (line_width * width_scale / 2.0);
-	vec2 cap_ndc = (screen * vec3(cap, 0)).xy;
+	vec2 cap_px = normalize(v_px) * (line_width * width_scale / 2.0);
+	vec2 cap_ndc = (screen * vec3(cap_px, 0)).xy;
 	p0x.xy -= cap_ndc;
 	p1x.xy += cap_ndc;
-	// Use a true perpendicular to the segment direction.  The previous
-	// (-v.y, -v.x) vector becomes nearly parallel to diagonal segments,
-	// collapsing their rendered width and making curved geometry fade out.
-	vec2 o2 = vec2(-v.y, v.x);
-	o2 /= length(o2);
-	o2 *= line_width/2;
-	if(FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_LINE_THINNER))
-		o2 *= .25;
-	else if(FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_LINE_THIN))
-		o2 *= .5;
-	
-	vec4 o = vec4((screen*vec3(o2,0)).xy, 0, 0);
+	vec2 o2_px = normalize(vec2(-v_px.y, v_px.x)) * (line_width * width_scale / 2.0);
+
+	vec4 o = vec4((screen*vec3(o2_px,0)).xy, 0, 0);
 	
 	pick_to_frag = pick_to_geom[0];
 	flags_to_frag = flags_to_geom[0];
