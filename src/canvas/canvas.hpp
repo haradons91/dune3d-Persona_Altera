@@ -49,8 +49,8 @@ public:
     void clear() override;
     void clear_chunks(unsigned int first_chunk);
     VertexRef draw_point(glm::vec3 p) override;
-    VertexRef draw_line(glm::vec3 from, glm::vec3 to) override;
-    VertexRef draw_axis_line(glm::vec3 from, glm::vec3 to, Axis axis) override;
+    VertexRef draw_line(glm::dvec3 from, glm::dvec3 to) override;
+    VertexRef draw_axis_line(glm::dvec3 from, glm::dvec3 to, Axis axis) override;
     VertexRef draw_screen_line(glm::vec3 origin, glm::vec3 direction) override;
     std::vector<VertexRef> draw_bitmap_text(glm::vec3 p, float size, const std::string &rtext) override;
     std::vector<VertexRef> draw_bitmap_text_centered(glm::vec3 p, float size,
@@ -316,6 +316,15 @@ private:
     glm::mat3 m_screenmat;
     glm::vec3 m_cam_normal;
 
+    // m_viewmat is built relative to this point (~m_center) rather than the
+    // true world origin, so its translation stays small regardless of how
+    // far the camera has panned/zoomed from (0,0,0). Vertex positions must
+    // be shifted by -m_render_origin in double precision, before narrowing
+    // to float, to match -- see transform_point(). Without this, float32
+    // world coordinates far from the origin lose enough precision at high
+    // zoom to visibly corrupt the line-width offset in the geometry shader.
+    glm::dvec3 m_render_origin = {0, 0, 0};
+
     void update_mats();
 
     glm::dvec2 m_cursor_pos;
@@ -520,8 +529,8 @@ private:
     State m_state;
     std::vector<State> m_states;
 
-    glm::vec3 transform_point(glm::vec3 pt) const;
-    glm::vec3 transform_point_rel(glm::vec3 pt) const;
+    glm::vec3 transform_point(glm::dvec3 pt) const;
+    glm::vec3 transform_point_rel(glm::dvec3 pt) const;
 
     bool m_selection_peeling = false;
     bool m_selection_peeling_enabled = true;

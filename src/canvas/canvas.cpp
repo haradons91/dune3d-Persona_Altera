@@ -909,14 +909,18 @@ Canvas::pick_buf_t Canvas::read_pick_buf(const std::vector<pick_buf_t> &pick_buf
 
 glm::dvec3 Canvas::get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal) const
 {
+    // m_projmat_viewmat_inv maps into a space relative to m_render_origin
+    // (see update_mats()), so r/r2 come out relative -- shift origin into
+    // that same frame for the dot product, then shift the result back.
     auto r = m_projmat_viewmat_inv * glm::dvec4(m_cursor_pos, -1, 1);
     r /= r.w;
     auto r2 = m_projmat_viewmat_inv * glm::dvec4(m_cursor_pos, 1, 1);
     r2 /= r2.w;
     const auto mouse_normal = glm::dvec3(glm::normalize(r2 - r));
 
-    auto d = glm::dot(origin - glm::dvec3(r), normal) / glm::dot(normal, mouse_normal);
-    return glm::dvec3(r) + d * mouse_normal;
+    const auto origin_rel = origin - m_render_origin;
+    auto d = glm::dot(origin_rel - glm::dvec3(r), normal) / glm::dot(normal, mouse_normal);
+    return glm::dvec3(r) + d * mouse_normal + m_render_origin;
 }
 
 glm::dvec3 Canvas::get_cursor_pos() const
@@ -949,7 +953,8 @@ void Canvas::update_cursor_position(double x, double y)
 
 glm::dvec2 Canvas::project_to_window(glm::dvec3 point) const
 {
-    const auto p = m_projmat * m_viewmat * glm::dvec4(point, 1.0);
+    // m_viewmat is relative to m_render_origin -- see update_mats().
+    const auto p = m_projmat * m_viewmat * glm::dvec4(point - m_render_origin, 1.0);
     const auto ndc = glm::dvec3(p) / static_cast<double>(p.w);
     return {(ndc.x + 1.) * m_width / 2., (1. - ndc.y) * m_height / 2.};
 }
@@ -1121,7 +1126,11 @@ ICanvas::VertexRef Canvas::add_face_group(const face::Faces &faces, glm::vec3 or
     m_current_chunk->m_face_groups.push_back(CanvasChunk::FaceGroup{
             .offset = offset,
             .length = length,
-            .origin = origin,
+            // Vertex data uploaded via add_faces() is shifted by
+            // -m_render_origin (see transform_point()); this uniform is
+            // added to it in face-vertex.glsl, so it must be shifted the
+            // same way to stay in the same frame.
+            .origin = glm::vec3(glm::dvec3(origin) - m_render_origin),
             .normal = normal,
             .color = face_color,
     });
@@ -1159,8 +1168,15 @@ void Canvas::update_mats()
     auto cam_offset = glm::rotate(m_cam_quat, glm::vec3(0, 0, r));
     auto cam_pos = cam_offset + m_center;
 
-
-    m_viewmat = glm::lookAt(cam_pos, m_center, glm::rotate(m_cam_quat, glm::vec3(0, 1, 0)));
+    // Build the view matrix relative to m_center rather than the true world
+    // origin, so its translation stays small (bounded by m_cam_distance)
+    // regardless of how far the camera has panned. Vertex data is shifted
+    // by the matching -m_render_origin in double precision before being
+    // narrowed to float (see transform_point()), which is what actually
+    // avoids the precision loss -- this alone wouldn't do it, since the
+    // view matrix itself is still only float.
+    m_render_origin = glm::dvec3(m_center);
+    m_viewmat = glm::lookAt(cam_offset, glm::vec3(0), glm::rotate(m_cam_quat, glm::vec3(0, 1, 0)));
 
     float cam_dist_min = 1e6;
     float cam_dist_max = -1e6;
@@ -1604,7 +1620,7 @@ ICanvas::VertexRef Canvas::draw_point(glm::vec3 p)
     return draw_point(p, IconTexture::IconTextureID::POINT_BOX);
 }
 
-ICanvas::VertexRef Canvas::draw_line(glm::vec3 a, glm::vec3 b)
+ICanvas::VertexRef Canvas::draw_line(glm::dvec3 a, glm::dvec3 b)
 {
     auto &lines = m_state.selection_invisible ? m_current_chunk->m_lines_selection_invisible : m_current_chunk->m_lines;
     auto &li = lines.emplace_back(transform_point(a), transform_point(b));
@@ -1616,7 +1632,7 @@ ICanvas::VertexRef Canvas::draw_line(glm::vec3 a, glm::vec3 b)
     return {VertexType::LINE, m_current_chunk->m_lines.size() - 1, m_current_chunk_id};
 }
 
-ICanvas::VertexRef Canvas::draw_axis_line(glm::vec3 a, glm::vec3 b, ICanvas::Axis axis)
+ICanvas::VertexRef Canvas::draw_axis_line(glm::dvec3 a, glm::dvec3 b, ICanvas::Axis axis)
 {
     auto &lines = m_state.selection_invisible ? m_current_chunk->m_lines_selection_invisible : m_current_chunk->m_lines;
     auto &li = lines.emplace_back(transform_point(a), transform_point(b), axis);
@@ -2137,16 +2153,19 @@ void Canvas::unset_override_selectable()
         m_override_selectable.reset();
 }
 
-glm::vec3 Canvas::transform_point(glm::vec3 p) const
+glm::vec3 Canvas::transform_point(glm::dvec3 p) const
 {
-    auto r = m_state.transform * glm::vec4(p, 1);
-    return r;
+    // Apply the (float) group transform and the origin shift in double
+    // precision, and only narrow to float once the result is small
+    // (camera-relative) -- see m_render_origin.
+    const auto r = glm::dmat4(m_state.transform) * glm::dvec4(p, 1);
+    return glm::vec3(glm::dvec3(r) - m_render_origin);
 }
 
-glm::vec3 Canvas::transform_point_rel(glm::vec3 p) const
+glm::vec3 Canvas::transform_point_rel(glm::dvec3 p) const
 {
-    auto r = m_state.transform * glm::vec4(p, 0);
-    return r;
+    const auto r = glm::dmat4(m_state.transform) * glm::dvec4(p, 0);
+    return glm::vec3(r);
 }
 
 void Canvas::set_transform(const glm::mat4 &transform)

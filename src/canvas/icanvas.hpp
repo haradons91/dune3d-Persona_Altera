@@ -46,8 +46,13 @@ public:
 
     virtual void clear() = 0;
     virtual VertexRef draw_point(glm::vec3 p) = 0;
-    virtual VertexRef draw_line(glm::vec3 from, glm::vec3 to) = 0;
-    virtual VertexRef draw_axis_line(glm::vec3 from, glm::vec3 to, Axis axis) = 0;
+    // Lines take double precision: at extreme zoom the camera sits close to
+    // geometry that may be far from the world origin, and float32 world
+    // coordinates lose enough precision in the view transform to visibly
+    // thin out (or misplace) the line-width offset computed in the
+    // geometry shader. See Canvas::transform_point/m_render_origin.
+    virtual VertexRef draw_line(glm::dvec3 from, glm::dvec3 to) = 0;
+    virtual VertexRef draw_axis_line(glm::dvec3 from, glm::dvec3 to, Axis axis) = 0;
     virtual VertexRef draw_screen_line(glm::vec3 origin, glm::vec3 direction) = 0;
     virtual std::vector<VertexRef> draw_bitmap_text(glm::vec3 p, float size, const std::string &rtext) = 0;
     virtual std::vector<VertexRef> draw_bitmap_text_centered(glm::vec3 p, float size,
