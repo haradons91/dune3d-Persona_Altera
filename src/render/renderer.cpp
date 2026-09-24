@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 #include "canvas/icanvas.hpp"
 #include "document/document.hpp"
+#include "document/component.hpp"
 #include "document/entity/all_entities.hpp"
 #include "document/entity/entity_line2d.hpp"
 #include "document/group/group_extrude.hpp"
@@ -28,6 +29,7 @@
 #include <iomanip>
 #include <limits>
 #include <ranges>
+#include <algorithm>
 #include <sstream>
 #include <glm/gtx/io.hpp>
 #include <format>
@@ -345,7 +347,9 @@ glm::dvec3 Renderer::get_sketch_geometry_offset() const
 
 void Renderer::render(const Document &doc, const UUID &current_group, const IDocumentView &doc_view,
                       const IWorkspaceView &wrk_view, const std::filesystem::path &containing_dir,
-                      std::optional<SelectableRef> sr)
+                      std::optional<SelectableRef> sr, const Document *component_registry,
+                      glm::dvec3 accum_origin, glm::dquat accum_rot, std::vector<UUID> occurrence_path,
+                      std::vector<UUID> occurrence_active_stack)
 {
     DUNE3D_TRACE(DebugCategory::RENDER);
     m_doc = &doc;
@@ -356,6 +360,11 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
     m_is_current_document = !sr.has_value();
     m_containing_dir = containing_dir;
     m_curvature_comb_scale = m_workspace_view->get_curvature_comb_scale();
+    m_component_registry = component_registry ? component_registry : &doc;
+    m_accum_origin = accum_origin;
+    m_accum_rot = accum_rot;
+    m_occurrence_path = std::move(occurrence_path);
+    m_occurrence_active_stack = std::move(occurrence_active_stack);
 
     int first_group_index = 0;
     if (m_first_group)
@@ -1385,6 +1394,45 @@ void Renderer::visit(const EntityDocument &en)
     else {
         add_selectables(sr_origin, m_ca.draw_bitmap_text({0, 0, 0}, 1, path_to_string(en.m_path) + " not loaded"));
     }
+}
+
+void Renderer::visit(const EntityOccurrence &en)
+{
+    SelectableRef sr_origin{SelectableRef::Type::ENTITY, en.m_uuid, 1};
+    m_ca.add_selectable(m_ca.draw_point(en.m_origin, IconID::POINT_DIAMOND), sr_origin);
+
+    if (std::ranges::find(m_occurrence_active_stack, en.m_component) != m_occurrence_active_stack.end()) {
+        add_selectables(sr_origin, m_ca.draw_bitmap_text(en.m_origin, 1, "circular component reference"));
+        return;
+    }
+
+    auto *component = m_component_registry->get_component_ptr(en.m_component);
+    if (!component) {
+        add_selectables(sr_origin, m_ca.draw_bitmap_text(en.m_origin, 1, "component not found"));
+        return;
+    }
+
+    // Compose the placement in double precision across however many nested
+    // occurrences got us here, so large-coordinate/deeply-nested scenes
+    // don't reintroduce the float32 precision loss the floating-origin fix
+    // (Canvas::m_render_origin) addressed for the single-level case -- see
+    // Canvas::set_transform_d.
+    const auto new_origin = m_accum_origin + glm::rotate(m_accum_rot, en.m_origin);
+    const auto new_rot = m_accum_rot * en.m_normal;
+
+    AutoSaveRestore asr{*this};
+    m_ca.set_transform_d(glm::toMat4(glm::quat(new_rot)), new_origin);
+
+    auto new_path = m_occurrence_path;
+    new_path.push_back(en.m_uuid);
+    auto new_stack = m_occurrence_active_stack;
+    new_stack.push_back(en.m_component);
+
+    Renderer renderer{m_ca, m_doc_prv};
+    SelectableRef sr{SelectableRef::Type::ENTITY, en.m_uuid, 0};
+    renderer.render(component->m_document, component->m_document.get_groups_sorted().back()->m_uuid,
+                    FakeDocumentView{}, *m_workspace_view, m_containing_dir, sr, m_component_registry, new_origin,
+                    new_rot, new_path, new_stack);
 }
 
 void Renderer::visit(const EntityBezier2D &bezier)

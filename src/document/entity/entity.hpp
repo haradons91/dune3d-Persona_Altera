@@ -34,6 +34,7 @@ enum class EntityType {
     CLUSTER,
     TEXT,
     PICTURE,
+    OCCURRENCE,
 };
 
 class Entity {

@@ -11,6 +11,7 @@
 #include "group/group_reference.hpp"
 #include "group/group_sketch.hpp"
 #include "group/group_step.hpp"
+#include "component.hpp"
 #include "system/system.hpp"
 #include "util/debug.hpp"
 #include "logger/logger.hpp"
@@ -51,10 +52,17 @@ json Document::serialize() const
         }
         j["constraints"] = o;
     }
+    {
+        auto o = json::object();
+        for (const auto &[uu, it] : m_components) {
+            o[uu] = it->serialize();
+        }
+        j["components"] = o;
+    }
     return j;
 }
 
-static const unsigned int app_version = 39;
+static const unsigned int app_version = 40;
 
 unsigned int Document::get_app_version()
 {
@@ -98,6 +106,21 @@ Document::Document(const json &j, const std::filesystem::path &containing_dir) :
     for (const auto &[uu, it] : j.at("groups").items()) {
         load_and_log(m_groups, "Group", uu, it);
     }
+    // Old files simply have no "components" key -- they load as a document
+    // with no components, which is a perfectly valid, fully-functional
+    // document (matching how Fusion treats a single-part file as "one
+    // component" under the hood).
+    if (j.contains("components")) {
+        for (const auto &[uu, it] : j.at("components").items()) {
+            const auto dom = Logger::Domain::DOCUMENT;
+            try {
+                m_components.emplace(UUID(uu), std::make_unique<Component>(UUID(uu), it, containing_dir));
+            }
+            catch (const std::exception &e) {
+                Logger::log_warning("couldn't load Component " + uu, dom, e.what());
+            }
+        }
+    }
     // Documents created before GroupStep used a sketch group as the
     // container for imported STEP entities.  Upgrade those containers while
     // loading so the tree and timeline expose the correct group type.
@@ -123,6 +146,30 @@ Document::Document(const json &j, const std::filesystem::path &containing_dir) :
             set_group_generate_pending(get_groups_sorted().front()->m_uuid);
         update_pending();
     }
+}
+
+Component *Document::get_component_ptr(const UUID &uu)
+{
+    auto it = m_components.find(uu);
+    if (it == m_components.end())
+        return nullptr;
+    return it->second.get();
+}
+
+const Component *Document::get_component_ptr(const UUID &uu) const
+{
+    auto it = m_components.find(uu);
+    if (it == m_components.end())
+        return nullptr;
+    return it->second.get();
+}
+
+Component &Document::add_component(const UUID &uu)
+{
+    auto c = std::make_unique<Component>(uu);
+    auto p = c.get();
+    m_components.emplace(uu, std::move(c));
+    return *p;
 }
 
 bool Document::apply_version_upgrades()
@@ -159,6 +206,9 @@ Document::Document(const Document &other) : m_version(other.m_version)
     }
     for (const auto &[uu, it] : other.m_groups) {
         m_groups.emplace(uu, it->clone());
+    }
+    for (const auto &[uu, it] : other.m_components) {
+        m_components.emplace(uu, it->clone());
     }
     update_groups_sorted();
 }

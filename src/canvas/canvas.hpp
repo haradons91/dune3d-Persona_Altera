@@ -263,6 +263,7 @@ public:
     void unset_override_selectable() override;
 
     void set_transform(const glm::mat4 &transform) override;
+    void set_transform_d(const glm::mat4 &rotation, const glm::dvec3 &origin) override;
 
     void set_selection_menu_creator(ISelectionMenuCreator &creator)
     {
@@ -516,6 +517,17 @@ private:
 
     struct State {
         glm::mat4 transform;
+        // Double-precision translation composed on top of transform's
+        // rotation, used by occurrence rendering (see
+        // Canvas::set_transform_d/transform_point) so that placing content
+        // deep inside nested occurrences at large world coordinates doesn't
+        // reintroduce the float32 precision loss the floating-origin fix
+        // (m_render_origin) addressed for the single-level case. Plain
+        // set_transform() callers leave this untouched -- if they happen to
+        // be nested inside an occurrence (not the case today, but not
+        // precluded either), it correctly keeps composing rather than
+        // resetting to zero.
+        glm::dvec3 transform_origin = {0, 0, 0};
         bool selection_invisible = false;
         bool vertex_inactive = false;
         bool vertex_hover_only = false;

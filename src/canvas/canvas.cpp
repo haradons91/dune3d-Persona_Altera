@@ -2157,9 +2157,13 @@ glm::vec3 Canvas::transform_point(glm::dvec3 p) const
 {
     // Apply the (float) group transform and the origin shift in double
     // precision, and only narrow to float once the result is small
-    // (camera-relative) -- see m_render_origin.
+    // (camera-relative) -- see m_render_origin. transform_origin adds any
+    // double-precision translation composed by occurrence rendering (see
+    // set_transform_d) on top of transform's rotation, so a deeply nested
+    // occurrence at a large world coordinate never has its translation
+    // narrowed to float before the final camera-relative shift.
     const auto r = glm::dmat4(m_state.transform) * glm::dvec4(p, 1);
-    return glm::vec3(glm::dvec3(r) - m_render_origin);
+    return glm::vec3(glm::dvec3(r) + m_state.transform_origin - m_render_origin);
 }
 
 glm::vec3 Canvas::transform_point_rel(glm::dvec3 p) const
@@ -2171,6 +2175,12 @@ glm::vec3 Canvas::transform_point_rel(glm::dvec3 p) const
 void Canvas::set_transform(const glm::mat4 &transform)
 {
     m_state.transform = transform;
+}
+
+void Canvas::set_transform_d(const glm::mat4 &rotation, const glm::dvec3 &origin)
+{
+    m_state.transform = rotation;
+    m_state.transform_origin = origin;
 }
 
 void Canvas::save()

@@ -15,3 +15,4 @@
 #include "entity_cluster.hpp"
 #include "entity_text.hpp"
 #include "entity_picture.hpp"
+#include "entity_occurrence.hpp"

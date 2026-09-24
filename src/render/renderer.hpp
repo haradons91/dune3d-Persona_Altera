@@ -1,7 +1,9 @@
 #pragma once
 #include "util/uuid.hpp"
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <list>
+#include <vector>
 #include "document/group/all_groups_fwd.hpp"
 #include "document/entity/entity_visitor.hpp"
 #include "document/constraint/constraint_visitor.hpp"
@@ -28,9 +30,18 @@ enum class ConstraintType;
 class Renderer : private EntityVisitor, private ConstraintVisitor {
 public:
     Renderer(ICanvas &ca, IDocumentProvider &docprv);
+    // component_registry/accum_origin/accum_rot/occurrence_path/occurrence_active_stack
+    // are only ever passed explicitly by Renderer::visit(const EntityOccurrence&)
+    // when it recurses into a placed Component's own Document -- every other
+    // caller (the top-level render pass, EntityDocument's linked-document
+    // recursion) uses the defaults, which correctly mean "this Document is
+    // its own component registry, with no accumulated occurrence transform."
     void render(const Document &doc, const UUID &current_group, const IDocumentView &doc_view,
                 const IWorkspaceView &wrk_view, const std::filesystem::path &containing_dir,
-                std::optional<SelectableRef> sr);
+                std::optional<SelectableRef> sr, const Document *component_registry = nullptr,
+                glm::dvec3 accum_origin = {0, 0, 0},
+                glm::dquat accum_rot = glm::quat_identity<double, glm::defaultp>(),
+                std::vector<UUID> occurrence_path = {}, std::vector<UUID> occurrence_active_stack = {});
 
     bool m_solid_model_edge_select_mode = false;
     bool m_connect_curvature_comb = true;
@@ -69,6 +80,7 @@ private:
     void visit(const EntityCluster &en) override;
     void visit(const EntityText &en) override;
     void visit(const EntityPicture &en) override;
+    void visit(const EntityOccurrence &en) override;
     void visit(const ConstraintPointDistance &constr) override;
     void visit(const ConstraintPointDistanceHV &constr) override;
     void visit(const ConstraintPointsCoincident &constr) override;
@@ -116,6 +128,21 @@ private:
     std::filesystem::path m_containing_dir;
     bool m_is_current_document = true;
     UUID m_document_uuid;
+
+    // Occurrence recursion state -- see the render() overload above and
+    // visit(const EntityOccurrence&). m_component_registry is always the
+    // root Document that owns m_components (never whatever Document is
+    // currently being iterated); m_accum_origin/m_accum_rot are the
+    // world-space placement accumulated across however many nested
+    // occurrences got us here, composed in double precision so deeply
+    // nested, large-coordinate scenes don't reintroduce the float32
+    // precision loss the floating-origin fix (Canvas::m_render_origin)
+    // addressed for the single-level case.
+    const Document *m_component_registry = nullptr;
+    glm::dvec3 m_accum_origin = {0, 0, 0};
+    glm::dquat m_accum_rot = glm::quat_identity<double, glm::defaultp>();
+    std::vector<UUID> m_occurrence_path;
+    std::vector<UUID> m_occurrence_active_stack;
 
     bool group_is_visible(const UUID &uu) const;
 

@@ -56,6 +56,8 @@ std::string Entity::get_type_name(Type type, TypeNameStyle style)
         return "Text";
     case Type::PICTURE:
         return "Picture";
+    case Type::OCCURRENCE:
+        return "Occurrence";
     default:
         return "Entity";
     }
@@ -109,6 +111,8 @@ std::string Entity::get_type_name_plural(Type type, TypeNameStyle style)
         return "Texts";
     case Type::PICTURE:
         return "Pictures";
+    case Type::OCCURRENCE:
+        return "Occurrences";
     default:
         return "Entities";
     }
@@ -153,6 +157,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Entity::Type, {
                                                    {Entity::Type::CLUSTER, "cluster"},
                                                    {Entity::Type::TEXT, "text"},
                                                    {Entity::Type::PICTURE, "picture"},
+                                                   {Entity::Type::OCCURRENCE, "occurrence"},
                                            })
 
 json Entity::serialize_type(Type type)
@@ -198,6 +203,8 @@ std::unique_ptr<Entity> Entity::new_from_json(const UUID &uu, const json &j,
         return std::make_unique<EntityText>(uu, j);
     case Type::PICTURE:
         return std::make_unique<EntityPicture>(uu, j);
+    case Type::OCCURRENCE:
+        return std::make_unique<EntityOccurrence>(uu, j);
     case Type::INVALID:
         throw std::runtime_error("unknown entity type " + j.at("type").get<std::string>());
     }

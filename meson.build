@@ -49,6 +49,7 @@ endif
 src_common = files(
   'src/util/uuid.cpp',
   'src/document/document.cpp',
+  'src/document/component.cpp',
   'src/document/entity/entity.cpp',
   'src/document/entity/entity_and_point.cpp',
   'src/document/entity/entity_line3d.cpp',
@@ -66,6 +67,7 @@ src_common = files(
   'src/document/entity/entity_cluster.cpp',
   'src/document/entity/entity_text.cpp',
   'src/document/entity/entity_picture.cpp',
+  'src/document/entity/entity_occurrence.cpp',
   'src/document/constraint/constraint.cpp',
   'src/document/constraint/constraint_util.cpp',
   'src/document/constraint/constraint_points_coincident.cpp',
@@ -138,6 +140,7 @@ src_common = files(
   'src/document/group/group_solid_model_operation.cpp',
   'src/document/group/group_clone.cpp',
   'src/document/group/group_pipe.cpp',
+  'src/document/group/group_occurrence.cpp',
   'src/document/export_paths.cpp',
   'src/document/export_dxf.cpp',
   'src/system/system.cpp',

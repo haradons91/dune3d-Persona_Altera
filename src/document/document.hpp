@@ -17,6 +17,7 @@ class Constraint;
 class Group;
 class Body;
 class GroupReference;
+class Component;
 enum class GroupType;
 
 struct ItemsToDelete {
@@ -140,6 +141,34 @@ public:
         return m_groups;
     }
 
+    // Only the root Document (the one an open tab/IDocumentInfo owns) has a
+    // meaningfully populated m_components -- a Component's own m_document
+    // always leaves this empty. Nesting is expressed by EntityOccurrences
+    // referencing other entries of this one flat, UUID-keyed map, never by
+    // physically nesting Documents. Code resolving an occurrence's target
+    // must be passed the *root* Document explicitly (see Renderer's
+    // m_component_registry) rather than assuming "the current Document" is
+    // the registry, since that's only true when m_occurrence_path is empty.
+    const auto &get_components() const
+    {
+        return m_components;
+    }
+
+    template <typename T = Component> T &get_component(const UUID &uu)
+    {
+        return dynamic_cast<T &>(*m_components.at(uu));
+    }
+
+    template <typename T = Component> const T &get_component(const UUID &uu) const
+    {
+        return dynamic_cast<const T &>(*m_components.at(uu));
+    }
+
+    Component *get_component_ptr(const UUID &uu);
+    const Component *get_component_ptr(const UUID &uu) const;
+
+    Component &add_component(const UUID &uu);
+
     template <typename T = Group> const T &get_group(const UUID &uu) const
     {
         return dynamic_cast<const T &>(*m_groups.at(uu));
@@ -217,6 +246,7 @@ public:
     ~Document();
 
 private:
+    std::map<UUID, std::unique_ptr<Component>> m_components;
     std::map<UUID, std::unique_ptr<Group>> m_groups;
     std::vector<Group *> m_groups_sorted;
     std::vector<const Group *> m_groups_sorted_const;

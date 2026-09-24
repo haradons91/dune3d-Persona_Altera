@@ -94,6 +94,14 @@ public:
     virtual void set_show_default_points(bool c) = 0;
     virtual void set_line_style(LineStyle style) = 0;
     virtual void set_transform(const glm::mat4 &transform) = 0;
+    // Like set_transform, but the translation is a double-precision origin
+    // composed separately from the (rotation-only) matrix -- see
+    // Canvas::transform_point. Used for occurrence placement, where the
+    // translation may be at a large world coordinate reached through many
+    // nested occurrences, and narrowing it to float before it's combined
+    // with m_render_origin would reintroduce the precision loss the
+    // floating-origin fix addressed for ordinary geometry.
+    virtual void set_transform_d(const glm::mat4 &rotation, const glm::dvec3 &origin) = 0;
 
     virtual void set_override_selectable(const SelectableRef &sr) = 0;
     virtual void unset_override_selectable() = 0;

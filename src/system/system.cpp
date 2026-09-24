@@ -18,6 +18,7 @@
 #include "document/entity/entity_cluster.hpp"
 #include "document/entity/entity_text.hpp"
 #include "document/entity/entity_picture.hpp"
+#include "document/entity/entity_occurrence.hpp"
 #include "document/constraint/all_constraints.hpp"
 #include "document/group/group.hpp"
 #include "document/group/group_extrude.hpp"
@@ -503,6 +504,35 @@ void System::visit(const EntityDocument &en_doc)
         eb.group.v = group;
         for (unsigned int axis = 0; axis < 4; axis++) {
             eb.param[axis].v = add_param(en_doc.m_group, en_doc.m_uuid, 2, (axis + 3) % 4);
+        }
+        SK.entity.Add(&eb);
+    }
+}
+
+void System::visit(const EntityOccurrence &en_occ)
+{
+    const auto group = get_group_index(en_occ);
+
+    auto en_origin = get_entity_ref(EntityRef{en_occ.m_uuid, 1});
+    {
+        EntityBase eb = {};
+        eb.type = EntityBase::Type::POINT_IN_3D;
+        eb.h.v = en_origin;
+        eb.group.v = group;
+        for (unsigned int axis = 0; axis < 3; axis++) {
+            eb.param[axis].v = add_param(en_occ.m_group, en_occ.m_uuid, 1, axis);
+        }
+        SK.entity.Add(&eb);
+    }
+
+    auto en_normal = get_entity_ref(EntityRef{en_occ.m_uuid, 2});
+    {
+        EntityBase eb = {};
+        eb.type = EntityBase::Type::NORMAL_IN_3D;
+        eb.h.v = en_normal;
+        eb.group.v = group;
+        for (unsigned int axis = 0; axis < 4; axis++) {
+            eb.param[axis].v = add_param(en_occ.m_group, en_occ.m_uuid, 2, (axis + 3) % 4);
         }
         SK.entity.Add(&eb);
     }
