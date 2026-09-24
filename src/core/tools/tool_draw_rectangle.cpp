@@ -55,21 +55,27 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
             const auto cursor = get_cursor_pos_in_plane();
 
             if (m_mode == Mode::THREE_POINT) {
-                const auto edge_end = m_three_point_edge_set ? m_second_point : cursor;
-                const auto edge = edge_end - m_first_point;
-                const auto edge_length = glm::length(edge);
-                if (edge_length > 1e-12) {
-                    const auto normal = glm::dvec2(-edge.y, edge.x) / edge_length;
+                const auto edge_end_raw = m_three_point_edge_set ? m_second_point : cursor;
+                const auto raw_edge = edge_end_raw - m_first_point;
+                const auto raw_edge_length = glm::length(raw_edge);
+                if (raw_edge_length > 1e-12) {
+                    // dir/normal always follow the raw mouse direction, even
+                    // when a typed width/height is locked, so the user can
+                    // still aim the rectangle; only the magnitude along each
+                    // axis is held fixed by the lock.
+                    const auto dir = raw_edge / raw_edge_length;
+                    const auto normal = glm::dvec2(-dir.y, dir.x);
                     const auto width = m_three_point_edge_set ? glm::dot(cursor - m_first_point, normal) : 0.;
-                    const auto offset = normal * width;
+                    if (!m_width_locked)
+                        m_width = raw_edge_length;
+                    if (!m_height_locked)
+                        m_height = width;
+                    const auto edge_end = m_first_point + dir * m_width;
+                    const auto offset = normal * m_height;
                     p1 = m_first_point;
                     p2 = edge_end;
                     p3 = edge_end + offset;
                     p4 = m_first_point + offset;
-                    if (!m_width_locked)
-                        m_width = edge_length;
-                    if (!m_height_locked)
-                        m_height = width;
                 }
                 else {
                     p1 = m_first_point;
@@ -122,16 +128,48 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
             m_lines.at(3)->m_p1 = p4;
             m_lines.at(3)->m_p2 = p1;
             if (!m_width_locked || !m_height_locked) {
-                m_intf.update_rectangle_dimensions(m_width, m_height);
+                // The dimension window always draws its first box on the
+                // horizontal (local-X) guide and its second on the vertical
+                // (local-Y) guide -- that pairing is fixed by the widget, so
+                // the guide points themselves are never swapped. For an
+                // axis-aligned (corner/center) rectangle p2-p1 is always
+                // horizontal, so m_width is always the horizontal-guide
+                // value. For a 3-point rectangle whose first edge (m_width)
+                // runs closer to the workplane's Y axis than X, that edge is
+                // the one that's actually vertical, so swap *which value* is
+                // shown on which (still fixed) guide to keep each box
+                // aligned with the edge it represents.
+                const auto swap_values = std::abs(p2.y - p1.y) > std::abs(p2.x - p1.x);
+                const auto x_guide_value = swap_values ? m_height : m_width;
+                const auto y_guide_value = swap_values ? m_width : m_height;
+                // While placing a 3-point rectangle's first edge, only that
+                // edge's length (m_width) is meaningful yet -- the
+                // perpendicular dimension (m_height) is still a placeholder
+                // 0 until the second click. Hide whichever box would show
+                // that placeholder instead of displaying a misleading 0.
+                const bool placing_first_edge = m_mode == Mode::THREE_POINT && !m_three_point_edge_set;
+                const bool width_entry_visible = !placing_first_edge || !swap_values;
+                const bool height_entry_visible = !placing_first_edge || swap_values;
+                m_intf.update_rectangle_dimensions(x_guide_value, y_guide_value, width_entry_visible,
+                                                   height_entry_visible);
                 const auto x_min = std::min({p1.x, p2.x, p3.x, p4.x});
                 const auto x_max = std::max({p1.x, p2.x, p3.x, p4.x});
                 const auto y_min = std::min({p1.y, p2.y, p3.y, p4.y});
                 const auto y_max = std::max({p1.y, p2.y, p3.y, p4.y});
+                // Which side each box's guide line/text goes on is derived
+                // from where the first corner (p1) sits relative to the
+                // bounding box, not from m_width/m_height's sign: in
+                // 3-point mode m_width is glm::length(...), always >= 0, so
+                // it carries no direction information (unlike corner/center
+                // mode's pb-pa, which is signed). Comparing p1 itself to the
+                // bounds works uniformly for every mode.
+                const bool negative_x = p1.x == x_min;
+                const bool negative_y = p1.y == y_max;
                 m_intf.position_rectangle_dimensions(m_wrkpl->transform(m_first_point),
                                                       m_wrkpl->transform({x_min, p1.y}),
                                                       m_wrkpl->transform({x_max, p1.y}),
                                                       m_wrkpl->transform({p1.x, y_min}),
-                                                      m_wrkpl->transform({p1.x, y_max}), m_width > 0, m_height < 0);
+                                                      m_wrkpl->transform({p1.x, y_max}), negative_x, negative_y);
             }
             rectangle_debug_log(std::format(
                     "[rectangle-dim] MOVE anchor=({}, {}) cursor=({}, {}) corner=({}, {}) delta=({}, {}) "
@@ -308,13 +346,20 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
             if (data->event == ToolDataWindow::Event::UPDATE) {
                 rectangle_debug_log(std::format("[rectangle-dim] tool update width={} height={}", data->width,
                                                 data->height));
+                // See the MOVE handler for why a 3-point rectangle's first
+                // edge (m_width) can be the one that's actually vertical,
+                // requiring the incoming width/height box values to be
+                // swapped back onto the correct field.
+                const bool swap_values = m_mode == Mode::THREE_POINT && m_three_point_edge_set
+                                         && std::abs(m_second_point.y - m_first_point.y)
+                                                    > std::abs(m_second_point.x - m_first_point.x);
                 if (data->lock_width) {
-                    m_width = data->width;
-                    m_width_locked = true;
+                    (swap_values ? m_height : m_width) = data->width;
+                    (swap_values ? m_height_locked : m_width_locked) = true;
                 }
                 if (data->lock_height) {
-                    m_height = data->height;
-                    m_height_locked = true;
+                    (swap_values ? m_width : m_height) = data->height;
+                    (swap_values ? m_width_locked : m_height_locked) = true;
                 }
                 update_from_dimensions();
                 const auto x_min = std::min({m_lines[0]->m_p1.x, m_lines[0]->m_p2.x, m_lines[1]->m_p1.x,
@@ -329,12 +374,17 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
                 const auto y_max = std::max({m_lines[0]->m_p1.y, m_lines[0]->m_p2.y, m_lines[1]->m_p1.y,
                                              m_lines[1]->m_p2.y, m_lines[2]->m_p1.y, m_lines[2]->m_p2.y,
                                              m_lines[3]->m_p1.y, m_lines[3]->m_p2.y});
+                // See the MOVE handler for why the guide side is derived
+                // from the first corner's position rather than
+                // m_width/m_height's sign.
+                const auto &p1 = m_lines[0]->m_p1;
+                const bool negative_x = p1.x == x_min;
+                const bool negative_y = p1.y == y_max;
                 m_intf.position_rectangle_dimensions(m_wrkpl->transform(m_first_point),
-                                                      m_wrkpl->transform({x_min, m_lines[0]->m_p1.y}),
-                                                      m_wrkpl->transform({x_max, m_lines[0]->m_p1.y}),
-                                                      m_wrkpl->transform({m_lines[0]->m_p1.x, y_min}),
-                                                      m_wrkpl->transform({m_lines[0]->m_p1.x, y_max}),
-                                                      m_width > 0, m_height < 0);
+                                                      m_wrkpl->transform({x_min, p1.y}),
+                                                      m_wrkpl->transform({x_max, p1.y}),
+                                                      m_wrkpl->transform({p1.x, y_min}),
+                                                      m_wrkpl->transform({p1.x, y_max}), negative_x, negative_y);
             }
         }
     }
@@ -346,6 +396,31 @@ void ToolDrawRectangle::update_from_dimensions()
 {
     if (!m_lines.front())
         return;
+    if (m_mode == Mode::THREE_POINT) {
+        if (!m_three_point_edge_set)
+            return;
+        const auto raw_edge = m_second_point - m_first_point;
+        const auto raw_edge_length = glm::length(raw_edge);
+        if (raw_edge_length < 1e-12)
+            return;
+        // The typed width/height keep the edge along the direction the user
+        // already aimed with the mouse; only the magnitude changes.
+        const auto dir = raw_edge / raw_edge_length;
+        const auto normal = glm::dvec2(-dir.y, dir.x);
+        const auto p1 = m_first_point;
+        const auto p2 = m_first_point + dir * m_width;
+        const auto p3 = p2 + normal * m_height;
+        const auto p4 = m_first_point + normal * m_height;
+        m_lines[0]->m_p1 = p1;
+        m_lines[0]->m_p2 = p2;
+        m_lines[1]->m_p1 = p2;
+        m_lines[1]->m_p2 = p3;
+        m_lines[2]->m_p1 = p3;
+        m_lines[2]->m_p2 = p4;
+        m_lines[3]->m_p1 = p4;
+        m_lines[3]->m_p2 = p1;
+        return;
+    }
     glm::dvec2 pa = m_first_point;
     glm::dvec2 pb;
     if (m_mode == Mode::CORNER) {

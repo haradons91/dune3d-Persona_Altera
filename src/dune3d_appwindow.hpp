@@ -191,8 +191,10 @@ public:
     Gtk::Button &get_ribbon_sketch_btn_measure() { return *m_ribbon_sketch_btn_measure; }
 
     SketchPlaneSelector &get_sketch_plane_selector() { return *m_sketch_plane_selector; }
-    void show_rectangle_dimensions(double width, double height);
-    void update_rectangle_dimensions(double width, double height);
+    void show_rectangle_dimensions(double width, double height, bool width_visible = true,
+                                   bool height_visible = true);
+    void update_rectangle_dimensions(double width, double height, bool width_visible = true,
+                                     bool height_visible = true);
     void hide_rectangle_dimensions();
     void position_rectangle_dimensions(glm::dvec2 pos, glm::dvec2 x_min, glm::dvec2 x_max, glm::dvec2 y_min,
                                        glm::dvec2 y_max, bool negative_x, bool negative_y);

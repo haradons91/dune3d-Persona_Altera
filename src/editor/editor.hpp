@@ -48,8 +48,8 @@ public:
     glm::quat get_cam_quat() const override;
     glm::dvec3 get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal) const override;
     glm::dvec3 get_cursor_pos_for_workplane(const EntityWorkplane &workplane) const override;
-    void show_rectangle_dimensions(double width, double height) override;
-    void update_rectangle_dimensions(double width, double height) override;
+    void show_rectangle_dimensions(double width, double height, bool width_visible, bool height_visible) override;
+    void update_rectangle_dimensions(double width, double height, bool width_visible, bool height_visible) override;
     void hide_rectangle_dimensions() override;
     void position_rectangle_dimensions(glm::dvec3 origin, glm::dvec3 x_min, glm::dvec3 x_max, glm::dvec3 y_min,
                                        glm::dvec3 y_max, bool negative_x, bool negative_y) override;

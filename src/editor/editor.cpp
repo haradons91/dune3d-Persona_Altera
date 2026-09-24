@@ -1916,13 +1916,13 @@ glm::dvec3 Editor::get_cursor_pos_for_workplane(const EntityWorkplane &workplane
     return best_snap.value_or(cursor);
 }
 
-void Editor::show_rectangle_dimensions(double width, double height)
+void Editor::show_rectangle_dimensions(double width, double height, bool width_visible, bool height_visible)
 {
-    m_win.show_rectangle_dimensions(width, height);
+    m_win.show_rectangle_dimensions(width, height, width_visible, height_visible);
 }
-void Editor::update_rectangle_dimensions(double width, double height)
+void Editor::update_rectangle_dimensions(double width, double height, bool width_visible, bool height_visible)
 {
-    m_win.update_rectangle_dimensions(width, height);
+    m_win.update_rectangle_dimensions(width, height, width_visible, height_visible);
 }
 void Editor::show_extrude_dimension(double height)
 {

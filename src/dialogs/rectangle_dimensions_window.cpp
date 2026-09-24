@@ -104,17 +104,19 @@ RectangleDimensionsWindow::RectangleDimensionsWindow(EditorInterface &intf, doub
         controller->signal_key_pressed().connect(
                 [this, entry_ptr](guint keyval, guint, Gdk::ModifierType) {
                     if (keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab) {
-                        if (m_circle_mode || m_extrude_mode) {
-                            // Circle and fillet tools have one visible field;
-                            // never move focus to the hidden height entry.
-                            Glib::signal_idle().connect_once([this] { focus_and_select(*m_width); });
+                        auto *next_entry = entry_ptr == m_width ? m_height : m_width;
+                        if (m_circle_mode || m_extrude_mode || !next_entry->get_visible()) {
+                            // Only one field is visible (circle/fillet tools
+                            // always have one, and a 3-point rectangle's
+                            // first edge only defines one dimension yet);
+                            // never move focus to the hidden entry.
+                            Glib::signal_idle().connect_once([this, entry_ptr] { focus_and_select(*entry_ptr); });
                             return true;
                         }
                         rectangle_debug_log(std::format("[rectangle-input] Tab entry={} text='{}'",
                                                         entry_ptr == m_width ? "width" : "height",
                                                         entry_ptr->get_text().raw()));
                         emit_dimensions(entry_ptr == m_width, entry_ptr == m_height);
-                        auto *next_entry = entry_ptr == m_width ? m_height : m_width;
                         m_tab_on_width = next_entry == m_width;
                         Glib::signal_idle().connect_once([this, next_entry] {
                             focus_and_select(*next_entry);
@@ -177,13 +179,21 @@ RectangleDimensionsWindow::RectangleDimensionsWindow(EditorInterface &intf, doub
     m_width->grab_focus();
 }
 
-void RectangleDimensionsWindow::set_dimensions(double width, double height)
+void RectangleDimensionsWindow::set_dimensions(double width, double height, bool width_visible, bool height_visible)
 {
     m_circle_mode = false;
     m_circle_user_editing = false;
     m_extrude_mode = false;
     m_extrude_user_editing = false;
-    m_height->set_visible(true);
+    m_width->set_visible(width_visible);
+    m_height->set_visible(height_visible);
+    // Never leave focus on an entry that just became hidden (e.g. a 3-point
+    // rectangle's first edge is being dragged, so only one dimension is
+    // defined yet): move it to whichever entry is still visible.
+    if (!width_visible && m_width->has_focus())
+        focus_and_select(*m_height);
+    else if (!height_visible && m_height->has_focus())
+        focus_and_select(*m_width);
     m_updating = true;
     m_width->set_text(std::format("{:.3f}", width));
     m_height->set_text(std::format("{:.3f}", height));

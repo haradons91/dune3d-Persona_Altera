@@ -26,7 +26,7 @@ public:
 class RectangleDimensionsWindow : public Gtk::Fixed {
 public:
     RectangleDimensionsWindow(EditorInterface &intf, double width, double height);
-    void set_dimensions(double width, double height);
+    void set_dimensions(double width, double height, bool width_visible = true, bool height_visible = true);
     void focus_width();
     void focus_next_dimension();
     void commit_dimensions();

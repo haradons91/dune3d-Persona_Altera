@@ -335,16 +335,18 @@ bool Dune3DAppWindow::rectangle_dimensions_visible() const
     return m_rectangle_dimensions_active;
 }
 
-void Dune3DAppWindow::show_rectangle_dimensions(double width, double height)
+void Dune3DAppWindow::show_rectangle_dimensions(double width, double height, bool width_visible,
+                                                bool height_visible)
 {
-    m_rectangle_dimensions->set_dimensions(width, height);
+    m_rectangle_dimensions->set_dimensions(width, height, width_visible, height_visible);
     m_rectangle_dimensions_box->set_visible(true);
     m_rectangle_dimensions_active = true;
     m_rectangle_dimensions->focus_width();
 }
-void Dune3DAppWindow::update_rectangle_dimensions(double width, double height)
+void Dune3DAppWindow::update_rectangle_dimensions(double width, double height, bool width_visible,
+                                                  bool height_visible)
 {
-    m_rectangle_dimensions->set_dimensions(width, height);
+    m_rectangle_dimensions->set_dimensions(width, height, width_visible, height_visible);
 }
 void Dune3DAppWindow::hide_rectangle_dimensions()
 {
