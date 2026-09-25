@@ -9,6 +9,8 @@
 #include "canvas/canvas.hpp"
 #include "document/entity/entity.hpp"
 #include "document/entity/entity_document.hpp"
+#include "document/occurrence_path.hpp"
+#include "document/component.hpp"
 #include "tool_popover.hpp"
 #include "dune3d_application.hpp"
 #include "util/selection_util.hpp"
@@ -1313,6 +1315,43 @@ void Editor::init_header_bar()
 
         m_win.get_hamburger_menu_button().set_menu_model(top);
     }
+
+    {
+        m_occurrence_breadcrumb_button = Gtk::make_managed<Gtk::Button>();
+        m_occurrence_breadcrumb_button->set_visible(false);
+        m_occurrence_breadcrumb_button->add_css_class("flat");
+        m_occurrence_breadcrumb_button->set_tooltip_text("Return to the main design");
+        m_occurrence_breadcrumb_button->signal_clicked().connect([this] {
+            m_core.set_active_occurrence_path({});
+            update_active_occurrence_breadcrumb();
+            canvas_update();
+        });
+        m_win.get_header_bar().pack_start(*m_occurrence_breadcrumb_button);
+    }
+}
+
+void Editor::update_active_occurrence_breadcrumb()
+{
+    if (!m_occurrence_breadcrumb_button)
+        return;
+    const auto &path = m_core.get_active_occurrence_path();
+    if (path.empty()) {
+        m_occurrence_breadcrumb_button->set_visible(false);
+        return;
+    }
+    std::string label = "◂ Editing";
+    try {
+        auto loc = resolve_occurrence_path(m_core.get_current_idocument_info().get_document(), path);
+        if (loc.component)
+            label = "◂ Editing: " + loc.component->m_name;
+    }
+    catch (const std::exception &) {
+        // stale path (the occurrence/component it pointed to no longer
+        // exists) -- fall back to the generic label above rather than
+        // propagating the exception into a signal handler.
+    }
+    m_occurrence_breadcrumb_button->set_label(label);
+    m_occurrence_breadcrumb_button->set_visible(true);
 }
 
 void Editor::update_view_hints()
@@ -1726,6 +1765,8 @@ void Editor::render_document(const IDocumentInfo &doc)
     }
     renderer.m_render_extrusion_editor = m_extrude_editing
                                          && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
+    if (doc.get_uuid() == m_core.get_current_idocument_info().get_uuid())
+        renderer.m_active_occurrence_path = m_core.get_active_occurrence_path();
     renderer.m_show_dimension_points = m_core.get_tool_id() == ToolID::CONSTRAIN_DISTANCE
                                       && doc.get_uuid() == m_core.get_current_idocument_info().get_uuid();
     for (const auto &selection : get_canvas().get_selection()) {
@@ -2162,7 +2203,19 @@ void Editor::handle_click(unsigned int button, unsigned int n)
     else if (is_doubleclick && button == 1) {
         auto sel = get_canvas().get_hover_selection();
         if (sel) {
-            if (auto action = get_doubleclick_action(*sel)) {
+            // Double-clicking something inside a placed Occurrence descends
+            // into it for editing, same as Fusion's "double-click to edit
+            // in place". Handled before get_doubleclick_action(), which
+            // resolves sr.item against the current document directly and
+            // would throw for an item that only exists inside a Component's
+            // own Document.
+            if (!sel->occurrence_path.empty()) {
+                m_core.set_active_occurrence_path(sel->occurrence_path);
+                update_active_occurrence_breadcrumb();
+                get_canvas().inhibit_drag_selection();
+                canvas_update();
+            }
+            else if (auto action = get_doubleclick_action(*sel)) {
                 get_canvas().set_selection({*sel}, false);
                 get_canvas().inhibit_drag_selection();
                 trigger_action(*action);
@@ -2196,6 +2249,15 @@ void Editor::handle_click(unsigned int button, unsigned int n)
 
 ToolID Editor::get_tool_for_drag_move(bool ctrl, const std::set<SelectableRef> &sel)
 {
+    // Moving an item inside a placed Occurrence isn't supported yet (a
+    // later milestone) -- ToolMove resolves its selection against "the
+    // current document" directly and throws for an item that only exists
+    // inside a Component's own Document. Refuse cleanly here rather than
+    // constructing the tool and letting it throw.
+    for (const auto &sr : sel) {
+        if (!sr.occurrence_path.empty())
+            return ToolID::NONE;
+    }
     return ToolID::MOVE;
 }
 

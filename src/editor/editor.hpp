@@ -168,6 +168,14 @@ private:
     void render_document(const IDocumentInfo &doc);
     unsigned int m_canvas_update_pending = 0;
 
+    // Edit-in-place breadcrumb: a single button showing the active
+    // Component's name while descended (Core::get_active_occurrence_path()
+    // is non-empty), clicking it returns to the root. Ascending one level
+    // at a time isn't implemented yet -- a v1 simplification, not a
+    // per-depth breadcrumb trail.
+    Gtk::Button *m_occurrence_breadcrumb_button = nullptr;
+    void update_active_occurrence_breadcrumb();
+
     class CanvasUpdater {
     public:
         [[nodiscard]] CanvasUpdater(Editor &editor);

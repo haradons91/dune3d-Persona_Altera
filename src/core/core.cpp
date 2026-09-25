@@ -12,6 +12,7 @@
 #include "document/entity/entity_document.hpp"
 #include "document/entity/entity_circle2d.hpp"
 #include "document/component.hpp"
+#include "document/occurrence_path.hpp"
 #include "system/system.hpp"
 #include "util/fs_util.hpp"
 #include "util/picture_load.hpp"
@@ -30,7 +31,31 @@ Core::~Core() = default;
 
 Document &Core::get_current_document()
 {
-    return get_current_document_info().get_document();
+    auto &info = get_current_document_info();
+    auto &root = info.get_document();
+    if (info.m_active_occurrence_path.empty())
+        return root;
+    return resolve_occurrence_path(root, info.m_active_occurrence_path).doc;
+}
+
+void Core::set_active_occurrence_path(const std::vector<UUID> &path)
+{
+    auto &info = get_current_document_info();
+    if (path.empty()) {
+        info.m_active_occurrence_path.clear();
+        return;
+    }
+    Document *resolved;
+    try {
+        resolved = &resolve_occurrence_path(info.get_document(), path).doc;
+    }
+    catch (const std::exception &e) {
+        Logger::log_warning("couldn't enter occurrence path", Logger::Domain::DOCUMENT, e.what());
+        return;
+    }
+    info.m_active_occurrence_path = path;
+    if (resolved->get_groups_sorted().size())
+        info.m_current_group_in_occurrence = resolved->get_groups_sorted().back()->m_uuid;
 }
 
 const Document &Core::get_current_last_document() const

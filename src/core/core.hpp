@@ -121,21 +121,54 @@ public:
         return m_documents.at(m_current_document);
     }
 
+    // Tool-facing "current group": when descended into an occurrence (see
+    // set_active_occurrence_path()), this is a group inside the active
+    // occurrence's own Document, tracked separately from
+    // IDocumentInfo::get_current_group() (m_current_group), which stays a
+    // root-document group throughout -- the top-level Renderer::render()
+    // call always operates on the root document (it recurses into
+    // occurrences internally), so its current_group argument must always
+    // resolve there, descended or not.
     UUID get_current_group() const override
     {
-        return get_current_document_info().get_current_group();
+        auto &info = get_current_document_info();
+        if (info.m_active_occurrence_path.empty())
+            return info.get_current_group();
+        return info.m_current_group_in_occurrence;
     }
 
     void set_current_group(const UUID &uu)
     {
-        if (get_current_document().get_groups().contains(uu))
-            get_current_document_info().m_current_group = uu;
+        if (!get_current_document().get_groups().contains(uu))
+            return;
+        auto &info = get_current_document_info();
+        if (info.m_active_occurrence_path.empty())
+            info.m_current_group = uu;
+        else
+            info.m_current_group_in_occurrence = uu;
     }
     void set_current_document(const UUID &uu)
     {
         if (m_documents.contains(uu))
             m_current_document = uu;
     }
+
+    // The occurrence path the user is currently "inside" for editing
+    // purposes (see EditorInterface's double-click-to-descend UX) --
+    // get_current_document()/get_current_group() resolve through this, so
+    // every existing Tool keeps mutating "the current document" unaware
+    // anything changed. Empty means editing the root document directly, as
+    // always. Setting a non-empty path (re)picks a sensible current group
+    // inside the newly-active document (its last group, the same default
+    // EntityOccurrence rendering itself falls back to) -- DocumentInfo only
+    // tracks one "current group in occurrence" slot, not a per-depth stack,
+    // since re-deriving a fresh default on every navigation is simpler than
+    // keeping one consistent across arbitrary path changes.
+    const std::vector<UUID> &get_active_occurrence_path() const
+    {
+        return get_current_document_info().m_active_occurrence_path;
+    }
+    void set_active_occurrence_path(const std::vector<UUID> &path);
 
     UUID get_current_workplane() const override
     {
@@ -225,6 +258,10 @@ private:
         bool m_from_entity = false;
         bool m_can_close = true;
         HistoryManager m_history_manager;
+
+        // See Core::get_active_occurrence_path()/set_active_occurrence_path().
+        std::vector<UUID> m_active_occurrence_path;
+        UUID m_current_group_in_occurrence;
     };
 
     DocumentInfo &get_current_document_info()

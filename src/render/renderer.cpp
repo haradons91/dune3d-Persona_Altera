@@ -786,6 +786,19 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
         m_ca.clear_occurrence_path();
 }
 
+namespace {
+// True if `current` (this recursion's occurrence path) is `active` (what
+// the user is editing) or a descendant of it -- i.e. content placed by a
+// further-nested occurrence *inside* the component the user is editing
+// counts as part of what's active too, not just that exact level.
+bool occurrence_path_is_active_or_descendant(const std::vector<UUID> &current, const std::vector<UUID> &active)
+{
+    if (current.size() < active.size())
+        return false;
+    return std::equal(active.begin(), active.end(), current.begin());
+}
+} // namespace
+
 void Renderer::render(const Entity &entity)
 {
     // Generated extrusion geometry is already represented by the solid
@@ -825,7 +838,8 @@ void Renderer::render(const Entity &entity)
     const bool visible_sketch_group = entity.m_group != m_current_group->m_uuid
                                       && m_doc->get_group(entity.m_group).get_type() == Group::Type::SKETCH
                                       && group_is_visible(entity.m_group);
-    m_ca.set_vertex_inactive(entity.m_group != m_current_group->m_uuid && !visible_sketch_group);
+    m_ca.set_vertex_inactive((entity.m_group != m_current_group->m_uuid && !visible_sketch_group)
+                             || !occurrence_path_is_active_or_descendant(m_occurrence_path, m_active_occurrence_path));
     m_ca.set_selection_invisible(entity.m_selection_invisible);
     m_ca.set_vertex_construction(entity.m_construction);
     m_ca.set_show_default_points(m_show_dimension_points);
@@ -1440,6 +1454,7 @@ void Renderer::visit(const EntityOccurrence &en)
     new_stack.push_back(en.m_component);
 
     Renderer renderer{m_ca, m_doc_prv};
+    renderer.m_active_occurrence_path = m_active_occurrence_path;
     SelectableRef sr{SelectableRef::Type::ENTITY, en.m_uuid, 0};
     renderer.render(component->m_document, component->m_document.get_groups_sorted().back()->m_uuid,
                     FakeDocumentView{}, *m_workspace_view, m_containing_dir, sr, m_component_registry, new_origin,

@@ -1045,6 +1045,12 @@ bool Editor::handle_action_key(Glib::RefPtr<Gtk::EventControllerKey> controller,
     remap_keys(keyval, state);
     state &= (Gdk::ModifierType::SHIFT_MASK | Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::ALT_MASK);
     if (keyval == GDK_KEY_Escape) {
+        if (!m_core.tool_is_active() && !m_core.get_active_occurrence_path().empty()) {
+            m_core.set_active_occurrence_path({});
+            update_active_occurrence_breadcrumb();
+            canvas_update();
+            return true;
+        }
         if (m_selecting_sketch_plane) {
             m_sketch_plane_grid.reset();
             m_selecting_sketch_plane = false;

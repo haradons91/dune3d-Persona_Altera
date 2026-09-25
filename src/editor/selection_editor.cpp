@@ -44,7 +44,13 @@ SelectionEditor::SelectionEditor(Core &core, IDocumentViewProvider &prv)
 
 class GenericEditor : public Gtk::Grid {
 public:
-    GenericEditor(Document &doc, const std::set<SelectableRef> &sel)
+    // `root` must be the true root Document (IDocumentInfo::get_document()),
+    // never Core::get_current_document() -- SelectableRef::occurrence_path
+    // is always root-relative regardless of what the user is currently
+    // "descended" into for editing (Core::get_active_occurrence_path()), so
+    // resolving it from an already-redirected starting point looks up the
+    // wrong Document's entities and throws.
+    GenericEditor(Document &root, const std::set<SelectableRef> &sel)
     {
         set_row_spacing(5);
         set_column_spacing(5);
@@ -55,14 +61,14 @@ public:
             if (!seen.emplace(sr.type, sr.item).second)
                 continue;
             // sr.item may live in a Component's own Document rather than
-            // this one -- resolve through occurrence_path first instead of
-            // assuming it's always in `doc` (stale paths are skipped, same
+            // the root -- resolve through occurrence_path first instead of
+            // assuming it's always in `root` (stale paths are skipped, same
             // as the existing get_..._ptr() null-check below already does
             // for a missing item).
-            const Document *item_doc = &doc;
+            const Document *item_doc = &root;
             if (!sr.occurrence_path.empty()) {
                 try {
-                    item_doc = &resolve_occurrence_path(doc, sr.occurrence_path).doc;
+                    item_doc = &resolve_occurrence_path(root, sr.occurrence_path).doc;
                 }
                 catch (const std::exception &) {
                     continue;
@@ -665,7 +671,9 @@ void SelectionEditor::set_selection(const std::set<SelectableRef> &sel)
         }
         else if (sel.size()) {
             m_title->set_label("");
-            m_editor = Gtk::make_managed<GenericEditor>(m_core.get_current_document(), sel);
+            // The true root, not get_current_document() -- see GenericEditor's
+            // own comment on why occurrence_path resolution needs it.
+            m_editor = Gtk::make_managed<GenericEditor>(m_core.get_current_idocument_info().get_document(), sel);
         }
     }
 

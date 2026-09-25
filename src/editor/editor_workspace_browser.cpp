@@ -61,7 +61,15 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
     m_workspace_browser->signal_group_activated().connect([this](const UUID &uu_doc, const UUID &uu_group) {
         if (uu_doc != m_core.get_current_idocument_info().get_uuid())
             return;
-        const auto type = m_core.get_current_document().get_group(uu_group).get_type();
+        // The workspace browser tree is still flat/root-only (making it
+        // recursive into Components is separate, not-yet-done work) --
+        // uu_group is always a root-document group, so this must resolve
+        // against the true root, not Core::get_current_document(), which
+        // is redirected into the active occurrence's own Document while
+        // descended (Core::get_active_occurrence_path()) and wouldn't
+        // contain uu_group at all in that case.
+        auto &root = m_core.get_current_idocument_info().get_document();
+        const auto type = root.get_group(uu_group).get_type();
         if (type == Group::Type::SKETCH) {
             m_extrude_editing = false;
             auto &doc_view = get_current_document_view();
@@ -74,12 +82,12 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
             // its original visibility is restored when editing ends.
             doc_view.m_group_views[uu_group].m_visible = true;
             m_sketch_editing = true;
-            auto &sketch = m_core.get_current_document().get_group(uu_group);
+            auto &sketch = root.get_group(uu_group);
             if (sketch.m_active_wrkpl) {
-                auto &workplane = m_core.get_current_document().get_entity<EntityWorkplane>(sketch.m_active_wrkpl);
+                auto &workplane = root.get_entity<EntityWorkplane>(sketch.m_active_wrkpl);
                 workplane.m_visible = true;
                 auto camera_quat = workplane.m_normal;
-                const auto &reference = m_core.get_current_document().get_reference_group();
+                const auto &reference = root.get_reference_group();
                 if (sketch.m_active_wrkpl == reference.get_workplane_zx_uuid()) {
                     // XZ has +Y as its positive normal, but open the sketch
                     // from the Front (-Y) side so X is right and Z is up.
@@ -130,12 +138,12 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
     m_workspace_browser->signal_export_body_step().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_export_body_step));
     m_workspace_browser->signal_body_expanded().connect([this](const UUID &body_uu, bool expanded) {
-        if (m_core.get_current_document()
-                            .get_group(m_core.get_current_group())
-                            .find_body(m_core.get_current_document())
-                            .group.m_uuid
-                    == body_uu
-            && expanded == false) {
+        // body_uu is always root-relative -- see signal_group_activated's
+        // handler above for why this can't use Core::get_current_document()/
+        // get_current_group() while descended into an occurrence.
+        auto &root = m_core.get_current_idocument_info().get_document();
+        const auto &root_current_group = m_core.get_current_idocument_info().get_current_group();
+        if (root.get_group(root_current_group).find_body(root).group.m_uuid == body_uu && expanded == false) {
             return false;
         }
         get_current_document_view().m_body_views[body_uu].m_expanded = expanded;

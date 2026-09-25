@@ -43,6 +43,19 @@ public:
                 glm::dquat accum_rot = glm::quat_identity<double, glm::defaultp>(),
                 std::vector<UUID> occurrence_path = {}, std::vector<UUID> occurrence_active_stack = {});
 
+    // The occurrence path the user is currently "inside" for editing
+    // purposes (Core::get_active_occurrence_path()) -- content whose own
+    // recursion path (m_occurrence_path) isn't this path or a descendant of
+    // it gets dimmed (see render(const Entity&)'s dimming predicate), same
+    // idea as the existing "dim groups other than the current one" check,
+    // generalized across occurrence boundaries. Not a render()
+    // parameter: it's set once by the caller (like
+    // m_render_extrusion_editor and friends) and copied verbatim onto each
+    // nested Renderer that EntityOccurrence recursion constructs, since it
+    // names a fixed target for the whole pass rather than something that
+    // changes with recursion depth the way m_occurrence_path does.
+    std::vector<UUID> m_active_occurrence_path;
+
     bool m_solid_model_edge_select_mode = false;
     bool m_connect_curvature_comb = true;
     bool m_render_sketch_plane_selector = false;
