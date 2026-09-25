@@ -14,10 +14,20 @@
 
 namespace dune3d {
 
+// EntityOccurrence has no "whole entity" content-click point (unlike
+// EntityDocument/EntityCluster, its content is individually selectable via
+// occurrence_path -- see Milestone 4/5 -- not collapsed to one ref), so its
+// own origin marker (point 1) is the only drag handle it has.
+static bool is_occurrence_origin(const Entity &entity, unsigned int point)
+{
+    return point == 1 && entity.get_type() == Entity::Type::OCCURRENCE;
+}
+
 ToolBase::CanBegin ToolMove::can_begin()
 {
     for (const auto &sr : m_selection) {
-        if (sr.type == SelectableRef::Type::ENTITY && sr.point == 0) {
+        if (sr.type == SelectableRef::Type::ENTITY
+            && (sr.point == 0 || is_occurrence_origin(get_entity(sr.item), sr.point))) {
             auto &entity = get_entity(sr.item);
             if (entity.can_move(get_doc()))
                 return true;
@@ -46,8 +56,11 @@ ToolResponse ToolMove::begin(const ToolArgs &args)
     for (const auto &sr : m_selection) {
         // Endpoint/vertex markers are selectable for constraints and
         // inspection, but are not drag handles. Moving them directly makes
-        // an unconstrained sketch dimension change unexpectedly.
-        if (sr.type == SelectableRef::Type::ENTITY && sr.point == 0) {
+        // an unconstrained sketch dimension change unexpectedly. An
+        // EntityOccurrence's origin marker (point 1) is the exception --
+        // see is_occurrence_origin()'s comment above.
+        if (sr.type == SelectableRef::Type::ENTITY
+            && (sr.point == 0 || is_occurrence_origin(get_entity(sr.item), sr.point))) {
             auto entity = &get_entity(sr.item);
             auto point = sr.point;
             while (entity->m_move_instead.contains(point)) {
