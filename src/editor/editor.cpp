@@ -1332,6 +1332,13 @@ void Editor::init_header_bar()
 
 void Editor::update_active_occurrence_breadcrumb()
 {
+    // The timeline reads Core::get_current_document()/get_current_group(),
+    // which change the instant the active occurrence path does, but it's
+    // otherwise only refreshed on rebuild/tool-completion -- every call site
+    // that changes the active path also needs the timeline (and this
+    // breadcrumb) refreshed, so do both together here rather than
+    // duplicating the pairing at each call site.
+    update_timeline();
     if (!m_occurrence_breadcrumb_button)
         return;
     const auto &path = m_core.get_active_occurrence_path();

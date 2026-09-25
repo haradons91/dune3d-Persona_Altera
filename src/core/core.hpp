@@ -164,11 +164,16 @@ public:
     // tracks one "current group in occurrence" slot, not a per-depth stack,
     // since re-deriving a fresh default on every navigation is simpler than
     // keeping one consistent across arbitrary path changes.
-    const std::vector<UUID> &get_active_occurrence_path() const
+    const std::vector<UUID> &get_active_occurrence_path() const override
     {
         return get_current_document_info().m_active_occurrence_path;
     }
     void set_active_occurrence_path(const std::vector<UUID> &path);
+
+    Document &get_root_document() override
+    {
+        return get_current_document_info().get_document();
+    }
 
     UUID get_current_workplane() const override
     {

@@ -100,7 +100,11 @@ ToolResponse ToolCreateComponent::begin(const ToolArgs &args)
     const auto after = doc.get_group_rel(group_uuids.front(), -1);
     const auto body_name = bg->body.m_name;
 
-    auto &comp = doc.add_component(UUID::random(), doc.get_reference_group().m_uuid);
+    // Components only ever live in the root's m_components (see Component's
+    // own comment on why) -- doc may itself be a Component's own Document
+    // while descended into one (Core::get_active_occurrence_path()), which
+    // must never gain its own populated m_components map.
+    auto &comp = m_core.get_root_document().add_component(UUID::random(), doc.get_reference_group().m_uuid);
     comp.m_name = body_name;
     doc.extract_groups(group_uuids, comp.m_document);
     comp.m_document.set_group_solve_pending(group_uuids.front());
