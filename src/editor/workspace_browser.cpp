@@ -261,7 +261,12 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
             // itself isn't a feature, it's a placed instance.
             const auto &occ_group = dynamic_cast<const GroupOccurrence &>(*gr);
             body_item = BodyItem::create();
-            body_item->m_name = gr->m_name;
+            // gr->m_name is the group's generic feature name (shown in the
+            // Timeline); the tree/Rename dialog use m_body->m_name instead,
+            // same field Color already reads just below -- keeping both
+            // reads on the same field is what makes per-instance rename
+            // actually show up here (see on_workspace_browser_rename_body()).
+            body_item->m_name = gr->m_body->m_name;
             body_item->m_has_color = gr->m_body->m_color.has_value();
             if (gr->m_body->m_color.has_value())
                 body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
