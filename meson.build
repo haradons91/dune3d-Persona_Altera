@@ -261,6 +261,7 @@ src_gui = files(
   'src/core/tools/tool_link_document.cpp',
   'src/core/tools/tool_create_component.cpp',
   'src/core/tools/tool_insert_occurrence.cpp',
+  'src/core/tools/tool_new_component.cpp',
   'src/core/tools/tool_create_cluster.cpp',
   'src/core/tools/tool_enter_text.cpp',
   'src/core/tools/tool_paste.cpp',

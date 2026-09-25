@@ -60,6 +60,28 @@ public:
         return m_signal_export_body_step;
     }
 
+    // Right-click on the top-level document row -- always root-relative,
+    // there's no occurrence_path to speak of at that level.
+    using type_signal_new_component = sigc::signal<void(UUID)>;
+    type_signal_new_component signal_new_component()
+    {
+        return m_signal_new_component;
+    }
+
+    // Right-click on a plain (non-occurrence) body row: extract it into a
+    // new Component, same as ToolCreateComponent.
+    type_signal_group_selected signal_new_component_from_body()
+    {
+        return m_signal_new_component_from_body;
+    }
+
+    // Right-click on an Occurrence's own row: place another Occurrence of
+    // that same Component (a live-linked instance, not a copy).
+    type_signal_group_selected signal_new_instance()
+    {
+        return m_signal_new_instance;
+    }
+
     using type_signal_group_checked = sigc::signal<void(UUID, UUID, bool)>;
     using type_signal_document_checked = sigc::signal<void(UUID, bool)>;
     using type_signal_origin_checked = sigc::signal<void(UUID, bool)>;
@@ -196,6 +218,9 @@ private:
     type_signal_group_selected m_signal_reset_body_color;
     type_signal_group_selected m_signal_export_body_stl;
     type_signal_group_selected m_signal_export_body_step;
+    type_signal_new_component m_signal_new_component;
+    type_signal_group_selected m_signal_new_component_from_body;
+    type_signal_group_selected m_signal_new_instance;
 
     type_signal_item_expanded m_signal_body_expanded;
     type_signal_occurrence_activated m_signal_occurrence_activated;
@@ -226,7 +251,15 @@ private:
     sigc::connection m_toast_connection;
 
     Gtk::PopoverMenu *m_body_popover = nullptr;
-    Glib::RefPtr<Gio::Menu> m_body_menu = nullptr;
+    // Same popover widget, three different menu models swapped in right
+    // before popup() depending on what was right-clicked -- their available
+    // actions genuinely differ (a plain body can become a component; an
+    // Occurrence can be instanced again; the document row can only start a
+    // brand new component), so one shared model can't cleanly serve all three.
+    Glib::RefPtr<Gio::Menu> m_document_menu = nullptr;
+    Glib::RefPtr<Gio::Menu> m_body_menu_plain = nullptr;
+    Glib::RefPtr<Gio::Menu> m_body_menu_occurrence = nullptr;
+    Glib::RefPtr<Gio::Menu> m_body_label_menu = nullptr;
     UUID m_body_menu_document;
     UUID m_body_menu_body;
     Glib::RefPtr<Gio::SimpleAction> m_reset_body_color_action;

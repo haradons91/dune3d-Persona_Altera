@@ -45,6 +45,7 @@
 #include "tools/tool_link_document.hpp"
 #include "tools/tool_create_component.hpp"
 #include "tools/tool_insert_occurrence.hpp"
+#include "tools/tool_new_component.hpp"
 #include "tools/tool_constrain_distance_aligned.hpp"
 #include "tools/tool_import_dxf.hpp"
 #include "tools/tool_create_cluster.hpp"
@@ -364,6 +365,9 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
 
     case ToolID::INSERT_OCCURRENCE:
         return std::make_unique<ToolInsertOccurrence>(tool_id, *this, m_intf, flags);
+
+    case ToolID::NEW_COMPONENT:
+        return std::make_unique<ToolNewComponent>(tool_id, *this, m_intf, flags);
     }
     throw std::runtime_error("unknown tool");
 }

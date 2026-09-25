@@ -681,6 +681,15 @@ public:
         m_label->set_halign(Gtk::Align::START);
         m_label->set_has_tooltip();
 
+        // Marks a row as a placed Component instance (an Occurrence),
+        // matching Fusion 360's browser convention of a distinct icon for
+        // components vs. plain bodies -- otherwise they'd be visually
+        // identical despite behaving very differently (shared, live-linked
+        // definition vs. a one-off feature).
+        m_component_icon = Gtk::make_managed<Gtk::Image>();
+        m_component_icon->set_from_icon_name("package-x-generic-symbolic");
+        m_component_icon->set_visible(false);
+
         m_source_group_image = Gtk::make_managed<Gtk::Image>();
         m_source_group_image->set_hexpand(true);
         m_source_group_image->set_from_icon_name("action-link-symbolic");
@@ -751,6 +760,7 @@ public:
         box2->set_hexpand(true);
         box->append(*m_checkbutton);
         box->append(*m_solid_toggle);
+        box->append(*m_component_icon);
         box2->append(*m_label);
         box2->append(*m_source_group_image);
         box->append(*box2);
@@ -764,9 +774,29 @@ public:
         auto controller = Gtk::GestureClick::create();
         controller->set_button(3);
         controller->signal_pressed().connect([this](int n_press, double x, double y) {
-            if (!m_body || m_body->m_is_document_folder || m_body->m_is_sketch_folder
-                || !m_body->m_occurrence_path.empty())
+            Glib::RefPtr<Gio::Menu> menu;
+            if (m_doc) {
+                // The top-level document row -- always root-relative, so
+                // "New Component" here is unambiguous regardless of what's
+                // currently being edited/descended.
+                m_browser.m_body_menu_document = m_doc->m_uuid;
+                menu = m_browser.m_document_menu;
+            }
+            else if (m_body && !m_body->m_is_document_folder && !m_body->m_is_sketch_folder
+                     && m_body->m_occurrence_path.empty()) {
+                m_browser.m_body_menu_document = m_body->m_doc;
+                m_browser.m_body_menu_body = m_body->m_uuid;
+                m_browser.m_reset_body_color_action->set_enabled(m_body->m_has_color);
+                menu = m_body->m_is_occurrence ? m_browser.m_body_menu_occurrence : m_browser.m_body_menu_plain;
+            }
+            else if (m_group && m_group->m_is_body_label && m_group->m_occurrence_path.empty()) {
+                m_browser.m_body_menu_document = m_group->m_doc;
+                m_browser.m_body_menu_body = m_group->m_uuid;
+                menu = m_browser.m_body_label_menu;
+            }
+            else {
                 return;
+            }
             const graphene_point_t pt_in{(float)x, (float)y};
             graphene_point_t pt_out;
             if (!gtk_widget_compute_point(GTK_WIDGET(gobj()), GTK_WIDGET(m_browser.gobj()), &pt_in, &pt_out))
@@ -774,9 +804,7 @@ public:
             Gdk::Rectangle rect;
             rect.set_x(pt_out.x);
             rect.set_y(pt_out.y);
-            m_browser.m_body_menu_document = m_body->m_doc;
-            m_browser.m_body_menu_body = m_body->m_uuid;
-            m_browser.m_reset_body_color_action->set_enabled(m_body->m_has_color);
+            m_browser.m_body_popover->set_menu_model(menu);
             m_browser.m_body_popover->set_pointing_to(rect);
             m_browser.m_body_popover->popup();
         });
@@ -817,6 +845,7 @@ public:
         m_status_button->set_visible(false);
         m_close_button->set_visible(true);
         m_source_group_image->set_visible(false);
+        m_component_icon->set_visible(false);
         m_label->set_attributes(m_attrs_normal);
         m_bindings.push_back(Glib::Binding::bind_property_value(
                 it.m_check_active.get_proxy(), m_checkbutton->property_active(), Glib::Binding::Flags::SYNC_CREATE));
@@ -862,6 +891,7 @@ public:
             m_status_button->set_visible(false);
             m_close_button->set_visible(false);
             m_source_group_image->set_visible(false);
+            m_component_icon->set_visible(false);
             m_label->set_attributes(m_attrs_bold);
             if ((it.m_is_origin_folder || it.m_is_sketch_folder) && !nested) {
                 m_bindings.push_back(Glib::Binding::bind_property_value(
@@ -884,6 +914,7 @@ public:
             m_status_button->set_visible(false);
             m_close_button->set_visible(false);
             m_source_group_image->set_visible(false);
+            m_component_icon->set_visible(it.m_is_occurrence);
             m_label->set_attributes(m_attrs_normal);
             m_bindings.push_back(Glib::Binding::bind_property_value(
                     it.m_name.get_proxy(), m_label->property_label(), Glib::Binding::Flags::SYNC_CREATE));
@@ -898,6 +929,7 @@ public:
         m_status_button->set_visible(false);
         m_close_button->set_visible(false);
         m_source_group_image->set_visible(false);
+        m_component_icon->set_visible(it.m_is_occurrence);
         m_label->set_attributes(m_attrs_normal);
         m_bindings.push_back(Glib::Binding::bind_property_value(it.m_name.get_proxy(), m_label->property_label(),
                                                                 Glib::Binding::Flags::SYNC_CREATE));
@@ -951,6 +983,7 @@ public:
         m_checkbutton->set_visible(!nested);
         m_checkbutton->set_sensitive(!nested);
         m_solid_toggle->set_visible(false);
+        m_component_icon->set_visible(false);
         m_dof_label->set_visible(!nested);
         m_status_button->set_visible(!nested);
         m_close_button->set_visible(false);
@@ -1016,6 +1049,7 @@ private:
     SolidModelToggleButton *m_solid_toggle = nullptr;
     Gtk::Label *m_label = nullptr;
     Gtk::Image *m_source_group_image = nullptr;
+    Gtk::Image *m_component_icon = nullptr;
     Gtk::Label *m_dof_label = nullptr;
     Gtk::MenuButton *m_status_button = nullptr;
     Gtk::Label *m_status_label = nullptr;
@@ -1200,7 +1234,6 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
 
     append(*m_info_bar);
 
-    m_body_menu = Gio::Menu::create();
     auto actions = Gio::SimpleActionGroup::create();
     m_reset_body_color_action = actions->add_action(
             "reset_color", [this] { signal_reset_body_color().emit(m_body_menu_document, m_body_menu_body); });
@@ -1210,17 +1243,46 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
             "export_stl", [this] { signal_export_body_stl().emit(m_body_menu_document, m_body_menu_body); });
     actions->add_action(
             "export_step", [this] { signal_export_body_step().emit(m_body_menu_document, m_body_menu_body); });
+    actions->add_action("new_component", [this] { signal_new_component().emit(m_body_menu_document); });
+    actions->add_action("new_component_from_body",
+                        [this] { signal_new_component_from_body().emit(m_body_menu_document, m_body_menu_body); });
+    actions->add_action("new_instance",
+                        [this] { signal_new_instance().emit(m_body_menu_document, m_body_menu_body); });
     insert_action_group("body", actions);
-    m_body_menu->append("Export STL", "body.export_stl");
-    m_body_menu->append("Export STEP", "body.export_step");
-    m_body_menu->append_section("", Gio::Menu::create());
-    m_body_menu->append("Set color", "body.set_color");
-    m_body_menu->append("Reset color", "body.reset_color");
-    m_body_menu->append("Rename", "body.rename");
+
+    m_document_menu = Gio::Menu::create();
+    m_document_menu->append("New Component", "body.new_component");
+
+    m_body_menu_plain = Gio::Menu::create();
+    m_body_menu_plain->append("Export STL", "body.export_stl");
+    m_body_menu_plain->append("Export STEP", "body.export_step");
+    m_body_menu_plain->append_section("", Gio::Menu::create());
+    m_body_menu_plain->append("Set color", "body.set_color");
+    m_body_menu_plain->append("Reset color", "body.reset_color");
+    m_body_menu_plain->append("Rename", "body.rename");
+
+    // "New Component from Body" lives on the BodyN feature row itself (a
+    // GroupItem, is_body_label -- see populate_body_store()), not the
+    // parent "Bodies" folder row above: a "Bodies" folder can hold several
+    // distinct features (Body1, Cut1, Join1, ...) that happen to share one
+    // physical body, and it's the specific feature you'd point at to say
+    // "make a component out of this."
+    m_body_label_menu = Gio::Menu::create();
+    m_body_label_menu->append("New Component from Body", "body.new_component_from_body");
+
+    m_body_menu_occurrence = Gio::Menu::create();
+    m_body_menu_occurrence->append("Export STL", "body.export_stl");
+    m_body_menu_occurrence->append("Export STEP", "body.export_step");
+    m_body_menu_occurrence->append_section("", Gio::Menu::create());
+    m_body_menu_occurrence->append("Set color", "body.set_color");
+    m_body_menu_occurrence->append("Reset color", "body.reset_color");
+    m_body_menu_occurrence->append("Rename", "body.rename");
+    m_body_menu_occurrence->append_section("", Gio::Menu::create());
+    m_body_menu_occurrence->append("New Instance", "body.new_instance");
 
 
     m_body_popover = Gtk::make_managed<Gtk::PopoverMenu>();
-    m_body_popover->set_menu_model(m_body_menu);
+    m_body_popover->set_menu_model(m_body_menu_plain);
 
     m_body_popover->set_parent(*this);
 }

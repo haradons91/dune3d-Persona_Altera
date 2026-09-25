@@ -3,6 +3,7 @@
 #include "dune3d_appwindow.hpp"
 #include "widgets/constraints_box.hpp"
 #include "document/group/all_groups.hpp"
+#include "document/component.hpp"
 #include "widgets/sketch_plane_selector.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "document/entity/entity_circle2d.hpp"
@@ -139,6 +140,12 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
             sigc::mem_fun(*this, &Editor::on_workspace_browser_export_body_stl));
     m_workspace_browser->signal_export_body_step().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_export_body_step));
+    m_workspace_browser->signal_new_component().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_new_component));
+    m_workspace_browser->signal_new_component_from_body().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_new_component_from_body));
+    m_workspace_browser->signal_new_instance().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_new_instance));
     m_workspace_browser->signal_body_expanded().connect([this](const UUID &body_uu, bool expanded) {
         // body_uu is always root-relative -- see signal_group_activated's
         // handler above for why this can't use Core::get_current_document()/
@@ -1038,6 +1045,62 @@ void Editor::on_workspace_browser_reset_body_color(const UUID &uu_doc, const UUI
     doc.set_group_update_solid_model_pending(uu_group);
     m_core.rebuild("reset body color");
     canvas_update_keep_selection();
+}
+
+void Editor::on_workspace_browser_new_component(const UUID &uu_doc)
+{
+    if (m_core.tool_is_active())
+        return;
+    m_core.set_current_document(uu_doc);
+    // Right-click on the top-level document row is always root-relative --
+    // ascend first so the new component (and its occurrence) land in the
+    // root design, not wherever we're currently descended into.
+    m_core.set_active_occurrence_path({});
+    update_active_occurrence_breadcrumb();
+    trigger_action(ToolID::NEW_COMPONENT);
+}
+
+void Editor::on_workspace_browser_new_component_from_body(const UUID &uu_doc, const UUID &uu_body)
+{
+    if (m_core.tool_is_active())
+        return;
+    m_core.set_current_document(uu_doc);
+    // uu_body is always root-relative (the context menu is disabled on
+    // nested rows -- see WorkspaceRow's own guard), so ascend first, same
+    // reasoning as on_workspace_browser_new_component() above.
+    m_core.set_active_occurrence_path({});
+    update_active_occurrence_breadcrumb();
+    set_current_group(uu_body);
+    trigger_action(ToolID::CREATE_COMPONENT);
+}
+
+void Editor::on_workspace_browser_new_instance(const UUID &uu_doc, const UUID &uu_body)
+{
+    if (m_core.tool_is_active())
+        return;
+    m_core.set_current_document(uu_doc);
+    m_core.set_active_occurrence_path({});
+    update_active_occurrence_breadcrumb();
+
+    // A direct mutation rather than going through ToolInsertOccurrence: we
+    // already know the target component (whichever one uu_body's own
+    // Occurrence places) and are always inserting at the root, which can
+    // never create a cycle -- the dialog and cycle-check that tool needs for
+    // the general "pick any component" case don't apply here.
+    auto &root = m_core.get_root_document();
+    const auto &occ_group = root.get_group<GroupOccurrence>(uu_body);
+    const auto component_uu = occ_group.m_component;
+
+    auto &new_occ = root.insert_group<GroupOccurrence>(UUID::random(), uu_body);
+    new_occ.m_component = component_uu;
+    new_occ.m_body.emplace();
+    new_occ.m_body->m_name = root.get_component(component_uu).m_name;
+    new_occ.m_name = new_occ.m_body->m_name;
+    root.set_group_generate_pending(new_occ.m_uuid);
+
+    m_core.rebuild("new instance");
+    canvas_update_keep_selection();
+    set_current_group(new_occ.m_uuid);
 }
 
 } // namespace dune3d
