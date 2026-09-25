@@ -1199,10 +1199,6 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
 
     const auto &reference = m_doc->get_reference_group();
     const bool is_reference_plane = wrkpl.m_group == reference.m_uuid;
-    const auto is_reference_plane_uuid = [&reference](const UUID &uuid) {
-        return uuid == reference.get_workplane_xy_uuid() || uuid == reference.get_workplane_yz_uuid()
-               || uuid == reference.get_workplane_zx_uuid();
-    };
     if (m_render_sketch_plane_selector && is_reference_plane) {
         constexpr double gap = 1.5;
         constexpr double size = 5.5;
@@ -1219,13 +1215,15 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
                 glm::vec2(tile_x0, tile_y1),
         };
         // Each tile is drawn on its corresponding reference workplane, so it
-        // must select that same workplane.
+        // must select that same workplane. All three tiles use the same
+        // plain SKETCH_PLANE/Axis::PLANE styling -- XY previously got a
+        // separate "default" highlight (SKETCH_PLANE_HIGHLIGHT/
+        // Axis::PLANE_HIGHLIGHT) here, but its outline color was broken
+        // (hardcoded black in line-geometry.glsl) and it read as visually
+        // inconsistent rather than as a meaningful default, so hover is now
+        // the only thing that distinguishes a tile, same as YZ/XZ already
+        // worked.
         const auto sr = SelectableRef{SelectableRef::Type::ENTITY, wrkpl.m_uuid, 0};
-        const bool hover_is_other_reference_plane = m_sketch_plane_hovered
-                                                    && is_reference_plane_uuid(*m_sketch_plane_hovered)
-                                                    && *m_sketch_plane_hovered != wrkpl.m_uuid;
-        const bool highlight_default_xy = wrkpl.m_uuid == reference.get_workplane_xy_uuid()
-                                          && !hover_is_other_reference_plane;
         face::Face selector_face;
         const auto normal = glm::normalize(wrkpl.get_normal_vector());
         for (const auto &point : tile) {
@@ -1234,19 +1232,13 @@ void Renderer::visit(const EntityWorkplane &wrkpl)
             selector_face.normals.emplace_back(normal.x, normal.y, normal.z);
         }
         selector_face.triangle_indices = {{0, 1, 2}, {0, 2, 3}};
-        m_ca.add_selectable(m_ca.add_face_group(
-                                    {selector_face}, {0, 0, 0}, glm::quat(1, 0, 0, 0),
-                                    highlight_default_xy ? ICanvas::FaceColor::SKETCH_PLANE_HIGHLIGHT
-                                                         : ICanvas::FaceColor::SKETCH_PLANE),
+        m_ca.add_selectable(m_ca.add_face_group({selector_face}, {0, 0, 0}, glm::quat(1, 0, 0, 0),
+                                                ICanvas::FaceColor::SKETCH_PLANE),
                             sr);
         for (size_t i = 0; i < tile.size(); i++) {
             const auto p1 = wrkpl.transform(tile.at(i));
             const auto p2 = wrkpl.transform(tile.at((i + 1) % tile.size()));
-            m_ca.add_selectable(m_ca.draw_axis_line(
-                                        p1, p2,
-                                        highlight_default_xy ? ICanvas::Axis::PLANE_HIGHLIGHT
-                                                             : ICanvas::Axis::PLANE),
-                                sr);
+            m_ca.add_selectable(m_ca.draw_axis_line(p1, p2, ICanvas::Axis::PLANE), sr);
         }
     }
     const bool show_origin = !is_reference_plane || reference.m_show_origin;
