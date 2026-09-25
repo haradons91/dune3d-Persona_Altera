@@ -133,6 +133,20 @@ public:
         return m_signal_body_expanded;
     }
 
+    // Fired on double-click of an Occurrence's own row, or of a group row
+    // nested inside one -- the only interaction the recursive (component-
+    // aware) part of the tree supports for now, matching how Milestone 4/5
+    // brought read-only selection before editing. The path is root-relative
+    // (EntityOccurrence UUIDs), ready for Core::set_active_occurrence_path();
+    // group is set (and non-root) when a specific group inside that document
+    // was double-clicked, so the caller can also select it as the current
+    // group after descending.
+    using type_signal_occurrence_activated = sigc::signal<void(std::vector<UUID>, UUID)>;
+    type_signal_occurrence_activated signal_occurrence_activated()
+    {
+        return m_signal_occurrence_activated;
+    }
+
 
     void group_prev_next(int dir);
     void select_group(const UUID &uu);
@@ -184,9 +198,21 @@ private:
     type_signal_group_selected m_signal_export_body_step;
 
     type_signal_item_expanded m_signal_body_expanded;
+    type_signal_occurrence_activated m_signal_occurrence_activated;
 
     void emit_add_group(GroupType type, AddGroupMode add_group_mode = AddGroupMode::WITHOUT_BODY);
     bool emit_body_expanded(const UUID &body_uu, bool expanded);
+
+    // Recursion point for the component-aware tree: populates body_store from
+    // doc's own groups exactly like the non-recursive code this replaced did
+    // for the root document, except a GroupOccurrence additionally resolves
+    // its Component against `root` (components only ever live in the root's
+    // own registry, never in a nested Document -- see Component's own
+    // comment) and recurses into its m_document, one level deeper in
+    // occurrence_path each time.
+    static void populate_body_store(const Document &root, const Document &doc, const UUID &doc_uuid,
+                                     const std::vector<UUID> &occurrence_path,
+                                     const Glib::RefPtr<Gio::ListStore<BodyItem>> &body_store);
 
     void block_signals();
     void unblock_signals();

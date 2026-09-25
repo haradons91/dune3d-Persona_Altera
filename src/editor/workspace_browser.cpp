@@ -6,6 +6,8 @@
 #include "document/group/group_sketch.hpp"
 #include "document/group/group_reference.hpp"
 #include "document/group/igroup_source_group.hpp"
+#include "document/group/group_occurrence.hpp"
+#include "document/component.hpp"
 #include "document/entity/entity_step.hpp"
 #include "workspace/document_view.hpp"
 #include "util/fs_util.hpp"
@@ -32,6 +34,10 @@ public:
     UUID m_uuid;
     UUID m_doc;
     bool m_is_body_label = false;
+    // Which Document (relative to the root) m_uuid actually lives in --
+    // empty for the root document itself. Non-empty only for rows nested
+    // under an Occurrence's row; see WorkspaceBrowser::populate_body_store().
+    std::vector<UUID> m_occurrence_path;
 
     // No idea why the ObjectBase::get_type won't work for us but
     // reintroducing the method and using the name used by gtkmm seems
@@ -81,6 +87,20 @@ public:
     bool m_is_document_folder = false;
     bool m_is_origin_folder = false;
     bool m_is_sketch_folder = false;
+
+    // Set for a row that represents a GroupOccurrence. Its children are a
+    // recursive population of the placed Component's own document (Bodies/
+    // Sketches folders, same shape as a top-level document) rather than the
+    // usual single "BodyN" GroupItem -- returned from create_model() instead
+    // of m_group_store when set. Declared as the base ListModel interface
+    // (not Gio::ListStore<BodyItem>) purely to avoid BodyItem needing to be a
+    // complete type within its own member-list; it's always actually a
+    // ListStore<BodyItem> underneath, built in populate_body_store().
+    bool m_is_occurrence = false;
+    UUID m_occurrence_entity;
+    Glib::RefPtr<Gio::ListModel> m_occurrence_children;
+    // Context path for this row itself -- see GroupItem::m_occurrence_path.
+    std::vector<UUID> m_occurrence_path;
 
     // No idea why the ObjectBase::get_type won't work for us but
     // reintroducing the method and using the name used by gtkmm seems
@@ -191,6 +211,152 @@ void WorkspaceBrowser::set_sketches_checked(const UUID &document_uuid, bool chec
     }
 }
 
+void WorkspaceBrowser::populate_body_store(const Document &root, const Document &doc, const UUID &doc_uuid,
+                                           const std::vector<UUID> &occurrence_path,
+                                           const Glib::RefPtr<Gio::ListStore<BodyItem>> &body_store)
+{
+    Glib::RefPtr<BodyItem> sketches;
+    Glib::RefPtr<BodyItem> body_item;
+    unsigned int body_number = 1;
+    unsigned int cut_number = 1;
+    unsigned int join_number = 1;
+    const auto extrusion_is_connected = [&doc](const Group &group) {
+        const auto *extrude = dynamic_cast<const GroupExtrude *>(&group);
+        if (!extrude)
+            return false;
+        if (extrude->m_operation == IGroupSolidModel::Operation::DIFFERENCE)
+            return true;
+        if (!doc.get_groups().contains(extrude->m_source_group))
+            return false;
+        const auto *sketch = dynamic_cast<const GroupSketch *>(&doc.get_group(extrude->m_source_group));
+        return sketch && sketch->m_attached_to_face;
+    };
+    for (auto gr : doc.get_groups_sorted()) {
+        // Reference is an internal document group.  Its workplanes and
+        // origin remain available, but it is not shown as a tree item.
+        if (gr->get_type() == Group::Type::REFERENCE)
+            continue;
+        if (gr->get_type() == Group::Type::SKETCH) {
+            if (!sketches) {
+                sketches = BodyItem::create();
+                sketches->m_doc = doc_uuid;
+                sketches->m_name = "Sketches";
+                sketches->m_is_sketch_folder = true;
+                sketches->m_check_active = true;
+                sketches->m_occurrence_path = occurrence_path;
+                body_store->append(sketches);
+            }
+            auto gi = GroupItem::create();
+            gi->m_name = gr->m_name;
+            gi->m_uuid = gr->m_uuid;
+            gi->m_doc = doc_uuid;
+            gi->m_occurrence_path = occurrence_path;
+            sketches->m_group_store->append(gi);
+            continue;
+        }
+        if (gr->get_type() == Group::Type::OCCURRENCE) {
+            // An Occurrence's row expands into the placed Component's own
+            // Bodies/Sketches, exactly like a document's top-level tree --
+            // not a synthetic "BodyN" feature entry, since the occurrence
+            // itself isn't a feature, it's a placed instance.
+            const auto &occ_group = dynamic_cast<const GroupOccurrence &>(*gr);
+            body_item = BodyItem::create();
+            body_item->m_name = gr->m_name;
+            body_item->m_has_color = gr->m_body->m_color.has_value();
+            if (gr->m_body->m_color.has_value())
+                body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
+            body_item->m_uuid = gr->m_uuid;
+            body_item->m_doc = doc_uuid;
+            body_item->m_occurrence_path = occurrence_path;
+            body_item->m_is_occurrence = true;
+            body_item->m_occurrence_entity = occ_group.get_entity_uuid();
+            body_store->append(body_item);
+
+            if (auto *comp = root.get_component_ptr(occ_group.m_component)) {
+                auto child_path = occurrence_path;
+                child_path.push_back(body_item->m_occurrence_entity);
+                auto child_store = Gio::ListStore<BodyItem>::create();
+                populate_body_store(root, comp->m_document, doc_uuid, child_path, child_store);
+                if (child_store->get_n_items() > 0)
+                    body_item->m_occurrence_children = child_store;
+            }
+            body_number++;
+            continue;
+        }
+        if (gr->get_type() == Group::Type::STEP) {
+            body_item = BodyItem::create();
+            body_item->m_name = gr->m_name;
+            for (const auto &[entity_uuid, entity] : doc.m_entities) {
+                (void)entity_uuid;
+                if (entity->m_group != gr->m_uuid)
+                    continue;
+                if (const auto *step = dynamic_cast<const EntitySTEP *>(entity.get()); step
+                    && !step->m_path.filename().empty()) {
+                    body_item->m_name = step->m_path.filename().string();
+                    break;
+                }
+            }
+            body_item->m_has_color = gr->m_body->m_color.has_value();
+            if (gr->m_body->m_color.has_value())
+                body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
+            body_item->m_uuid = gr->m_uuid;
+            body_item->m_doc = doc_uuid;
+            body_item->m_occurrence_path = occurrence_path;
+            body_store->append(body_item);
+
+            auto gi = GroupItem::create();
+            gi->m_name = "Body1";
+            gi->m_is_body_label = true;
+            gi->m_uuid = gr->m_uuid;
+            gi->m_doc = doc_uuid;
+            gi->m_occurrence_path = occurrence_path;
+            body_item->m_group_store->append(gi);
+            body_number++;
+            continue;
+        }
+        const bool connected_extrude = extrusion_is_connected(*gr);
+        if (gr->m_body.has_value() && !connected_extrude) {
+            body_item = BodyItem::create();
+            body_item->m_name = "Bodies";
+            body_item->m_has_color = gr->m_body->m_color.has_value();
+            if (gr->m_body->m_color.has_value())
+                body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
+            body_item->m_uuid = gr->m_uuid;
+            body_item->m_doc = doc_uuid;
+            body_item->m_occurrence_path = occurrence_path;
+            body_store->append(body_item);
+        }
+
+        // Connected extrusions remain part of the existing body.  They
+        // stay available in the timeline, but do not create another
+        // feature/body row in the tree.
+        if (connected_extrude)
+            continue;
+
+        auto gi = GroupItem::create();
+        const bool is_body_group = gr->m_body.has_value() && !connected_extrude
+                                   && gr->get_type() != Group::Type::REFERENCE;
+        const bool is_first_extrusion_body = gr->get_type() == Group::Type::EXTRUDE && body_number == 1;
+        if (is_body_group || is_first_extrusion_body) {
+            gi->m_name = "Body" + std::to_string(body_number++);
+            gi->m_is_body_label = true;
+        }
+        else if (connected_extrude) {
+            const auto &extrude = dynamic_cast<const GroupExtrude &>(*gr);
+            if (extrude.m_operation == IGroupSolidModel::Operation::DIFFERENCE)
+                gi->m_name = "Cut" + std::to_string(cut_number++);
+            else
+                gi->m_name = "Join" + std::to_string(join_number++);
+        }
+        else
+            gi->m_name = gr->m_name;
+        gi->m_uuid = gr->m_uuid;
+        gi->m_doc = doc_uuid;
+        gi->m_occurrence_path = occurrence_path;
+        body_item->m_group_store->append(gi);
+    }
+}
+
 void WorkspaceBrowser::update_documents(const std::map<UUID, DocumentView> &doc_views)
 {
     DUNE3D_TRACE(DebugCategory::TREE);
@@ -216,112 +382,8 @@ void WorkspaceBrowser::update_documents(const std::map<UUID, DocumentView> &doc_
             }
             mi->m_body_store->append(folder);
         }
-        Glib::RefPtr<BodyItem> sketches;
         const auto &doc = doci->get_document();
-        Glib::RefPtr<BodyItem> body_item;
-        unsigned int body_number = 1;
-        unsigned int cut_number = 1;
-        unsigned int join_number = 1;
-        const auto extrusion_is_connected = [&doc](const Group &group) {
-            const auto *extrude = dynamic_cast<const GroupExtrude *>(&group);
-            if (!extrude)
-                return false;
-            if (extrude->m_operation == IGroupSolidModel::Operation::DIFFERENCE)
-                return true;
-            if (!doc.get_groups().contains(extrude->m_source_group))
-                return false;
-            const auto *sketch = dynamic_cast<const GroupSketch *>(&doc.get_group(extrude->m_source_group));
-            return sketch && sketch->m_attached_to_face;
-        };
-        for (auto gr : doc.get_groups_sorted()) {
-            // Reference is an internal document group.  Its workplanes and
-            // origin remain available, but it is not shown as a tree item.
-            if (gr->get_type() == Group::Type::REFERENCE)
-                continue;
-            if (gr->get_type() == Group::Type::SKETCH) {
-                if (!sketches) {
-                    sketches = BodyItem::create();
-                    sketches->m_doc = mi->m_uuid;
-                    sketches->m_name = "Sketches";
-                    sketches->m_is_sketch_folder = true;
-                    sketches->m_check_active = true;
-                    mi->m_body_store->append(sketches);
-                }
-                auto gi = GroupItem::create();
-                gi->m_name = gr->m_name;
-                gi->m_uuid = gr->m_uuid;
-                gi->m_doc = doci->get_uuid();
-                sketches->m_group_store->append(gi);
-                continue;
-            }
-            if (gr->get_type() == Group::Type::STEP) {
-                body_item = BodyItem::create();
-                body_item->m_name = gr->m_name;
-                for (const auto &[entity_uuid, entity] : doc.m_entities) {
-                    (void)entity_uuid;
-                    if (entity->m_group != gr->m_uuid)
-                        continue;
-                    if (const auto *step = dynamic_cast<const EntitySTEP *>(entity.get()); step
-                        && !step->m_path.filename().empty()) {
-                        body_item->m_name = step->m_path.filename().string();
-                        break;
-                    }
-                }
-                body_item->m_has_color = gr->m_body->m_color.has_value();
-                if (gr->m_body->m_color.has_value())
-                    body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
-                body_item->m_uuid = gr->m_uuid;
-                body_item->m_doc = mi->m_uuid;
-                mi->m_body_store->append(body_item);
-
-                auto gi = GroupItem::create();
-                gi->m_name = "Body1";
-                gi->m_is_body_label = true;
-                gi->m_uuid = gr->m_uuid;
-                gi->m_doc = doci->get_uuid();
-                body_item->m_group_store->append(gi);
-                body_number++;
-                continue;
-            }
-            const bool connected_extrude = extrusion_is_connected(*gr);
-            if (gr->m_body.has_value() && !connected_extrude) {
-                body_item = BodyItem::create();
-                body_item->m_name = "Bodies";
-                body_item->m_has_color = gr->m_body->m_color.has_value();
-                if (gr->m_body->m_color.has_value())
-                    body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
-                body_item->m_uuid = gr->m_uuid;
-                body_item->m_doc = mi->m_uuid;
-                mi->m_body_store->append(body_item);
-            }
-
-            // Connected extrusions remain part of the existing body.  They
-            // stay available in the timeline, but do not create another
-            // feature/body row in the tree.
-            if (connected_extrude)
-                continue;
-
-            auto gi = GroupItem::create();
-            const bool is_body_group = gr->m_body.has_value() && !connected_extrude
-                                       && gr->get_type() != Group::Type::REFERENCE;
-            const bool is_first_extrusion_body = gr->get_type() == Group::Type::EXTRUDE && body_number == 1;
-            if (is_body_group || is_first_extrusion_body) {
-                gi->m_name = "Body" + std::to_string(body_number++);
-                gi->m_is_body_label = true;
-            }
-            else if (connected_extrude) {
-                const auto &extrude = dynamic_cast<const GroupExtrude &>(*gr);
-                if (extrude.m_operation == IGroupSolidModel::Operation::DIFFERENCE)
-                    gi->m_name = "Cut" + std::to_string(cut_number++);
-                else
-                    gi->m_name = "Join" + std::to_string(join_number++);
-            }
-            else
-                gi->m_name = gr->m_name;
-            gi->m_uuid = gr->m_uuid;
-            gi->m_doc = doci->get_uuid();
-            body_item->m_group_store->append(gi);
-        }
+        populate_body_store(doc, doc, mi->m_uuid, {}, mi->m_body_store);
         store->append(mi);
     }
     m_document_store = store;
@@ -697,7 +759,8 @@ public:
         auto controller = Gtk::GestureClick::create();
         controller->set_button(3);
         controller->signal_pressed().connect([this](int n_press, double x, double y) {
-            if (!m_body || m_body->m_is_document_folder || m_body->m_is_sketch_folder)
+            if (!m_body || m_body->m_is_document_folder || m_body->m_is_sketch_folder
+                || !m_body->m_occurrence_path.empty())
                 return;
             const graphene_point_t pt_in{(float)x, (float)y};
             graphene_point_t pt_out;
@@ -717,8 +780,22 @@ public:
         auto activate_controller = Gtk::GestureClick::create();
         activate_controller->set_button(1);
         activate_controller->signal_pressed().connect([this](int n_press, double, double) {
-            if (n_press == 2 && m_group)
+            if (n_press != 2)
+                return;
+            if (m_group && !m_group->m_occurrence_path.empty()) {
+                // Nested group row -- descend into the Document it lives in
+                // and land directly on it, rather than the generic "last
+                // group" default set_active_occurrence_path() picks.
+                m_browser.m_signal_occurrence_activated.emit(m_group->m_occurrence_path, m_group->m_uuid);
+            }
+            else if (m_body && m_body->m_is_occurrence) {
+                auto path = m_body->m_occurrence_path;
+                path.push_back(m_body->m_occurrence_entity);
+                m_browser.m_signal_occurrence_activated.emit(path, UUID());
+            }
+            else if (m_group) {
                 m_browser.m_signal_group_activated.emit(m_group->m_doc, m_group->m_uuid);
+            }
         });
         add_controller(activate_controller);
     }
@@ -766,15 +843,22 @@ public:
         // folders, share the same indentation as a document's Body row.
         if (auto row_box = dynamic_cast<Gtk::Box *>(get_child()))
             row_box->set_margin_start(16);
+        // Content nested inside a placed Occurrence's Component (non-empty
+        // occurrence_path) is read-only for now -- visibility toggling and
+        // renaming aren't tracked per-occurrence-path yet (see
+        // WorkspaceBrowser::populate_body_store()). Only navigation
+        // (double-click descend, wired in the click controller below) works
+        // on it, same "read before write" rollout as selection/picking was.
+        const bool nested = !it.m_occurrence_path.empty();
         if (it.m_is_document_folder || it.m_is_sketch_folder) {
-            m_checkbutton->set_visible(it.m_is_origin_folder || it.m_is_sketch_folder);
+            m_checkbutton->set_visible((it.m_is_origin_folder || it.m_is_sketch_folder) && !nested);
             m_solid_toggle->set_visible(false);
             m_dof_label->set_visible(false);
             m_status_button->set_visible(false);
             m_close_button->set_visible(false);
             m_source_group_image->set_visible(false);
             m_label->set_attributes(m_attrs_bold);
-            if (it.m_is_origin_folder || it.m_is_sketch_folder) {
+            if ((it.m_is_origin_folder || it.m_is_sketch_folder) && !nested) {
                 m_bindings.push_back(Glib::Binding::bind_property_value(
                         it.m_check_active.get_proxy(), m_checkbutton->property_active(),
                         Glib::Binding::Flags::SYNC_CREATE));
@@ -782,6 +866,20 @@ public:
                         it.m_check_sensitive.get_proxy(), m_checkbutton->property_sensitive(),
                         Glib::Binding::Flags::SYNC_CREATE));
             }
+            m_bindings.push_back(Glib::Binding::bind_property_value(
+                    it.m_name.get_proxy(), m_label->property_label(), Glib::Binding::Flags::SYNC_CREATE));
+            get_list_row()->set_expanded(true);
+            m_browser.unblock_signals();
+            return;
+        }
+        if (nested) {
+            m_checkbutton->set_visible(false);
+            m_solid_toggle->set_visible(false);
+            m_dof_label->set_visible(false);
+            m_status_button->set_visible(false);
+            m_close_button->set_visible(false);
+            m_source_group_image->set_visible(false);
+            m_label->set_attributes(m_attrs_normal);
             m_bindings.push_back(Glib::Binding::bind_property_value(
                     it.m_name.get_proxy(), m_label->property_label(), Glib::Binding::Flags::SYNC_CREATE));
             get_list_row()->set_expanded(true);
@@ -839,18 +937,27 @@ public:
         // inset instead of sitting flush with their parent.
         if (auto row_box = dynamic_cast<Gtk::Box *>(get_child()))
             row_box->set_margin_start(16);
-        m_checkbutton->set_visible(true);
-        m_checkbutton->set_sensitive(true);
+        // See the matching comment in bind(BodyItem&) -- nested content is
+        // read-only display for now: its checkbox (visibility, untracked per
+        // occurrence path) and dof/status (not refreshed incrementally,
+        // only ever populated once at tree-rebuild time) stay hidden rather
+        // than risk showing stale or misleading values.
+        const bool nested = !it.m_occurrence_path.empty();
+        m_checkbutton->set_visible(!nested);
+        m_checkbutton->set_sensitive(!nested);
         m_solid_toggle->set_visible(false);
-        m_dof_label->set_visible(true);
-        m_status_button->set_visible(true);
+        m_dof_label->set_visible(!nested);
+        m_status_button->set_visible(!nested);
         m_close_button->set_visible(false);
         m_group = &it;
-        m_bindings.push_back(Glib::Binding::bind_property_value(
-                it.m_check_active.get_proxy(), m_checkbutton->property_active(), Glib::Binding::Flags::SYNC_CREATE));
-        m_bindings.push_back(Glib::Binding::bind_property_value(
-                it.m_check_sensitive.get_proxy(), m_checkbutton->property_sensitive(),
-                Glib::Binding::Flags::SYNC_CREATE));
+        if (!nested) {
+            m_bindings.push_back(Glib::Binding::bind_property_value(it.m_check_active.get_proxy(),
+                                                                    m_checkbutton->property_active(),
+                                                                    Glib::Binding::Flags::SYNC_CREATE));
+            m_bindings.push_back(Glib::Binding::bind_property_value(it.m_check_sensitive.get_proxy(),
+                                                                    m_checkbutton->property_sensitive(),
+                                                                    Glib::Binding::Flags::SYNC_CREATE));
+        }
         m_bindings.push_back(Glib::Binding::bind_property_value(it.m_name.get_proxy(), m_label->property_label(),
                                                                 Glib::Binding::Flags::SYNC_CREATE));
         m_bindings.push_back(Glib::Binding::bind_property_value(
@@ -1012,7 +1119,14 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
         if (!tr)
             return;
         if (auto gr = std::dynamic_pointer_cast<WorkspaceBrowser::GroupItem>(tr->get_item())) {
-            m_signal_group_selected.emit(gr->m_doc, gr->m_uuid);
+            // Nested rows (inside a placed Occurrence's Component) aren't
+            // root-document groups -- selecting them would make
+            // Editor::on_workspace_browser_group_selected() resolve gr->m_uuid
+            // against the wrong document. Double-click-to-descend (see
+            // signal_occurrence_activated()) is the only wired-up interaction
+            // for them so far.
+            if (gr->m_occurrence_path.empty())
+                m_signal_group_selected.emit(gr->m_doc, gr->m_uuid);
         }
     });
     m_view->add_css_class("navigation-sidebar");
@@ -1123,8 +1237,11 @@ Glib::RefPtr<Gio::ListModel> WorkspaceBrowser::create_model(const Glib::RefPtr<G
     // The items in a StringList are StringObjects.
     if (auto col = std::dynamic_pointer_cast<DocumentItem>(item))
         return col->m_body_store;
-    if (auto col = std::dynamic_pointer_cast<BodyItem>(item))
+    if (auto col = std::dynamic_pointer_cast<BodyItem>(item)) {
+        if (col->m_is_occurrence)
+            return col->m_occurrence_children;
         return col->m_group_store;
+    }
     return nullptr;
     /*Glib::RefPtr<Gio::ListModel> result;
     if (!col)

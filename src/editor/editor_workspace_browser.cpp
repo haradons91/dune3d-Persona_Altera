@@ -58,6 +58,8 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
 
     m_workspace_browser->signal_group_selected().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_group_selected));
+    m_workspace_browser->signal_occurrence_activated().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_occurrence_activated));
     m_workspace_browser->signal_group_activated().connect([this](const UUID &uu_doc, const UUID &uu_group) {
         if (uu_doc != m_core.get_current_idocument_info().get_uuid())
             return;
@@ -250,6 +252,23 @@ void Editor::on_workspace_browser_group_selected(const UUID &uu_doc, const UUID 
     get_current_document_view().m_current_group = uu_group;
     set_current_group(uu_group);
     update_timeline();
+}
+
+void Editor::on_workspace_browser_occurrence_activated(std::vector<UUID> path, UUID uu_group)
+{
+    if (m_core.tool_is_active())
+        return;
+    m_core.set_active_occurrence_path(path);
+    update_active_occurrence_breadcrumb();
+    // A specific nested group was double-clicked (not just the Occurrence's
+    // own row) -- land directly on it, same as
+    // on_workspace_browser_group_selected() does for a root-level group.
+    // Valid now that Core::get_current_document()/get_current_group() are
+    // redirected into the just-activated path's Document.
+    if (uu_group)
+        set_current_group(uu_group);
+    else
+        canvas_update();
 }
 
 void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode add_group_mode)
