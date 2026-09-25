@@ -123,6 +123,7 @@ public:
     virtual void update_bbox() = 0;
     virtual glm::vec3 get_cam_normal() const = 0;
     virtual glm::vec3 get_cam_center() const = 0;
+    virtual glm::dvec3 get_render_origin() const = 0;
     virtual float get_cam_distance() const = 0;
     virtual float get_world_units_per_pixel() const = 0;
     virtual glm::vec2 get_viewport_size() const = 0;

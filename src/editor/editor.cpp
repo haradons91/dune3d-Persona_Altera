@@ -681,6 +681,28 @@ void Editor::init_canvas()
     }
     get_canvas().signal_cursor_moved().connect(sigc::mem_fun(*this, &Editor::handle_cursor_move));
     get_canvas().signal_view_changed().connect(sigc::mem_fun(*this, &Editor::handle_view_changed));
+    // See Canvas::signal_request_rebase()'s own comment: the canvas has just
+    // rebased m_render_origin to the current camera center, so the geometry
+    // already pushed (baked relative to the old origin) needs to be rebuilt
+    // to match, or it'll render at the wrong position -- this is what makes
+    // panning actually move the geometry on screen instead of silently
+    // drifting the camera away from stale, unmoving vertex data.
+    //
+    // This must be a FULL walk, not canvas_update()'s "only groups after
+    // m_update_groups_after changed" partial-redraw optimization: a rebase
+    // shifts the origin for EVERYTHING on screen, not just whatever group was
+    // last edited, so content the optimization would otherwise skip (the
+    // workplane/sketch-grid background, solid bodies from earlier groups,
+    // ...) would be left stale at the old origin while only the
+    // most-recently-edited group's geometry catches up -- exactly the
+    // visible mismatch (grid/body offset from the active sketch/extrude)
+    // this was found from.
+    get_canvas().signal_request_rebase().connect([this] {
+        if (m_core.has_documents()) {
+            m_update_groups_after = UUID();
+            canvas_update();
+        }
+    });
     get_canvas().signal_select_from_menu().connect([this](const auto &sel) {
         if (m_core.tool_is_active()) {
             ToolArgs args;

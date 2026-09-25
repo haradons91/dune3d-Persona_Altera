@@ -164,6 +164,11 @@ public:
     void set_cam_distance(float dist, ZoomCenter zoom_center, bool sync_animator = true);
     void animate_zoom(float factor, ZoomCenter zoom_center);
 
+    glm::dvec3 get_render_origin() const override
+    {
+        return m_render_origin;
+    }
+
     glm::vec3 get_center() const
     {
         return m_center;
@@ -223,6 +228,16 @@ public:
     type_signal_view_changed signal_selection_mode_changed()
     {
         return m_signal_selection_mode_changed;
+    }
+
+    // Fired (via an idle-loop callback, never from inside a render pass) when
+    // m_render_origin has just been rebased to the current camera center --
+    // see update_mats()'s own comment. The listener (Editor) must re-walk the
+    // document into fresh canvas geometry (canvas_update()) so vertex data,
+    // baked relative to the OLD origin, gets rebuilt relative to the new one.
+    type_signal_view_changed signal_request_rebase()
+    {
+        return m_signal_request_rebase;
     }
 
     void set_appearance(const Appearance &appearance);
@@ -319,13 +334,21 @@ private:
     glm::mat3 m_screenmat;
     glm::vec3 m_cam_normal;
 
-    // m_viewmat is built relative to this point (~m_center) rather than the
-    // true world origin, so its translation stays small regardless of how
-    // far the camera has panned/zoomed from (0,0,0). Vertex positions must
-    // be shifted by -m_render_origin in double precision, before narrowing
-    // to float, to match -- see transform_point(). Without this, float32
-    // world coordinates far from the origin lose enough precision at high
-    // zoom to visibly corrupt the line-width offset in the geometry shader.
+    // The origin currently baked into pushed vertex data (via transform_point()
+    // subtracting it in double precision before narrowing to float -- see
+    // that function). Without this, float32 world coordinates far from the
+    // origin lose enough precision at high zoom to visibly corrupt the
+    // line-width offset in the geometry shader.
+    //
+    // This is intentionally NOT kept exactly equal to m_center every frame:
+    // m_center changes continuously while panning, but rebasing it would mean
+    // re-walking the whole document's geometry (Editor::canvas_update()) on
+    // every mouse-move, which is far too expensive to do per frame. Instead
+    // update_mats() lets m_center drift from m_render_origin and folds the
+    // (small, bounded) difference into the view matrix as an ordinary float
+    // translation -- safe as long as it stays small relative to m_cam_distance,
+    // which is what the drift check in update_mats() enforces by requesting a
+    // rebase (see signal_request_rebase()) once it grows too large.
     glm::dvec3 m_render_origin = {0, 0, 0};
 
     void update_mats();
@@ -483,6 +506,8 @@ private:
     type_signal_view_changed m_signal_selection_changed;
     type_signal_view_changed m_signal_hover_selection_changed;
     type_signal_view_changed m_signal_selection_mode_changed;
+    type_signal_view_changed m_signal_request_rebase;
+    bool m_rebase_pending = false;
 
     void apply_flags(VertexFlags &flags);
     void apply_line_flags(VertexFlags &flags);

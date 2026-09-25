@@ -676,8 +676,16 @@ void Canvas::animate_pan(glm::vec2 shift)
 void Canvas::set_center(glm::vec3 center)
 {
     m_center = center;
+    // An explicit camera jump (view restore, "look here", reset view, ...)
+    // rather than a continuous drag -- always called from outside a render
+    // pass, so unlike update_mats()'s drift check, it's safe (and necessary:
+    // otherwise m_render_origin would claim to match m_center while the
+    // already-pushed geometry is still baked relative to the old one) to
+    // rebase and re-walk the document immediately rather than deferring.
+    m_render_origin = glm::dvec3(m_center);
     queue_draw();
     m_signal_view_changed.emit();
+    m_signal_request_rebase.emit();
 }
 
 void Canvas::animate_to_cam_quat(const glm::quat &q)
@@ -1126,11 +1134,23 @@ ICanvas::VertexRef Canvas::add_face_group(const face::Faces &faces, glm::vec3 or
     m_current_chunk->m_face_groups.push_back(CanvasChunk::FaceGroup{
             .offset = offset,
             .length = length,
-            // Vertex data uploaded via add_faces() is shifted by
-            // -m_render_origin (see transform_point()); this uniform is
-            // added to it in face-vertex.glsl, so it must be shifted the
-            // same way to stay in the same frame.
-            .origin = glm::vec3(glm::dvec3(origin) - m_render_origin),
+            // Vertex data uploaded via add_faces() is UNCONDITIONALLY shifted
+            // by -m_render_origin already (transform_point() does this for
+            // every face group, treating the vertices as already being in
+            // whatever frame is currently active -- world space, for every
+            // caller that isn't itself inside an occurrence's save()/
+            // set_transform_d() context). A zero `origin` here is every such
+            // caller's way of saying "no separate placement, the mesh is
+            // already fully positioned" (solid models, sketch profiles, the
+            // sketch-plane selector) -- subtracting m_render_origin AGAIN for
+            // that case corrupts the position by up to -render_origin the
+            // moment the camera pans away from {0,0,0}, since it was only
+            // ever exercised at render_origin == {0,0,0} before panning was
+            // fixed. Only a genuinely non-zero placement (EntitySTEP's
+            // direct, non-occurrence origin/normal) is an offset that hasn't
+            // already been folded into the vertex data, and needs the same
+            // shift as any other world coordinate.
+            .origin = origin == glm::vec3(0) ? glm::vec3(0) : glm::vec3(glm::dvec3(origin) - m_render_origin),
             .normal = normal,
             .color = face_color,
     });
@@ -1168,15 +1188,31 @@ void Canvas::update_mats()
     auto cam_offset = glm::rotate(m_cam_quat, glm::vec3(0, 0, r));
     auto cam_pos = cam_offset + m_center;
 
-    // Build the view matrix relative to m_center rather than the true world
-    // origin, so its translation stays small (bounded by m_cam_distance)
-    // regardless of how far the camera has panned. Vertex data is shifted
-    // by the matching -m_render_origin in double precision before being
-    // narrowed to float (see transform_point()), which is what actually
-    // avoids the precision loss -- this alone wouldn't do it, since the
-    // view matrix itself is still only float.
-    m_render_origin = glm::dvec3(m_center);
-    m_viewmat = glm::lookAt(cam_offset, glm::vec3(0), glm::rotate(m_cam_quat, glm::vec3(0, 1, 0)));
+    // The view matrix is built relative to m_render_origin, not m_center
+    // itself or the true world origin -- see m_render_origin's own comment
+    // for why the two are allowed to drift apart between rebases. The drift
+    // (center_delta) is added to both the eye and the target below, which
+    // keeps the camera-to-pivot geometry (cam_offset) unchanged while still
+    // reflecting how far the camera has panned since the last rebase.
+    const auto center_delta = glm::vec3(glm::dvec3(m_center) - m_render_origin);
+    m_viewmat = glm::lookAt(cam_offset + center_delta, center_delta, glm::rotate(m_cam_quat, glm::vec3(0, 1, 0)));
+
+    // Once the drift grows large enough to risk the same float32 precision
+    // loss this whole scheme exists to avoid (center_delta feeds into the
+    // view matrix's translation, which then multiplies against near-zero
+    // vertex data -- large + small loses the small part), rebase to the
+    // current center. Re-walking the document's geometry to match
+    // (Editor::canvas_update(), via signal_request_rebase()) is too
+    // expensive to do from inside this per-frame render pass, so it's
+    // deferred to the next idle-loop iteration.
+    if (!m_rebase_pending && glm::length(center_delta) > std::max(2.f * m_cam_distance, 10.f)) {
+        m_rebase_pending = true;
+        Glib::signal_idle().connect_once([this] {
+            m_rebase_pending = false;
+            m_render_origin = glm::dvec3(m_center);
+            m_signal_request_rebase.emit();
+        });
+    }
 
     float cam_dist_min = 1e6;
     float cam_dist_max = -1e6;
