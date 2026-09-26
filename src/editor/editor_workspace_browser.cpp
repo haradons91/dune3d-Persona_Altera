@@ -1121,6 +1121,36 @@ void Editor::on_workspace_browser_move_group_into_component(const UUID &uu_doc, 
     if (!root.get_groups().contains(uu_seed_group) || !root.get_groups().contains(uu_target_occurrence))
         return;
 
+    // Dragging a placed component's own row onto another component's row
+    // nests it there, instead of moving a sketch/body into a component --
+    // handled separately since neither compute_move_closure() nor the
+    // entity-reference validation below apply: GroupOccurrence doesn't
+    // implement IGroupSourceGroup (confirmed while building the sketch/body
+    // move -- it can't be a boolean-op operand either), so there's no
+    // group-level dependency to pull in, and an EntityOccurrence doesn't
+    // reference other entities. What it DOES need is the same
+    // component-containment cycle check ToolInsertOccurrence already uses.
+    if (root.get_group(uu_seed_group).get_type() == Group::Type::OCCURRENCE) {
+        auto &dragged_occ = root.get_group<GroupOccurrence>(uu_seed_group);
+        auto &target_occ = root.get_group<GroupOccurrence>(uu_target_occurrence);
+        // Also correctly refuses dragging a component's occurrence onto
+        // another occurrence of itself: collect_contained_components()
+        // always includes its own seed.
+        const auto contained = root.collect_contained_components(dragged_occ.m_component);
+        if (contained.contains(target_occ.m_component)) {
+            m_workspace_browser->show_toast("Can't nest this here -- it would make a component contain itself");
+            return;
+        }
+        auto &target_comp = root.get_component(target_occ.m_component);
+        root.extract_groups({uu_seed_group}, target_comp.m_document);
+        target_comp.m_document.set_group_generate_pending(uu_seed_group);
+        target_comp.m_document.update_pending();
+        root.set_group_generate_pending(uu_target_occurrence);
+        m_core.rebuild("nest component");
+        canvas_update_keep_selection();
+        return;
+    }
+
     // A dragged BodyN row seeds the whole body span (so a chained Cut/Join
     // travels with it); a dragged Sketch row seeds just itself. Distinguish
     // by whether the seed group owns a body -- find_body_groups() itself

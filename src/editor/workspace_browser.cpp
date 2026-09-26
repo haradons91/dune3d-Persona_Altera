@@ -844,12 +844,21 @@ public:
         drag_source->set_actions(Gdk::DragAction::MOVE);
         drag_source->signal_prepare().connect(
                 [this](double, double) -> Glib::RefPtr<Gdk::ContentProvider> {
-                    if (!m_group || !m_group->m_occurrence_path.empty()
-                        || !(m_group->m_is_body_label || m_group->m_is_sketch))
+                    UUID seed;
+                    if (m_group && m_group->m_occurrence_path.empty()
+                        && (m_group->m_is_body_label || m_group->m_is_sketch))
+                        seed = m_group->m_uuid;
+                    // A root-level Occurrence's own row -- the same
+                    // condition that already shows "New Instance" -- can
+                    // also be dragged, to nest that component inside
+                    // another one.
+                    else if (m_body && m_body->m_is_occurrence && m_body->m_occurrence_path.empty())
+                        seed = m_body->m_uuid;
+                    else
                         return {};
                     Glib::Value<Glib::ustring> value;
                     value.init(Glib::Value<Glib::ustring>::value_type());
-                    value.set(static_cast<std::string>(m_group->m_uuid));
+                    value.set(static_cast<std::string>(seed));
                     return Gdk::ContentProvider::create(value);
                 },
                 false);

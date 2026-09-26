@@ -12,6 +12,7 @@
 #include "group/group_sketch.hpp"
 #include "group/group_step.hpp"
 #include "group/igroup_source_group.hpp"
+#include "entity/entity_occurrence.hpp"
 #include "component.hpp"
 #include "system/system.hpp"
 #include "util/debug.hpp"
@@ -370,6 +371,26 @@ std::vector<UUID> Document::compute_move_closure(std::set<UUID> seed) const
         if (seed.contains(group->m_uuid))
             ordered.push_back(group->m_uuid);
     return ordered;
+}
+
+std::set<UUID> Document::collect_contained_components(const UUID &component_uu) const
+{
+    std::set<UUID> out;
+    std::vector<UUID> stack{component_uu};
+    while (!stack.empty()) {
+        auto uu = stack.back();
+        stack.pop_back();
+        if (!out.insert(uu).second)
+            continue;
+        auto *comp = get_component_ptr(uu);
+        if (!comp)
+            continue;
+        for (const auto &[euu, en] : comp->m_document.m_entities) {
+            if (auto *occ = dynamic_cast<const EntityOccurrence *>(en.get()))
+                stack.push_back(occ->m_component);
+        }
+    }
+    return out;
 }
 
 void Document::update_pending(const UUID &last_group_to_update_i, const std::vector<EntityAndPoint> &dragged)

@@ -233,6 +233,15 @@ public:
     // reference behind on either side -- see workspace browser drag-and-drop.
     std::vector<UUID> compute_move_closure(std::set<UUID> seed) const;
 
+    // Every component_uu (and everything it, in turn, places an occurrence
+    // of) reachable from component_uu -- i.e. "components that would end up
+    // nested inside a new occurrence of component_uu". The result always
+    // includes component_uu itself. Used to refuse an occurrence placement
+    // (ToolInsertOccurrence) or a drag-and-drop nesting move (workspace
+    // browser) that would make a component contain itself, directly or
+    // transitively.
+    std::set<UUID> collect_contained_components(const UUID &component_uu) const;
+
     void erase_invalid();
     void update_pending(const UUID &last_group = UUID(), const std::vector<EntityAndPoint> &dragged = {});
 

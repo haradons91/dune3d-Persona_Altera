@@ -13,31 +13,6 @@
 namespace dune3d {
 
 namespace {
-// Every component_uu (and everything it, in turn, places an occurrence of)
-// reachable from component_uu -- i.e. "components that would end up nested
-// inside a new occurrence of component_uu". Used to refuse placing an
-// occurrence that would make a component contain itself, directly or
-// transitively.
-std::set<UUID> collect_contained_components(Document &root, const UUID &component_uu)
-{
-    std::set<UUID> out;
-    std::vector<UUID> stack{component_uu};
-    while (!stack.empty()) {
-        auto uu = stack.back();
-        stack.pop_back();
-        if (!out.insert(uu).second)
-            continue;
-        auto *comp = root.get_component_ptr(uu);
-        if (!comp)
-            continue;
-        for (const auto &[euu, en] : comp->m_document.m_entities) {
-            if (auto *occ = dynamic_cast<const EntityOccurrence *>(en.get()))
-                stack.push_back(occ->m_component);
-        }
-    }
-    return out;
-}
-
 // The chain of Components the user is currently "inside" (see
 // Core::get_active_occurrence_path()), outermost first. Empty if editing
 // the root directly -- nothing can create a cycle there, since the root
@@ -91,7 +66,7 @@ ToolResponse ToolInsertOccurrence::update(const ToolArgs &args)
             auto &root = m_core.get_root_document();
             const auto ancestors = ancestor_components(root, m_core.get_active_occurrence_path());
             if (!ancestors.empty()) {
-                const auto contained = collect_contained_components(root, data->uuid);
+                const auto contained = root.collect_contained_components(data->uuid);
                 for (const auto &ancestor : ancestors) {
                     if (contained.contains(ancestor)) {
                         m_intf.tool_bar_flash(
