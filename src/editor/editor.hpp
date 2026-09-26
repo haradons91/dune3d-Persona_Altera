@@ -136,8 +136,8 @@ private:
     void on_workspace_browser_new_component(const UUID &uu_doc);
     void on_workspace_browser_new_component_from_body(const UUID &uu_doc, const UUID &uu_body);
     void on_workspace_browser_new_instance(const UUID &uu_doc, const UUID &uu_body);
-    void on_workspace_browser_move_group_into_component(const UUID &uu_doc, const UUID &uu_seed_group,
-                                                        const UUID &uu_target_occurrence);
+    void on_workspace_browser_move_group_into_component(const UUID &uu_doc, const std::vector<UUID> &source_path,
+                                                        const UUID &uu_seed_group, const UUID &uu_target_occurrence);
 
     void on_export_solid_model(const ActionConnection &conn);
     void on_export_paths(const ActionConnection &conn);

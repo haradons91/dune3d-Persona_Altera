@@ -82,11 +82,13 @@ public:
         return m_signal_new_instance;
     }
 
-    // Dragging a root-level Sketch or BodyN feature row onto a placed
-    // component's row: move it (and everything it depends on, in both
-    // directions) into that component. (doc, dragged seed group, target
-    // occurrence group).
-    using type_signal_move_group_into_component = sigc::signal<void(UUID, UUID, UUID)>;
+    // Dragging a Sketch/BodyN/Occurrence row (root-level or nested, to any
+    // depth) onto either a placed component's row or the top-level document
+    // row: move it (and everything it depends on, in both directions) into
+    // that component, or back out to the root. (doc, the dragged row's own
+    // occurrence_path, dragged seed group, target occurrence group -- nil
+    // target UUID means "move to the root").
+    using type_signal_move_group_into_component = sigc::signal<void(UUID, std::vector<UUID>, UUID, UUID)>;
     type_signal_move_group_into_component signal_move_group_into_component()
     {
         return m_signal_move_group_into_component;

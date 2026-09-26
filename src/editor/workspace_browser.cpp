@@ -12,8 +12,11 @@
 #include "workspace/document_view.hpp"
 #include "util/fs_util.hpp"
 #include "util/debug.hpp"
+#include "util/json_util.hpp"
+#include "nlohmann/json.hpp"
 
 namespace dune3d {
+using json = nlohmann::json;
 
 class WorkspaceBrowser::GroupItem : public Glib::Object {
 public:
@@ -837,28 +840,36 @@ public:
         });
         add_controller(activate_controller);
 
-        // Drag a root-level Sketch or BodyN feature row onto a placed
-        // component's row to move it (and its full dependency closure) into
-        // that component -- see Editor::on_workspace_browser_move_group_into_component().
+        // Drag a Sketch/BodyN/Occurrence row -- root-level or nested, to any
+        // depth -- onto a placed component's row or the top-level document
+        // row, to move it into that component or back out to the root --
+        // see Editor::on_workspace_browser_move_group_into_component().
         auto drag_source = Gtk::DragSource::create();
         drag_source->set_actions(Gdk::DragAction::MOVE);
         drag_source->signal_prepare().connect(
                 [this](double, double) -> Glib::RefPtr<Gdk::ContentProvider> {
                     UUID seed;
-                    if (m_group && m_group->m_occurrence_path.empty()
-                        && (m_group->m_is_body_label || m_group->m_is_sketch))
+                    std::vector<UUID> path;
+                    if (m_group && (m_group->m_is_body_label || m_group->m_is_sketch)) {
                         seed = m_group->m_uuid;
-                    // A root-level Occurrence's own row -- the same
-                    // condition that already shows "New Instance" -- can
-                    // also be dragged, to nest that component inside
-                    // another one.
-                    else if (m_body && m_body->m_is_occurrence && m_body->m_occurrence_path.empty())
+                        path = m_group->m_occurrence_path;
+                    }
+                    // An Occurrence's own row -- the same condition that
+                    // already shows "New Instance" for a root-level one --
+                    // can also be dragged, to nest that component inside
+                    // another one (or, if already nested, move it further).
+                    else if (m_body && m_body->m_is_occurrence) {
                         seed = m_body->m_uuid;
+                        path = m_body->m_occurrence_path;
+                    }
                     else
                         return {};
+                    json j;
+                    j["path"] = path;
+                    j["seed"] = seed;
                     Glib::Value<Glib::ustring> value;
                     value.init(Glib::Value<Glib::ustring>::value_type());
-                    value.set(static_cast<std::string>(seed));
+                    value.set(j.dump());
                     return Gdk::ContentProvider::create(value);
                 },
                 false);
@@ -867,18 +878,32 @@ public:
         auto drop_target = Gtk::DropTarget::create(Glib::Value<Glib::ustring>::value_type(), Gdk::DragAction::MOVE);
         drop_target->signal_accept().connect(
                 [this](const Glib::RefPtr<Gdk::Drop> &) {
-                    return m_body && m_body->m_is_occurrence && m_body->m_occurrence_path.empty();
+                    return m_doc || (m_body && m_body->m_is_occurrence && m_body->m_occurrence_path.empty());
                 },
                 false);
         drop_target->signal_drop().connect(
                 [this](const Glib::ValueBase &value, double, double) {
-                    if (!m_body || !m_body->m_is_occurrence || !m_body->m_occurrence_path.empty())
+                    // The document row means "move to the root" (nil target
+                    // UUID); an Occurrence's row means "nest/move into this
+                    // component" -- either way, only a *root-level* target is
+                    // accepted (matching signal_accept() above), since
+                    // nested rows stay non-interactive as drop targets too.
+                    UUID target;
+                    if (m_doc) {
+                        // target stays nil
+                    }
+                    else if (m_body && m_body->m_is_occurrence && m_body->m_occurrence_path.empty())
+                        target = m_body->m_uuid;
+                    else
                         return false;
                     Glib::Value<Glib::ustring> str_value;
                     str_value.init(value.gobj());
+                    std::vector<UUID> source_path;
                     UUID seed_group;
                     try {
-                        seed_group = UUID(static_cast<std::string>(str_value.get()));
+                        const auto j = json::parse(static_cast<std::string>(str_value.get()));
+                        source_path = j.at("path").get<std::vector<UUID>>();
+                        seed_group = j.at("seed").get<UUID>();
                     }
                     catch (const std::exception &) {
                         return false;
@@ -892,10 +917,9 @@ public:
                     // showed up as the app hanging in a notify::expanded
                     // feedback loop.
                     auto &browser = m_browser;
-                    const auto doc = m_body->m_doc;
-                    const auto target = m_body->m_uuid;
-                    Glib::signal_idle().connect_once([&browser, doc, seed_group, target] {
-                        browser.m_signal_move_group_into_component.emit(doc, seed_group, target);
+                    const auto doc = m_doc ? m_doc->m_uuid : m_body->m_doc;
+                    Glib::signal_idle().connect_once([&browser, doc, source_path, seed_group, target] {
+                        browser.m_signal_move_group_into_component.emit(doc, source_path, seed_group, target);
                     });
                     return true;
                 },
