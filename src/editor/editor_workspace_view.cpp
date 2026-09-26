@@ -175,9 +175,20 @@ void Editor::set_current_workspace_view(const UUID &uu)
     // selected; doing this after the switch would misattribute the
     // restored camera to the view being entered instead of the one being
     // left, so it would never be correctly restored on returning to it.
+    //
+    // target_wv.m_current_document can legitimately still be nil here:
+    // create_workspace_view() appends a notebook page before its caller
+    // (Editor::open_file(), the NEW_DOCUMENT action) has assigned it a
+    // document, and appending can itself fire signal_switch_page()
+    // synchronously (see Editor::init()), reentering this function with
+    // that not-yet-configured workspace view. Everything below that reads
+    // wv.m_current_document as if it names a real document is guarded the
+    // same way for the same reason; the caller always finishes the job
+    // with its own call once the workspace view is actually ready.
     if (m_core.has_documents() && m_workspace_views.contains(uu)) {
         const auto &target_wv = m_workspace_views.at(uu);
-        if (m_core.get_current_idocument_info().get_uuid() != target_wv.m_current_document)
+        if (target_wv.m_current_document
+            && m_core.get_current_idocument_info().get_uuid() != target_wv.m_current_document)
             reset_sketch_editing_state();
     }
 
@@ -211,7 +222,7 @@ void Editor::set_current_workspace_view(const UUID &uu)
         update_view_hints();
         m_workspace_view_loading = false;
     }
-    if (m_core.has_documents()) {
+    if (m_core.has_documents() && wv.m_current_document) {
         m_core.set_current_document(wv.m_current_document);
         set_current_group(get_current_document_view().m_current_group);
         show_workspace_browser(m_core.get_current_idocument_info().get_uuid());

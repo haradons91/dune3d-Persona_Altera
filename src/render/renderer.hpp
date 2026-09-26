@@ -41,7 +41,8 @@ public:
                 std::optional<SelectableRef> sr, const Document *component_registry = nullptr,
                 glm::dvec3 accum_origin = {0, 0, 0},
                 glm::dquat accum_rot = glm::quat_identity<double, glm::defaultp>(),
-                std::vector<UUID> occurrence_path = {}, std::vector<UUID> occurrence_active_stack = {});
+                std::vector<UUID> occurrence_path = {}, std::vector<UUID> occurrence_active_stack = {},
+                UUID sketch_folder_key = {});
 
     // The occurrence path the user is currently "inside" for editing
     // purposes (Core::get_active_occurrence_path()) -- content whose own
@@ -156,6 +157,9 @@ private:
     glm::dquat m_accum_rot = glm::quat_identity<double, glm::defaultp>();
     std::vector<UUID> m_occurrence_path;
     std::vector<UUID> m_occurrence_active_stack;
+    // Which Document's "Sketches" folder checkbox governs the sketch groups
+    // currently being rendered -- see IDocumentView::sketch_folder_is_visible().
+    UUID m_sketch_folder_key;
 
     bool group_is_visible(const UUID &uu) const;
 

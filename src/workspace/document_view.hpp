@@ -37,12 +37,17 @@ public:
     };
     std::map<UUID, BodyView> m_body_views;
 
+    // Keyed by owning Component UUID (nil for the root document's own
+    // folder) -- see IDocumentView::sketch_folder_is_visible().
+    std::map<UUID, bool> m_sketch_folder_views;
+
     std::map<UUID, std::unique_ptr<EntityView>> m_entity_views;
 
     bool body_is_visible(const UUID &uu) const override;
     bool body_is_expanded(const UUID &uu) const;
     bool body_solid_model_is_visible(const UUID &uu) const override;
     bool group_is_visible(const UUID &uu) const override;
+    bool sketch_folder_is_visible(const UUID &uu) const override;
 
     bool m_document_is_visible = false;
     bool document_is_visible() const override

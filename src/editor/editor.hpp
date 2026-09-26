@@ -118,10 +118,14 @@ private:
     void on_move_group(Document::MoveGroup op);
     void on_workspace_browser_document_checked(const UUID &uu_doc, bool checked);
     void on_workspace_browser_origin_checked(const UUID &uu_doc, bool checked);
-    void on_workspace_browser_sketches_checked(const UUID &uu_doc, bool checked);
-    void on_workspace_browser_group_checked(const UUID &uu_doc, const UUID &uu_group, bool checked);
-    void on_workspace_browser_body_checked(const UUID &uu_doc, const UUID &uu_group, bool checked);
-    void on_workspace_browser_body_solid_model_checked(const UUID &uu_doc, const UUID &uu_group, bool checked);
+    void on_workspace_browser_sketches_checked(const UUID &uu_doc, const std::vector<UUID> &occurrence_path,
+                                               bool checked);
+    void on_workspace_browser_group_checked(const UUID &uu_doc, const std::vector<UUID> &occurrence_path,
+                                            const UUID &uu_group, bool checked);
+    void on_workspace_browser_body_checked(const UUID &uu_doc, const std::vector<UUID> &occurrence_path,
+                                           const UUID &uu_group, bool checked);
+    void on_workspace_browser_body_solid_model_checked(const UUID &uu_doc, const std::vector<UUID> &occurrence_path,
+                                                       const UUID &uu_group, bool checked);
     void on_workspace_browser_activate_link(const std::string &link);
     void on_view_rotate(const ActionConnection &conn);
     void on_view_zoom(const ActionConnection &conn);

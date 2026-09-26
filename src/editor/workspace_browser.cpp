@@ -108,6 +108,10 @@ public:
     Glib::RefPtr<Gio::ListModel> m_occurrence_children;
     // Context path for this row itself -- see GroupItem::m_occurrence_path.
     std::vector<UUID> m_occurrence_path;
+    // Set on an m_is_sketch_folder row: the key its own "Sketches" checkbox
+    // is stored under in DocumentView::m_sketch_folder_views -- the owning
+    // Component's UUID, or nil for the root document's own folder.
+    UUID m_sketch_folder_key;
 
     // No idea why the ObjectBase::get_type won't work for us but
     // reintroducing the method and using the name used by gtkmm seems
@@ -204,22 +208,8 @@ void WorkspaceBrowser::set_body_checked(const UUID &document_uuid, const UUID &b
     }
 }
 
-void WorkspaceBrowser::set_sketches_checked(const UUID &document_uuid, bool checked)
-{
-    for (size_t i_doc = 0; i_doc < m_document_store->get_n_items(); i_doc++) {
-        auto &document = *m_document_store->get_item(i_doc);
-        if (document.m_uuid != document_uuid)
-            continue;
-        for (size_t i_body = 0; i_body < document.m_body_store->get_n_items(); i_body++) {
-            auto &body = *document.m_body_store->get_item(i_body);
-            if (body.m_is_sketch_folder)
-                body.m_check_active = checked;
-        }
-    }
-}
-
 void WorkspaceBrowser::populate_body_store(const Document &root, const Document &doc, const UUID &doc_uuid,
-                                           const std::vector<UUID> &occurrence_path,
+                                           const std::vector<UUID> &occurrence_path, const UUID &component_uuid,
                                            const Glib::RefPtr<Gio::ListStore<BodyItem>> &body_store)
 {
     Glib::RefPtr<BodyItem> sketches;
@@ -251,6 +241,7 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
                 sketches->m_is_sketch_folder = true;
                 sketches->m_check_active = true;
                 sketches->m_occurrence_path = occurrence_path;
+                sketches->m_sketch_folder_key = component_uuid;
                 body_store->append(sketches);
             }
             auto gi = GroupItem::create();
@@ -289,7 +280,8 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
                 auto child_path = occurrence_path;
                 child_path.push_back(body_item->m_occurrence_entity);
                 auto child_store = Gio::ListStore<BodyItem>::create();
-                populate_body_store(root, comp->m_document, doc_uuid, child_path, child_store);
+                populate_body_store(root, comp->m_document, doc_uuid, child_path, occ_group.m_component,
+                                    child_store);
                 if (child_store->get_n_items() > 0)
                     body_item->m_occurrence_children = child_store;
             }
@@ -396,7 +388,7 @@ void WorkspaceBrowser::update_documents(const std::map<UUID, DocumentView> &doc_
             mi->m_body_store->append(folder);
         }
         const auto &doc = doci->get_document();
-        populate_body_store(doc, doc, mi->m_uuid, {}, mi->m_body_store);
+        populate_body_store(doc, doc, mi->m_uuid, {}, UUID(), mi->m_body_store);
         store->append(mi);
     }
     m_document_store = store;
@@ -471,6 +463,36 @@ void WorkspaceBrowser::update_name(DocumentItem &it_doc, IDocumentInfo &doci)
         it_doc.m_name = it_doc.m_name + " *";
 }
 
+void WorkspaceBrowser::update_nested_checkbox_state(const Glib::RefPtr<Gio::ListModel> &store,
+                                                    const DocumentView &doc_view)
+{
+    if (!store)
+        return;
+    for (guint i = 0; i < store->get_n_items(); i++) {
+        auto it_body = std::dynamic_pointer_cast<BodyItem>(store->get_object(i));
+        if (!it_body)
+            continue;
+        if (it_body->m_is_sketch_folder) {
+            it_body->m_check_active = doc_view.sketch_folder_is_visible(it_body->m_sketch_folder_key);
+            for (guint j = 0; j < it_body->m_group_store->get_n_items(); j++) {
+                auto &it_group = *it_body->m_group_store->get_item(j);
+                it_group.m_check_sensitive = it_body->m_check_active.get_value();
+                it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
+            }
+            continue;
+        }
+        it_body->m_check_active = doc_view.body_is_visible(it_body->m_uuid);
+        for (guint j = 0; j < it_body->m_group_store->get_n_items(); j++) {
+            auto &it_group = *it_body->m_group_store->get_item(j);
+            it_group.m_check_sensitive = it_body->m_check_active.get_value();
+            it_group.m_check_active = it_group.m_is_body_label ? doc_view.body_is_visible(it_body->m_uuid)
+                                                                : doc_view.group_is_visible(it_group.m_uuid);
+        }
+        if (it_body->m_is_occurrence)
+            update_nested_checkbox_state(it_body->m_occurrence_children, doc_view);
+    }
+}
+
 void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &doc_views)
 {
     DUNE3D_TRACE(DebugCategory::TREE);
@@ -501,6 +523,7 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
             if (it_body.m_is_sketch_folder) {
                 it_body.m_expanded = it_body.m_group_store->get_n_items() > 0;
                 it_body.m_check_sensitive = true;
+                it_body.m_check_active = doc_view.sketch_folder_is_visible(it_body.m_sketch_folder_key);
                 for (size_t i_group = 0; i_group < it_body.m_group_store->get_n_items(); i_group++) {
                     auto &it_group = *it_body.m_group_store->get_item(i_group);
                     const bool is_current = doci.get_current_group() == it_group.m_uuid;
@@ -531,6 +554,8 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
             it_body.m_check_sensitive = true;
             it_body.m_solid_model_active = doc_view.body_solid_model_is_visible(it_body.m_uuid);
             it_body.m_expanded = doc_view.body_is_expanded(it_body.m_uuid) | is_current_body;
+            if (it_body.m_is_occurrence)
+                update_nested_checkbox_state(it_body.m_occurrence_children, doc_view);
 
 
             for (size_t i_group = 0; i_group < it_body.m_group_store->get_n_items(); i_group++) {
@@ -681,7 +706,7 @@ public:
 
         m_solid_toggle = Gtk::make_managed<SolidModelToggleButton>();
         m_solid_toggle->signal_toggled().connect([this] {
-            m_browser.signal_body_solid_model_checked().emit(m_body->m_doc, m_body->m_uuid,
+            m_browser.signal_body_solid_model_checked().emit(m_body->m_doc, m_body->m_occurrence_path, m_body->m_uuid,
                                                              m_solid_toggle->get_active());
         });
 
@@ -743,16 +768,18 @@ public:
             if (m_body && m_body->m_is_origin_folder)
                 m_browser.signal_origin_checked().emit(m_body->m_doc, m_checkbutton->get_active());
             else if (m_body && m_body->m_is_sketch_folder)
-                m_browser.signal_sketches_checked().emit(m_body->m_doc, m_checkbutton->get_active());
+                m_browser.signal_sketches_checked().emit(m_body->m_doc, m_body->m_occurrence_path,
+                                                         m_checkbutton->get_active());
             else if (m_body && !m_body->m_is_document_folder)
-                m_browser.signal_body_checked().emit(m_body->m_doc, m_body->m_uuid, m_checkbutton->get_active());
+                m_browser.signal_body_checked().emit(m_body->m_doc, m_body->m_occurrence_path, m_body->m_uuid,
+                                                     m_checkbutton->get_active());
             if (m_group) {
                 debug_log(DebugCategory::UI,
                           "tree checkbox group=" + static_cast<std::string>(m_group->m_uuid)
                                   + " name=" + m_group->m_name.get_value()
                                   + " body_label=" + std::to_string(m_group->m_is_body_label)
                                   + " active=" + std::to_string(m_checkbutton->get_active()));
-                m_browser.signal_group_checked().emit(m_group->m_doc, m_group->m_uuid,
+                m_browser.signal_group_checked().emit(m_group->m_doc, m_group->m_occurrence_path, m_group->m_uuid,
                                                       m_checkbutton->get_active());
             }
             if (m_doc)
@@ -972,14 +999,22 @@ public:
         if (auto row_box = dynamic_cast<Gtk::Box *>(get_child()))
             row_box->set_margin_start(16);
         // Content nested inside a placed Occurrence's Component (non-empty
-        // occurrence_path) is read-only for now -- visibility toggling and
-        // renaming aren't tracked per-occurrence-path yet (see
-        // WorkspaceBrowser::populate_body_store()). Only navigation
-        // (double-click descend, wired in the click controller below) works
-        // on it, same "read before write" rollout as selection/picking was.
+        // occurrence_path) stays read-only for most things -- no rename, no
+        // context menu, no per-instance override (a Component's content is
+        // shared/live-linked across every placed instance, so hiding it
+        // applies everywhere that component is used, same as editing its
+        // geometry already does) -- but visibility (the checkbox) IS wired
+        // up: DocumentView::group_is_visible()/body_is_visible() are a flat
+        // map keyed by the group's own globally-unique UUID, so they work
+        // for a nested group exactly like a root one, no path-awareness
+        // needed (see Renderer::visit(const EntityOccurrence&), which now
+        // passes the real DocumentView down instead of a stub that always
+        // returned true). Only navigation (double-click descend, wired in
+        // the click controller below) and now visibility work on it, same
+        // "read before write" rollout as selection/picking was.
         const bool nested = !it.m_occurrence_path.empty();
         if (it.m_is_document_folder || it.m_is_sketch_folder) {
-            m_checkbutton->set_visible((it.m_is_origin_folder || it.m_is_sketch_folder) && !nested);
+            m_checkbutton->set_visible(it.m_is_origin_folder || it.m_is_sketch_folder);
             m_solid_toggle->set_visible(false);
             m_dof_label->set_visible(false);
             m_status_button->set_visible(false);
@@ -987,7 +1022,7 @@ public:
             m_source_group_image->set_visible(false);
             m_component_icon->set_visible(false);
             m_label->set_attributes(m_attrs_bold);
-            if ((it.m_is_origin_folder || it.m_is_sketch_folder) && !nested) {
+            if (it.m_is_origin_folder || it.m_is_sketch_folder) {
                 m_bindings.push_back(Glib::Binding::bind_property_value(
                         it.m_check_active.get_proxy(), m_checkbutton->property_active(),
                         Glib::Binding::Flags::SYNC_CREATE));
@@ -1002,7 +1037,8 @@ public:
             return;
         }
         if (nested) {
-            m_checkbutton->set_visible(false);
+            m_checkbutton->set_active(true);
+            m_checkbutton->set_sensitive(true);
             m_solid_toggle->set_visible(false);
             m_dof_label->set_visible(false);
             m_status_button->set_visible(false);
@@ -1012,6 +1048,12 @@ public:
             m_label->set_attributes(m_attrs_normal);
             m_bindings.push_back(Glib::Binding::bind_property_value(
                     it.m_name.get_proxy(), m_label->property_label(), Glib::Binding::Flags::SYNC_CREATE));
+            m_bindings.push_back(Glib::Binding::bind_property_value(it.m_check_active.get_proxy(),
+                                                                    m_checkbutton->property_active(),
+                                                                    Glib::Binding::Flags::SYNC_CREATE));
+            m_bindings.push_back(Glib::Binding::bind_property_value(it.m_check_sensitive.get_proxy(),
+                                                                    m_checkbutton->property_sensitive(),
+                                                                    Glib::Binding::Flags::SYNC_CREATE));
             get_list_row()->set_expanded(true);
             m_browser.unblock_signals();
             return;
@@ -1078,28 +1120,25 @@ public:
         // inset instead of sitting flush with their parent.
         if (auto row_box = dynamic_cast<Gtk::Box *>(get_child()))
             row_box->set_margin_start(16);
-        // See the matching comment in bind(BodyItem&) -- nested content is
-        // read-only display for now: its checkbox (visibility, untracked per
-        // occurrence path) and dof/status (not refreshed incrementally,
-        // only ever populated once at tree-rebuild time) stay hidden rather
-        // than risk showing stale or misleading values.
+        // See the matching comment in bind(BodyItem&) -- nested content stays
+        // read-only display for dof/status (not refreshed incrementally,
+        // only ever populated once at tree-rebuild time, so showing them
+        // risks stale/misleading values), but visibility (the checkbox) IS
+        // wired up -- see that comment for why no path-awareness is needed.
         const bool nested = !it.m_occurrence_path.empty();
-        m_checkbutton->set_visible(!nested);
-        m_checkbutton->set_sensitive(!nested);
+        m_checkbutton->set_visible(true);
+        m_checkbutton->set_sensitive(true);
         m_solid_toggle->set_visible(false);
         m_component_icon->set_visible(false);
         m_dof_label->set_visible(!nested);
         m_status_button->set_visible(!nested);
         m_close_button->set_visible(false);
         m_group = &it;
-        if (!nested) {
-            m_bindings.push_back(Glib::Binding::bind_property_value(it.m_check_active.get_proxy(),
-                                                                    m_checkbutton->property_active(),
-                                                                    Glib::Binding::Flags::SYNC_CREATE));
-            m_bindings.push_back(Glib::Binding::bind_property_value(it.m_check_sensitive.get_proxy(),
-                                                                    m_checkbutton->property_sensitive(),
-                                                                    Glib::Binding::Flags::SYNC_CREATE));
-        }
+        m_bindings.push_back(Glib::Binding::bind_property_value(
+                it.m_check_active.get_proxy(), m_checkbutton->property_active(), Glib::Binding::Flags::SYNC_CREATE));
+        m_bindings.push_back(Glib::Binding::bind_property_value(it.m_check_sensitive.get_proxy(),
+                                                                m_checkbutton->property_sensitive(),
+                                                                Glib::Binding::Flags::SYNC_CREATE));
         m_bindings.push_back(Glib::Binding::bind_property_value(it.m_name.get_proxy(), m_label->property_label(),
                                                                 Glib::Binding::Flags::SYNC_CREATE));
         m_bindings.push_back(Glib::Binding::bind_property_value(

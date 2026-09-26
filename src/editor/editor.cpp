@@ -2414,7 +2414,17 @@ void Editor::open_file(const std::filesystem::path &path)
             loaded_workspace_views.clear();
         }
 
-        DocumentView *new_dv = nullptr;
+        // Register the document with Core *before* touching any workspace
+        // view, so that set_current_workspace_view() below -- which reads
+        // the current group of whatever document it switches to -- never
+        // runs against a doc_uu that doesn't exist in m_core yet. It used
+        // to run afterwards, which meant switching to the just-created
+        // workspace view (whenever a document is already open, which is
+        // always true given ensure_new_document()) tried to look up a
+        // group in a document Core didn't know about yet, throwing
+        // std::out_of_range.
+        m_core.add_document(path, doc_uu);
+
         UUID current_wsv;
         if (loaded_workspace_views.size()) {
             for (const auto &[uu, wv] : loaded_workspace_views) {
@@ -2433,13 +2443,11 @@ void Editor::open_file(const std::filesystem::path &path)
         else {
             current_wsv = create_workspace_view();
             m_workspace_views.at(current_wsv).m_current_document = doc_uu;
-            set_current_workspace_view(current_wsv);
             auto &dv = m_workspace_views.at(current_wsv).m_documents[doc_uu];
             dv.m_document_is_visible = true;
-            new_dv = &dv;
+            dv.m_current_group = m_core.get_idocument_info(doc_uu).get_current_group();
+            set_current_workspace_view(current_wsv);
         }
-
-        m_core.add_document(path, doc_uu);
 
         {
             auto &wv = m_workspace_views.at(m_current_workspace_view);
@@ -2449,9 +2457,6 @@ void Editor::open_file(const std::filesystem::path &path)
             m_core.set_current_group(get_current_document_view().m_current_group);
         }
 
-        if (new_dv) {
-            new_dv->m_current_group = m_core.get_idocument_info(doc_uu).get_current_group();
-        }
         if (current_wsv && m_core.get_current_idocument_info().get_uuid() == doc_uu) {
             auto &dv = m_workspace_views.at(current_wsv).m_documents[doc_uu];
             set_current_group(dv.m_current_group);

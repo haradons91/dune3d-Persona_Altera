@@ -933,24 +933,45 @@ void Editor::on_workspace_browser_origin_checked(const UUID &uu_doc, bool checke
     canvas_update();
 }
 
-void Editor::on_workspace_browser_sketches_checked(const UUID &uu_doc, bool checked)
+void Editor::on_workspace_browser_sketches_checked(const UUID &uu_doc, const std::vector<UUID> &occurrence_path,
+                                                    bool checked)
 {
     CanvasUpdater canvas_updater{*this};
-    auto &doc = m_core.get_idocument_info(uu_doc).get_document();
-    auto &doc_view = get_current_document_views()[uu_doc];
-    for (const auto *group : doc.get_groups_sorted()) {
-        if (group->get_type() == Group::Type::SKETCH)
-            doc_view.m_group_views[group->m_uuid].m_visible = checked;
+    auto &root = m_core.get_root_document();
+    // The "Sketches" folder checkbox has no per-sketch backing state of its
+    // own -- unlike group/body visibility, it doesn't touch any individual
+    // sketch's own checked state, only whether the folder itself gates
+    // rendering (see Renderer::group_is_visible()/IDocumentView::
+    // sketch_folder_is_visible()), keyed by the owning Component's UUID (nil
+    // for the root document's own folder).
+    UUID key;
+    if (!occurrence_path.empty()) {
+        try {
+            if (auto *component = resolve_occurrence_path(root, occurrence_path).component)
+                key = component->m_uuid;
+        }
+        catch (const std::exception &) {
+            return;
+        }
     }
-    m_workspace_browser->set_sketches_checked(uu_doc, checked);
+    get_current_document_views()[uu_doc].m_sketch_folder_views[key] = checked;
     m_workspace_browser->update_current_group(get_current_document_views());
 }
 
-void Editor::on_workspace_browser_group_checked(const UUID &uu_doc, const UUID &uu_group, bool checked)
+void Editor::on_workspace_browser_group_checked(const UUID &uu_doc, const std::vector<UUID> &occurrence_path,
+                                                 const UUID &uu_group, bool checked)
 {
     CanvasUpdater canvas_updater{*this};
-    auto &doc = m_core.get_idocument_info(uu_doc).get_document();
-    auto &group = doc.get_group(uu_group);
+    auto &root = m_core.get_root_document();
+    Document *doc = &root;
+    try {
+        if (!occurrence_path.empty())
+            doc = &resolve_occurrence_path(root, occurrence_path).doc;
+    }
+    catch (const std::exception &) {
+        return;
+    }
+    auto &group = doc->get_group(uu_group);
     if (group.m_body.has_value())
         get_current_document_views()[uu_doc].m_body_views[uu_group].m_visible = checked;
     else
@@ -961,7 +982,8 @@ void Editor::on_workspace_browser_group_checked(const UUID &uu_doc, const UUID &
     m_workspace_browser->update_current_group(get_current_document_views());
 }
 
-void Editor::on_workspace_browser_body_checked(const UUID &uu_doc, const UUID &uu_group, bool checked)
+void Editor::on_workspace_browser_body_checked(const UUID &uu_doc, const std::vector<UUID> &occurrence_path,
+                                                const UUID &uu_group, bool checked)
 {
     DUNE3D_TRACE(DebugCategory::UI);
     CanvasUpdater canvas_updater{*this};
@@ -969,11 +991,14 @@ void Editor::on_workspace_browser_body_checked(const UUID &uu_doc, const UUID &u
               "body checkbox doc=" + static_cast<std::string>(uu_doc) + " body="
                       + static_cast<std::string>(uu_group) + " checked=" + std::to_string(checked));
     get_current_document_views()[uu_doc].m_body_views[uu_group].m_visible = checked;
-    m_workspace_browser->set_body_checked(uu_doc, uu_group, checked);
+    if (occurrence_path.empty())
+        m_workspace_browser->set_body_checked(uu_doc, uu_group, checked);
     m_workspace_browser->update_current_group(get_current_document_views());
 }
 
-void Editor::on_workspace_browser_body_solid_model_checked(const UUID &uu_doc, const UUID &uu_group, bool checked)
+void Editor::on_workspace_browser_body_solid_model_checked(const UUID &uu_doc,
+                                                            const std::vector<UUID> &occurrence_path,
+                                                            const UUID &uu_group, bool checked)
 {
     CanvasUpdater canvas_updater{*this};
     get_current_document_views()[uu_doc].m_body_views[uu_group].m_solid_model_visible = checked;

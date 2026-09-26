@@ -17,7 +17,6 @@ public:
 
     void set_document(const UUID &document_uuid);
     void set_body_checked(const UUID &document_uuid, const UUID &body_uuid, bool checked);
-    void set_sketches_checked(const UUID &document_uuid, bool checked);
 
     void update_documents(const std::map<UUID, DocumentView> &doc_views);
     void update_current_group(const std::map<UUID, DocumentView> &doc_views);
@@ -94,10 +93,12 @@ public:
         return m_signal_move_group_into_component;
     }
 
-    using type_signal_group_checked = sigc::signal<void(UUID, UUID, bool)>;
+    // (doc, occurrence_path of the row itself -- empty for root-level, same
+    // convention as everywhere else this session -- group/body uuid, checked).
+    using type_signal_group_checked = sigc::signal<void(UUID, std::vector<UUID>, UUID, bool)>;
     using type_signal_document_checked = sigc::signal<void(UUID, bool)>;
     using type_signal_origin_checked = sigc::signal<void(UUID, bool)>;
-    using type_signal_sketches_checked = sigc::signal<void(UUID, bool)>;
+    using type_signal_sketches_checked = sigc::signal<void(UUID, std::vector<UUID>, bool)>;
     type_signal_group_checked signal_group_checked()
     {
         return m_signal_group_checked;
@@ -249,8 +250,19 @@ private:
     // comment) and recurses into its m_document, one level deeper in
     // occurrence_path each time.
     static void populate_body_store(const Document &root, const Document &doc, const UUID &doc_uuid,
-                                     const std::vector<UUID> &occurrence_path,
+                                     const std::vector<UUID> &occurrence_path, const UUID &component_uuid,
                                      const Glib::RefPtr<Gio::ListStore<BodyItem>> &body_store);
+
+    // Refreshes checkbox state (m_check_active) for a nested BodyItem store
+    // (an Occurrence's m_occurrence_children) and everything under it,
+    // recursing into further-nested Occurrences. update_current_group()
+    // only walks the root-level m_body_store/m_group_store directly; this
+    // is its counterpart for content inside a component, called once per
+    // occurrence row found there. No occurrence_path resolution is needed --
+    // DocumentView::group_is_visible()/body_is_visible() are a flat map
+    // keyed by the group's own globally-unique UUID, the same lookup as any
+    // root-level group.
+    static void update_nested_checkbox_state(const Glib::RefPtr<Gio::ListModel> &store, const DocumentView &doc_view);
 
     void block_signals();
     void unblock_signals();
