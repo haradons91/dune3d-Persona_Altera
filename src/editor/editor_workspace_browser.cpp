@@ -963,19 +963,26 @@ void Editor::on_workspace_browser_group_checked(const UUID &uu_doc, const std::v
 {
     CanvasUpdater canvas_updater{*this};
     auto &root = m_core.get_root_document();
-    Document *doc = &root;
+    // uu_group's own visibility write below is flat/path-independent, but
+    // still validate the path resolves (a stale path -- something along it
+    // no longer exists -- means this checkbox click is now meaningless,
+    // same as any other invalid tree interaction).
     try {
         if (!occurrence_path.empty())
-            doc = &resolve_occurrence_path(root, occurrence_path).doc;
+            resolve_occurrence_path(root, occurrence_path);
     }
     catch (const std::exception &) {
         return;
     }
-    auto &group = doc->get_group(uu_group);
-    if (group.m_body.has_value())
-        get_current_document_views()[uu_doc].m_body_views[uu_group].m_visible = checked;
-    else
-        get_current_document_views()[uu_doc].m_group_views[uu_group].m_visible = checked;
+    // "Body1" (the group that starts the body -- group.m_body.has_value())
+    // used to write into m_body_views, the same flag as the body's own
+    // "Bodies" row -- so unchecking the body forced Body1's own checkbox
+    // unchecked too, instead of just graying it out (see the equivalent
+    // fix for the Sketches folder/its sketches). Body1's own visibility
+    // now always lives in m_group_views, the same flat per-group storage
+    // every other feature (Cut1, Join1, ...) already uses; the body's own
+    // visibility is a separate gate ANDed in by Renderer::group_is_visible().
+    get_current_document_views()[uu_doc].m_group_views[uu_group].m_visible = checked;
     debug_log(DebugCategory::UI,
               "checkbox doc=" + static_cast<std::string>(uu_doc) + " group=" + static_cast<std::string>(uu_group)
                       + " checked=" + std::to_string(checked));

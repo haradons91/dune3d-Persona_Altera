@@ -485,8 +485,12 @@ void WorkspaceBrowser::update_nested_checkbox_state(const Glib::RefPtr<Gio::List
         for (guint j = 0; j < it_body->m_group_store->get_n_items(); j++) {
             auto &it_group = *it_body->m_group_store->get_item(j);
             it_group.m_check_sensitive = it_body->m_check_active.get_value();
-            it_group.m_check_active = it_group.m_is_body_label ? doc_view.body_is_visible(it_body->m_uuid)
-                                                                : doc_view.group_is_visible(it_group.m_uuid);
+            // Body1's own checked state lives in m_group_views like any
+            // other feature now (see Editor::on_workspace_browser_group_checked)
+            // -- it_group.m_uuid equals it_body->m_uuid for that row, but the
+            // two are now separate flags: this one, and the body's own gate
+            // just above, ANDed together at render time.
+            it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
         }
         if (it_body->m_is_occurrence)
             update_nested_checkbox_state(it_body->m_occurrence_children, doc_view);
@@ -570,13 +574,13 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
                 // The child remains actionable when its own visibility is
                 // off.  Only the Bodies parent should disable its children.
                 it_group.m_check_sensitive = it_body.m_check_active.get_value();
-                // Body1 is the visible label for the whole logical body.  It
-                // must reflect the body visibility rather than only the
-                // visibility of the first feature, otherwise later joined or
-                // cut features remain rendered when Body1 is unchecked.
-                it_group.m_check_active = it_group.m_is_body_label
-                                                  ? doc_view.body_is_visible(it_body.m_uuid)
-                                                  : doc_view.group_is_visible(it_group.m_uuid);
+                // Body1's own checked state lives in m_group_views like any
+                // other feature (Cut1, Join1, ...) -- see
+                // Editor::on_workspace_browser_group_checked(). Unchecking
+                // the body still hides everything in it (Body1 included):
+                // that's the separate m_body_views gate above, ANDed in by
+                // Renderer::group_is_visible() regardless of Body1's own bit.
+                it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
                 {
                     auto msgs = gr.get_messages();
                     it_group.m_status = GroupStatusMessage::summarize(msgs);
