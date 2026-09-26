@@ -130,6 +130,11 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_ribbon_create_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_create_menu_button");
     m_ribbon_insert_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_insert_menu_button");
     m_ribbon_modify_group = refBuilder->get_widget<Gtk::Box>("ribbon_modify_group");
+    m_ribbon_modify_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_modify_menu_button");
+    m_ribbon_btn_fillet = refBuilder->get_widget<Gtk::Button>("ribbon_btn_fillet");
+    m_ribbon_btn_chamfer = refBuilder->get_widget<Gtk::Button>("ribbon_btn_chamfer");
+    m_ribbon_btn_combine = refBuilder->get_widget<Gtk::Button>("ribbon_btn_combine");
+    m_ribbon_btn_pattern = refBuilder->get_widget<Gtk::Button>("ribbon_btn_pattern");
     m_ribbon_sketch_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_group");
     m_ribbon_sketch_create_menu_button =
             refBuilder->get_widget<Gtk::MenuButton>("ribbon_sketch_create_menu_button");
@@ -145,11 +150,6 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_ribbon_btn_revolve = refBuilder->get_widget<Gtk::Button>("ribbon_btn_revolve");
     m_ribbon_btn_sweep = refBuilder->get_widget<Gtk::Button>("ribbon_btn_sweep");
     m_ribbon_btn_loft = refBuilder->get_widget<Gtk::Button>("ribbon_btn_loft");
-
-    m_ribbon_btn_fillet = refBuilder->get_widget<Gtk::Button>("ribbon_btn_fillet");
-    m_ribbon_btn_chamfer = refBuilder->get_widget<Gtk::Button>("ribbon_btn_chamfer");
-    m_ribbon_btn_combine = refBuilder->get_widget<Gtk::Button>("ribbon_btn_combine");
-    m_ribbon_btn_pattern = refBuilder->get_widget<Gtk::Button>("ribbon_btn_pattern");
 
     m_ribbon_btn_line = refBuilder->get_widget<Gtk::Button>("ribbon_btn_line");
     m_ribbon_btn_rect = refBuilder->get_widget<Gtk::Button>("ribbon_btn_rect");

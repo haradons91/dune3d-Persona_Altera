@@ -1290,6 +1290,57 @@ void Editor::init_header_bar()
         auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
         m_win.get_ribbon_insert_menu_button().set_popover(*popover);
     }
+    {
+        // Fusion 360's own "Modify" dropdown, in its own item order, sitting
+        // alongside the existing Fillet/Chamfer/Combine/Pattern ribbon
+        // buttons (unchanged) rather than replacing them -- this menu is an
+        // additional way to reach those same four (duplicated here on
+        // purpose) plus everything else on the list. Most of the rest
+        // (anything not already a real Tool/ActionID here) have no
+        // equivalent feature in Dune3D yet -- added disabled, same
+        // placeholder pattern as Insert's own "Insert SVG"/"Insert Derive"
+        // above, so the menu shows the full intended shape without
+        // pretending unbuilt features exist.
+        auto menu = Gio::Menu::create();
+        auto actions = Gio::SimpleActionGroup::create();
+        actions->add_action("fillet", [this] { trigger_action(ActionID::CREATE_GROUP_FILLET); });
+        actions->add_action("chamfer", [this] { trigger_action(ActionID::CREATE_GROUP_CHAMFER); });
+        actions->add_action("combine", [this] { trigger_action(ActionID::CREATE_GROUP_SOLID_MODEL_OPERATION); });
+        actions->add_action("pattern", [this] { trigger_action(ActionID::CREATE_GROUP_LINEAR_ARRAY); });
+        actions->add_action("delete", [this] { trigger_action(ToolID::DELETE); });
+        for (const char *name : {"press_pull", "shell", "draft", "scale", "offset_face", "replace_face",
+                                 "split_face", "split_body", "silhouette_split", "move_copy", "align", "remove",
+                                 "simplify", "physical_material", "appearance", "manage_materials",
+                                 "change_parameters", "compute_all", "bill_of_materials"})
+            actions->add_action(name, [] {})->set_enabled(false);
+        m_win.insert_action_group("ribbon_modify", actions);
+        menu->append("Press/Pull", "ribbon_modify.press_pull");
+        menu->append("Fillet", "ribbon_modify.fillet");
+        menu->append("Chamfer", "ribbon_modify.chamfer");
+        menu->append("Shell", "ribbon_modify.shell");
+        menu->append("Draft", "ribbon_modify.draft");
+        menu->append("Scale", "ribbon_modify.scale");
+        menu->append("Combine", "ribbon_modify.combine");
+        menu->append("Pattern", "ribbon_modify.pattern");
+        menu->append("Offset Face", "ribbon_modify.offset_face");
+        menu->append("Replace Face", "ribbon_modify.replace_face");
+        menu->append("Split Face", "ribbon_modify.split_face");
+        menu->append("Split Body", "ribbon_modify.split_body");
+        menu->append("Silhouette Split", "ribbon_modify.silhouette_split");
+        menu->append("Move/Copy", "ribbon_modify.move_copy");
+        menu->append("Align", "ribbon_modify.align");
+        menu->append("Delete", "ribbon_modify.delete");
+        menu->append("Remove", "ribbon_modify.remove");
+        menu->append("Simplify", "ribbon_modify.simplify");
+        menu->append("Physical Material", "ribbon_modify.physical_material");
+        menu->append("Appearance", "ribbon_modify.appearance");
+        menu->append("Manage Materials", "ribbon_modify.manage_materials");
+        menu->append("Change Parameters", "ribbon_modify.change_parameters");
+        menu->append("Compute All", "ribbon_modify.compute_all");
+        menu->append("Bill of Materials", "ribbon_modify.bill_of_materials");
+        auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_modify_menu_button().set_popover(*popover);
+    }
 
     attach_action_button(m_win.get_open_button(), ActionID::OPEN_DOCUMENT);
     attach_action_sensitive(m_win.get_open_menu_button(), ActionID::OPEN_DOCUMENT);

@@ -159,6 +159,11 @@ public:
     Gtk::MenuButton &get_ribbon_create_menu_button() { return *m_ribbon_create_menu_button; }
     Gtk::MenuButton &get_ribbon_insert_menu_button() { return *m_ribbon_insert_menu_button; }
     Gtk::Box &get_ribbon_modify_group() { return *m_ribbon_modify_group; }
+    Gtk::MenuButton &get_ribbon_modify_menu_button() { return *m_ribbon_modify_menu_button; }
+    Gtk::Button &get_ribbon_btn_fillet() { return *m_ribbon_btn_fillet; }
+    Gtk::Button &get_ribbon_btn_chamfer() { return *m_ribbon_btn_chamfer; }
+    Gtk::Button &get_ribbon_btn_combine() { return *m_ribbon_btn_combine; }
+    Gtk::Button &get_ribbon_btn_pattern() { return *m_ribbon_btn_pattern; }
     Gtk::Box &get_ribbon_sketch_group() { return *m_ribbon_sketch_group; }
     Gtk::MenuButton &get_ribbon_sketch_create_menu_button() { return *m_ribbon_sketch_create_menu_button; }
     Gtk::Box &get_ribbon_sketch_modify_group() { return *m_ribbon_sketch_modify_group; }
@@ -174,12 +179,7 @@ public:
     Gtk::Button &get_ribbon_btn_sweep() { return *m_ribbon_btn_sweep; }
     Gtk::Button &get_ribbon_btn_loft() { return *m_ribbon_btn_loft; }
 
-    Gtk::Button &get_ribbon_btn_fillet() { return *m_ribbon_btn_fillet; }
-    Gtk::Button &get_ribbon_btn_chamfer() { return *m_ribbon_btn_chamfer; }
-    Gtk::Button &get_ribbon_btn_combine() { return *m_ribbon_btn_combine; }
-    Gtk::Button &get_ribbon_btn_pattern() { return *m_ribbon_btn_pattern; }
-
-    Gtk::Button &get_ribbon_btn_line() { return *m_ribbon_btn_line; }
+Gtk::Button &get_ribbon_btn_line() { return *m_ribbon_btn_line; }
     Gtk::Button &get_ribbon_btn_rect() { return *m_ribbon_btn_rect; }
     Gtk::Button &get_ribbon_btn_circle() { return *m_ribbon_btn_circle; }
     Gtk::Button &get_ribbon_btn_polygon() { return *m_ribbon_btn_polygon; }
@@ -305,6 +305,11 @@ private:
     Gtk::MenuButton *m_ribbon_create_menu_button = nullptr;
     Gtk::MenuButton *m_ribbon_insert_menu_button = nullptr;
     Gtk::Box *m_ribbon_modify_group = nullptr;
+    Gtk::MenuButton *m_ribbon_modify_menu_button = nullptr;
+    Gtk::Button *m_ribbon_btn_fillet = nullptr;
+    Gtk::Button *m_ribbon_btn_chamfer = nullptr;
+    Gtk::Button *m_ribbon_btn_combine = nullptr;
+    Gtk::Button *m_ribbon_btn_pattern = nullptr;
     Gtk::Box *m_ribbon_sketch_group = nullptr;
     Gtk::MenuButton *m_ribbon_sketch_create_menu_button = nullptr;
     Gtk::Box *m_ribbon_sketch_modify_group = nullptr;
@@ -320,12 +325,7 @@ private:
     Gtk::Button *m_ribbon_btn_sweep = nullptr;
     Gtk::Button *m_ribbon_btn_loft = nullptr;
 
-    Gtk::Button *m_ribbon_btn_fillet = nullptr;
-    Gtk::Button *m_ribbon_btn_chamfer = nullptr;
-    Gtk::Button *m_ribbon_btn_combine = nullptr;
-    Gtk::Button *m_ribbon_btn_pattern = nullptr;
-
-    Gtk::Button *m_ribbon_btn_line = nullptr;
+Gtk::Button *m_ribbon_btn_line = nullptr;
     Gtk::Button *m_ribbon_btn_rect = nullptr;
     Gtk::Button *m_ribbon_btn_circle = nullptr;
     Gtk::Button *m_ribbon_btn_polygon = nullptr;
