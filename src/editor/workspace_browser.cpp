@@ -98,10 +98,16 @@ public:
     bool m_is_sketch_folder = false;
     // Set for the synthetic "Meshes" folder row spanning imported STL/3MF
     // bodies (same idea as m_is_sketch_folder, but its children are full
-    // BodyItem rows -- each mesh keeps its own body-style context menu,
-    // color, and "Body1" child -- not GroupItems, so they're held in
-    // m_mesh_children below rather than m_group_store).
+    // BodyItem rows -- each mesh keeps its own body-style context menu and
+    // color -- not GroupItems, so they're held in m_mesh_children below
+    // rather than m_group_store).
     bool m_is_mesh_folder = false;
+    // Set on a mesh row itself (a child of an m_is_mesh_folder row). Unlike
+    // a generic body, a mesh has no "Body1"/feature children of its own to
+    // drag by (see populate_body_store()), so WorkspaceRow's drag source
+    // needs to recognize the mesh row directly, the same way it already
+    // does for an Occurrence's own row.
+    bool m_is_mesh = false;
 
     // Set for a row that represents a GroupOccurrence. Its children are a
     // recursive population of the placed Component's own document (Bodies/
@@ -360,6 +366,7 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
             }
 
             auto mesh_item = BodyItem::create();
+            mesh_item->m_is_mesh = true;
             mesh_item->m_name = gr->m_name;
             for (const auto &[entity_uuid, entity] : doc.m_entities) {
                 (void)entity_uuid;
@@ -383,14 +390,14 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
             mesh_item->m_doc = doc_uuid;
             mesh_item->m_occurrence_path = occurrence_path;
             mesh_children_store->append(mesh_item);
-
-            auto gi = GroupItem::create();
-            gi->m_name = "Body1";
-            gi->m_is_body_label = true;
-            gi->m_uuid = gr->m_uuid;
-            gi->m_doc = doc_uuid;
-            gi->m_occurrence_path = occurrence_path;
-            mesh_item->m_group_store->append(gi);
+            // No "Body1" child, unlike STEP's tree shape: a mesh's own
+            // checkbox (on this row, backed by m_body_views[gr->m_uuid])
+            // already fully controls its visibility -- see
+            // Renderer::group_is_visible(), which ANDs body_visible with
+            // group_visible (always true here, since nothing else ever
+            // writes to m_group_views for this UUID) and the folder gate.
+            // Adding a same-UUID GroupItem child under it would just be a
+            // second, purely cosmetic row for the same single mesh.
             body_number++;
             continue;
         }
@@ -1011,7 +1018,9 @@ public:
                     // already shows "New Instance" for a root-level one --
                     // can also be dragged, to nest that component inside
                     // another one (or, if already nested, move it further).
-                    else if (m_body && m_body->m_is_occurrence) {
+                    // A mesh row is draggable the same way, since it has no
+                    // "Body1"/feature child of its own to drag by instead.
+                    else if (m_body && (m_body->m_is_occurrence || m_body->m_is_mesh)) {
                         seed = m_body->m_uuid;
                         path = m_body->m_occurrence_path;
                     }
@@ -1578,6 +1587,13 @@ Glib::RefPtr<Gio::ListModel> WorkspaceBrowser::create_model(const Glib::RefPtr<G
             return col->m_occurrence_children;
         if (col->m_is_mesh_folder)
             return col->m_mesh_children;
+        // A mesh row has no "Body1"/feature children (see
+        // populate_body_store()) -- an empty-but-non-null ListStore still
+        // makes GTK show a (permanently unusable) disclosure arrow, so
+        // return null instead to mark it a leaf, same as
+        // m_occurrence_children already does for a childless Occurrence.
+        if (col->m_group_store->get_n_items() == 0)
+            return {};
         return col->m_group_store;
     }
     return nullptr;
