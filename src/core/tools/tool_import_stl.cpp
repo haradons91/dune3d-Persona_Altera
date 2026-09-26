@@ -2,8 +2,8 @@
 #include "document/document.hpp"
 #include "document/group/group.hpp"
 #include "document/group/group_sketch.hpp"
-#include "document/group/group_step.hpp"
-#include "document/entity/entity_step.hpp"
+#include "document/group/group_stl.hpp"
+#include "document/entity/entity_stl.hpp"
 #include "document/constraint/constraint_lock_rotation.hpp"
 #include "editor/editor_interface.hpp"
 #include "dialogs/dialogs.hpp"
@@ -30,11 +30,9 @@ ToolResponse ToolImportSTL::begin(const ToolArgs &args)
 
     auto filters = Gio::ListStore<Gtk::FileFilter>::create();
     auto filter = Gtk::FileFilter::create();
-    filter->set_name("Mesh (STL, 3MF)");
+    filter->set_name("STL");
     filter->add_pattern("*.stl");
     filter->add_pattern("*.STL");
-    filter->add_pattern("*.3mf");
-    filter->add_pattern("*.3MF");
     filters->append(filter);
     dialog->set_filters(filters);
 
@@ -79,10 +77,10 @@ ToolResponse ToolImportSTL::update(const ToolArgs &args)
             const auto after_group = get_group().get_type() == Group::Type::REFERENCE
                                            ? get_group().find_body(get_doc()).group.m_uuid
                                            : get_group().m_uuid;
-            auto &import_group = get_doc().insert_group<GroupStep>(UUID::random(), after_group);
+            auto &import_group = get_doc().insert_group<GroupSTL>(UUID::random(), after_group);
             import_group.m_name = data->path.stem().string();
             import_group.m_body.emplace();
-            m_mesh = &get_doc().add_entity<EntitySTEP>(UUID::random());
+            m_mesh = &get_doc().add_entity<EntitySTL>(UUID::random());
             m_mesh->m_group = import_group.m_uuid;
             get_doc().set_group_generate_pending(import_group.m_uuid);
             auto dir = m_core.get_current_document_directory();
@@ -92,7 +90,6 @@ ToolResponse ToolImportSTL::update(const ToolArgs &args)
                 m_mesh->m_path = data->path;
             m_mesh->update_imported(dir);
             m_mesh->m_origin = {0, 0, 0};
-            m_mesh->m_include_in_solid_model = true;
             return ToolResponse::commit();
         }
     }

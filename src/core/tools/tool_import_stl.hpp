@@ -4,14 +4,11 @@
 
 namespace dune3d {
 
-class EntitySTEP;
+class EntitySTL;
 
-// STUB: the file picker accepts .stl/.3mf, but the entity this tool creates
-// hands the path to EntitySTEP::update_imported(), which only reads
-// STEP/IGES via STEPImportManager. There is no mesh (STL/3MF) parser in the
-// tree yet, so picking an actual mesh file will fail to import. Wire up a
-// real mesh reader (e.g. OpenCASCADE's RWStl/RWGltf) before advertising this
-// as working mesh import.
+// Imports an STL mesh as a positioned, movable reference body (EntitySTL) --
+// see the STL import plan. 3MF is not supported yet: this OpenCascade
+// install has no 3MF reader, so the file dialog only offers .stl for now.
 class ToolImportSTL : public ToolCommon {
 public:
     using ToolCommon::ToolCommon;
@@ -28,7 +25,7 @@ public:
     }
 
 private:
-    EntitySTEP *m_mesh = nullptr;
+    EntitySTL *m_mesh = nullptr;
     bool m_lock_rotation = false;
 
     void update_tip();

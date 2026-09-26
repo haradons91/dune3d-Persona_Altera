@@ -8,6 +8,7 @@
 #include "entity_circle3d.hpp"
 #include "entity_workplane.hpp"
 #include "entity_step.hpp"
+#include "entity_stl.hpp"
 #include "entity_point2d.hpp"
 #include "entity_document.hpp"
 #include "entity_bezier2d.hpp"

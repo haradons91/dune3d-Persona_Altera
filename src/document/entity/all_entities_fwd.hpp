@@ -10,6 +10,7 @@ class EntityCircle3D;
 class EntityArc3D;
 class EntityWorkplane;
 class EntitySTEP;
+class EntitySTL;
 class EntityPoint2D;
 class EntityDocument;
 class EntityBezier2D;

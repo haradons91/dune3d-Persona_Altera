@@ -11,6 +11,7 @@
 #include "document/entity/entity_arc3d.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "document/entity/entity_step.hpp"
+#include "document/entity/entity_stl.hpp"
 #include "document/entity/entity_point2d.hpp"
 #include "document/entity/entity_document.hpp"
 #include "document/entity/entity_bezier2d.hpp"
@@ -425,6 +426,61 @@ static void AddEq(IdList<Equation, hEquation> *l, Expr *expr)
 }
 
 void System::visit(const EntitySTEP &step)
+{
+    const auto group = get_group_index(step);
+
+    auto en_origin = get_entity_ref(EntityRef{step.m_uuid, 1});
+    {
+        EntityBase eb = {};
+        eb.type = EntityBase::Type::POINT_IN_3D;
+        eb.h.v = en_origin;
+        eb.group.v = group;
+        for (unsigned int axis = 0; axis < 3; axis++) {
+            eb.param[axis].v = add_param(step.m_group, step.m_uuid, 1, axis);
+        }
+        SK.entity.Add(&eb);
+    }
+
+
+    auto en_normal = get_entity_ref(EntityRef{step.m_uuid, 2});
+    {
+        EntityBase eb = {};
+        eb.type = EntityBase::Type::NORMAL_IN_3D;
+        eb.h.v = en_normal;
+        eb.group.v = group;
+        for (unsigned int axis = 0; axis < 4; axis++) {
+            eb.param[axis].v = add_param(step.m_group, step.m_uuid, 2, (axis + 3) % 4);
+        }
+        SK.entity.Add(&eb);
+    }
+
+
+    for (auto &[idx, p] : step.m_anchors) {
+        auto en_p = get_entity_ref(EntityRef{step.m_uuid, idx});
+        EntityBase eb = {};
+        eb.type = EntityBase::Type::POINT_IN_3D;
+        eb.h.v = en_p;
+        eb.group.v = group;
+        for (unsigned int axis = 0; axis < 3; axis++) {
+            eb.param[axis].v = add_param(step.m_group, step.m_uuid, idx, axis);
+        }
+        SK.entity.Add(&eb);
+        if (step.m_group == m_solve_group) {
+            auto eb_origin = SK.GetEntity({en_origin});
+            auto eb_normal = SK.GetEntity({en_normal});
+            auto ex = eb_normal->NormalGetExprs()
+                              .Rotate(ExprVector::From(p.x, p.y, p.z))
+                              .Plus(eb_origin->PointGetExprs())
+                              .Minus(eb.PointGetExprs());
+
+            AddEq(&m_sys->eq, ex.x);
+            AddEq(&m_sys->eq, ex.y);
+            AddEq(&m_sys->eq, ex.z);
+        }
+    }
+}
+
+void System::visit(const EntitySTL &step)
 {
     const auto group = get_group_index(step);
 

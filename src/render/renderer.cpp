@@ -1370,6 +1370,52 @@ void Renderer::visit(const EntitySTEP &en)
     }
 }
 
+void Renderer::visit(const EntitySTL &en)
+{
+    const bool show_only_solids = m_workspace_view->show_only_solid_models();
+
+    if (!show_only_solids)
+        m_ca.add_selectable(m_ca.draw_point(en.m_origin, IconID::POINT_DIAMOND),
+                            SelectableRef{SelectableRef::Type::ENTITY, en.m_uuid, 1});
+
+    if (!show_only_solids) {
+        for (const auto &[idx, p] : en.m_anchors) {
+            m_ca.add_selectable(m_ca.draw_point(en.transform(p), IconID::POINT_TRIANGLE_DOWN),
+                                SelectableRef{SelectableRef::Type::ENTITY, en.m_uuid, idx});
+        }
+    }
+
+    // Reference-only: always shown as shaded faces, no solid-model
+    // participation and no wireframe/solid display-mode toggle (unlike
+    // EntitySTEP, which supports both -- see the STL import plan).
+    if (en.m_imported && !show_only_solids) {
+        if (m_render_sketch_plane_selector) {
+            // While picking a plane for a new sketch, a clicked face must be
+            // tagged SOLID_MODEL_FACE (routed to
+            // Editor::finish_sketch_face_selection(), which safely no-ops
+            // for an entity type it doesn't recognize) rather than the plain
+            // ENTITY type used otherwise -- Editor::handle_click() treats
+            // ENTITY hits in that mode as a *workplane* pick and reaches for
+            // it unchecked, throwing std::bad_cast for anything else,
+            // EntitySTL included, since it's reference-only and can never
+            // actually be attached to.
+            unsigned int face_idx = 0;
+            for (const auto &face : en.m_imported->result.faces) {
+                const auto vref =
+                        m_ca.add_face_group({face}, en.m_origin, en.m_normal, ICanvas::FaceColor::AS_IS);
+                m_ca.add_selectable(vref,
+                                    SelectableRef{SelectableRef::Type::SOLID_MODEL_FACE, en.m_uuid, face_idx++});
+            }
+        }
+        else {
+            SelectableRef sr{SelectableRef::Type::ENTITY, en.m_uuid, 0};
+            m_ca.add_selectable(m_ca.add_face_group(en.m_imported->result.faces, en.m_origin, en.m_normal,
+                                                    ICanvas::FaceColor::AS_IS),
+                                sr);
+        }
+    }
+}
+
 class FakeDocumentView : public IDocumentView {
 public:
     bool document_is_visible() const override

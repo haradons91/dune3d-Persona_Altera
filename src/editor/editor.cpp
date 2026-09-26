@@ -18,6 +18,7 @@
 #include "render/renderer.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "document/entity/entity_step.hpp"
+#include "document/entity/entity_stl.hpp"
 #include "document/group/group_reference.hpp"
 #include "document/group/group_extrude.hpp"
 #include "document/group/group_sketch.hpp"
@@ -177,17 +178,24 @@ void Editor::update_timeline()
         if (group->get_type() == Group::Type::REFERENCE)
             continue;
         bool imported_step_group = group->get_type() == Group::Type::STEP;
+        bool imported_stl_group = group->get_type() == Group::Type::STL;
         for (const auto &[entity_uuid, entity] : doc.m_entities) {
-            if (entity->m_group == group->m_uuid && dynamic_cast<const EntitySTEP *>(entity.get())) {
+            if (entity->m_group != group->m_uuid)
+                continue;
+            if (dynamic_cast<const EntitySTEP *>(entity.get()))
                 imported_step_group = true;
-                break;
-            }
+            else if (dynamic_cast<const EntitySTL *>(entity.get()))
+                imported_stl_group = true;
         }
         auto feature = Gtk::make_managed<Gtk::ToggleButton>();
         feature->set_label(imported_step_group ? (group->m_name.empty() ? "STEP" : group->m_name)
-                                               : (group->m_name.empty() ? group->get_type_name() : group->m_name));
+                                    : imported_stl_group ? (group->m_name.empty() ? "STL" : group->m_name)
+                                                          : (group->m_name.empty() ? group->get_type_name()
+                                                                                   : group->m_name));
         feature->set_active(group->m_uuid == current_group);
-        feature->set_tooltip_text(imported_step_group ? "Imported STEP body" : group->get_type_name());
+        feature->set_tooltip_text(imported_step_group  ? "Imported STEP body"
+                                          : imported_stl_group ? "Imported STL mesh"
+                                                                : group->get_type_name());
         feature->add_css_class("dune3d-timeline-feature");
         feature->signal_clicked().connect([this, current_uuid, uu = group->m_uuid] {
             on_workspace_browser_group_selected(current_uuid, uu);

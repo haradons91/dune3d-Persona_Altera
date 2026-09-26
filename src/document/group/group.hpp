@@ -38,6 +38,7 @@ enum class GroupType {
     REFERENCE,
     SKETCH,
     STEP,
+    STL,
     EXTRUDE,
     LOFT,
     LATHE,

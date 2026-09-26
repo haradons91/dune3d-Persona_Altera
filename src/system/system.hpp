@@ -69,6 +69,7 @@ private:
     void visit(const EntityArc3D &arc) override;
     void visit(const EntityWorkplane &wrkpl) override;
     void visit(const EntitySTEP &step) override;
+    void visit(const EntitySTL &step) override;
     void visit(const EntityPoint2D &point) override;
     void visit(const EntityDocument &point) override;
     void visit(const EntityBezier2D &point) override;
