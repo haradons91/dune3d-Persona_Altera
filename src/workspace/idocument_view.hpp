@@ -17,6 +17,9 @@ public:
     // group/body visibility, a sketch folder has no group/body UUID of its
     // own to key off of, since it spans many independent sketch groups.
     virtual bool sketch_folder_is_visible(const UUID &uu) const = 0;
+    // Same idea as sketch_folder_is_visible(), for the "Meshes" folder
+    // spanning imported STL/3MF bodies.
+    virtual bool mesh_folder_is_visible(const UUID &uu) const = 0;
     virtual const EntityView *get_entity_view(const UUID &uu) const = 0;
 };
 

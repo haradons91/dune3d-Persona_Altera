@@ -40,6 +40,9 @@ public:
     // Keyed by owning Component UUID (nil for the root document's own
     // folder) -- see IDocumentView::sketch_folder_is_visible().
     std::map<UUID, bool> m_sketch_folder_views;
+    // Same idea, for the "Meshes" folder -- see
+    // IDocumentView::mesh_folder_is_visible().
+    std::map<UUID, bool> m_mesh_folder_views;
 
     std::map<UUID, std::unique_ptr<EntityView>> m_entity_views;
 
@@ -48,6 +51,7 @@ public:
     bool body_solid_model_is_visible(const UUID &uu) const override;
     bool group_is_visible(const UUID &uu) const override;
     bool sketch_folder_is_visible(const UUID &uu) const override;
+    bool mesh_folder_is_visible(const UUID &uu) const override;
 
     bool m_document_is_visible = false;
     bool document_is_visible() const override

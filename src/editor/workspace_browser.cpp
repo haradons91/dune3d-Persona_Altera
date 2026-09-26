@@ -96,6 +96,12 @@ public:
     bool m_is_document_folder = false;
     bool m_is_origin_folder = false;
     bool m_is_sketch_folder = false;
+    // Set for the synthetic "Meshes" folder row spanning imported STL/3MF
+    // bodies (same idea as m_is_sketch_folder, but its children are full
+    // BodyItem rows -- each mesh keeps its own body-style context menu,
+    // color, and "Body1" child -- not GroupItems, so they're held in
+    // m_mesh_children below rather than m_group_store).
+    bool m_is_mesh_folder = false;
 
     // Set for a row that represents a GroupOccurrence. Its children are a
     // recursive population of the placed Component's own document (Bodies/
@@ -114,6 +120,13 @@ public:
     // is stored under in DocumentView::m_sketch_folder_views -- the owning
     // Component's UUID, or nil for the root document's own folder.
     UUID m_sketch_folder_key;
+    // Set on an m_is_mesh_folder row: same idea, for
+    // DocumentView::m_mesh_folder_views.
+    UUID m_mesh_folder_key;
+    // Set on an m_is_mesh_folder row: its children, each a full BodyItem
+    // (one per imported mesh) -- returned from create_model() instead of
+    // m_group_store when set, same convention as m_occurrence_children.
+    Glib::RefPtr<Gio::ListModel> m_mesh_children;
 
     // No idea why the ObjectBase::get_type won't work for us but
     // reintroducing the method and using the name used by gtkmm seems
@@ -215,6 +228,8 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
                                            const Glib::RefPtr<Gio::ListStore<BodyItem>> &body_store)
 {
     Glib::RefPtr<BodyItem> sketches;
+    Glib::RefPtr<BodyItem> meshes;
+    Glib::RefPtr<Gio::ListStore<BodyItem>> mesh_children_store;
     Glib::RefPtr<BodyItem> body_item;
     unsigned int body_number = 1;
     unsigned int cut_number = 1;
@@ -321,26 +336,53 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
             body_number++;
             continue;
         }
-        if (gr->get_type() == Group::Type::STL) {
-            body_item = BodyItem::create();
-            body_item->m_name = gr->m_name;
+        if (gr->get_type() == Group::Type::STL || gr->get_type() == Group::Type::THREE_MF) {
+            // Every imported mesh nests under one shared "Meshes" folder,
+            // same shape as the "Sketches" folder above -- created lazily on
+            // the first mesh encountered, mesh rows appended to its own
+            // m_mesh_children store instead of body_store directly. Unlike
+            // Sketches' children (plain GroupItems), each mesh stays a full
+            // BodyItem -- keeps its own body-style context menu, color, and
+            // "Body1" child unchanged (see WorkspaceRow's bind(BodyItem&):
+            // a non-folder, non-nested BodyItem row gets that treatment
+            // regardless of which store it's actually held in).
+            if (!meshes) {
+                meshes = BodyItem::create();
+                meshes->m_doc = doc_uuid;
+                meshes->m_name = "Meshes";
+                meshes->m_is_mesh_folder = true;
+                meshes->m_check_active = true;
+                meshes->m_occurrence_path = occurrence_path;
+                meshes->m_mesh_folder_key = component_uuid;
+                mesh_children_store = Gio::ListStore<BodyItem>::create();
+                meshes->m_mesh_children = mesh_children_store;
+                body_store->append(meshes);
+            }
+
+            auto mesh_item = BodyItem::create();
+            mesh_item->m_name = gr->m_name;
             for (const auto &[entity_uuid, entity] : doc.m_entities) {
                 (void)entity_uuid;
                 if (entity->m_group != gr->m_uuid)
                     continue;
-                if (const auto *stl = dynamic_cast<const EntitySTL *>(entity.get()); stl
-                    && !stl->m_path.filename().empty()) {
-                    body_item->m_name = stl->m_path.filename().string();
+                if (const auto *stl = dynamic_cast<const EntitySTL *>(entity.get());
+                    stl && !stl->m_path.filename().empty()) {
+                    mesh_item->m_name = stl->m_path.filename().string();
+                    break;
+                }
+                if (const auto *mf = dynamic_cast<const EntityThreeMF *>(entity.get());
+                    mf && !mf->m_path.filename().empty()) {
+                    mesh_item->m_name = mf->m_path.filename().string();
                     break;
                 }
             }
-            body_item->m_has_color = gr->m_body->m_color.has_value();
+            mesh_item->m_has_color = gr->m_body->m_color.has_value();
             if (gr->m_body->m_color.has_value())
-                body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
-            body_item->m_uuid = gr->m_uuid;
-            body_item->m_doc = doc_uuid;
-            body_item->m_occurrence_path = occurrence_path;
-            body_store->append(body_item);
+                mesh_item->m_color = rgba_from_color(gr->m_body->m_color.value());
+            mesh_item->m_uuid = gr->m_uuid;
+            mesh_item->m_doc = doc_uuid;
+            mesh_item->m_occurrence_path = occurrence_path;
+            mesh_children_store->append(mesh_item);
 
             auto gi = GroupItem::create();
             gi->m_name = "Body1";
@@ -348,38 +390,7 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
             gi->m_uuid = gr->m_uuid;
             gi->m_doc = doc_uuid;
             gi->m_occurrence_path = occurrence_path;
-            body_item->m_group_store->append(gi);
-            body_number++;
-            continue;
-        }
-        if (gr->get_type() == Group::Type::THREE_MF) {
-            body_item = BodyItem::create();
-            body_item->m_name = gr->m_name;
-            for (const auto &[entity_uuid, entity] : doc.m_entities) {
-                (void)entity_uuid;
-                if (entity->m_group != gr->m_uuid)
-                    continue;
-                if (const auto *mf = dynamic_cast<const EntityThreeMF *>(entity.get()); mf
-                    && !mf->m_path.filename().empty()) {
-                    body_item->m_name = mf->m_path.filename().string();
-                    break;
-                }
-            }
-            body_item->m_has_color = gr->m_body->m_color.has_value();
-            if (gr->m_body->m_color.has_value())
-                body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
-            body_item->m_uuid = gr->m_uuid;
-            body_item->m_doc = doc_uuid;
-            body_item->m_occurrence_path = occurrence_path;
-            body_store->append(body_item);
-
-            auto gi = GroupItem::create();
-            gi->m_name = "Body1";
-            gi->m_is_body_label = true;
-            gi->m_uuid = gr->m_uuid;
-            gi->m_doc = doc_uuid;
-            gi->m_occurrence_path = occurrence_path;
-            body_item->m_group_store->append(gi);
+            mesh_item->m_group_store->append(gi);
             body_number++;
             continue;
         }
@@ -473,6 +484,7 @@ void WorkspaceBrowser::block_signals()
     m_signal_body_checked.block();
     m_signal_origin_checked.block();
     m_signal_sketches_checked.block();
+    m_signal_meshes_checked.block();
     m_signal_group_selected.block();
     m_signal_body_solid_model_checked.block();
     m_signal_body_expanded.block();
@@ -491,6 +503,7 @@ void WorkspaceBrowser::unblock_signals()
     m_signal_body_checked.unblock();
     m_signal_origin_checked.unblock();
     m_signal_sketches_checked.unblock();
+    m_signal_meshes_checked.unblock();
     m_signal_group_selected.unblock();
     m_signal_body_solid_model_checked.unblock();
     m_signal_body_expanded.unblock();
@@ -551,6 +564,13 @@ void WorkspaceBrowser::update_nested_checkbox_state(const Glib::RefPtr<Gio::List
             }
             continue;
         }
+        if (it_body->m_is_mesh_folder) {
+            it_body->m_check_active = doc_view.mesh_folder_is_visible(it_body->m_mesh_folder_key);
+            it_body->m_check_sensitive = parent_enabled;
+            const bool folder_enabled = parent_enabled && it_body->m_check_active.get_value();
+            update_nested_checkbox_state(it_body->m_mesh_children, doc_view, folder_enabled);
+            continue;
+        }
         it_body->m_check_active = doc_view.body_is_visible(it_body->m_uuid);
         it_body->m_check_sensitive = parent_enabled;
         const bool body_enabled = parent_enabled && it_body->m_check_active.get_value();
@@ -566,6 +586,58 @@ void WorkspaceBrowser::update_nested_checkbox_state(const Glib::RefPtr<Gio::List
         }
         if (it_body->m_is_occurrence)
             update_nested_checkbox_state(it_body->m_occurrence_children, doc_view, body_enabled);
+    }
+}
+
+void WorkspaceBrowser::refresh_body_row(BodyItem &it_body, const Document &doc, const DocumentView &doc_view,
+                                        const std::set<UUID> &source_groups, bool is_current_doc,
+                                        const UUID &current_group_uu, const UUID &body_uu, bool parent_enabled)
+{
+    const bool is_current_body = body_uu == it_body.m_uuid && is_current_doc;
+    // The active body can also be hidden.  Keep its checkbox usable so the
+    // tree behaves consistently for the current and inactive body.
+    it_body.m_check_sensitive = parent_enabled;
+    // Previously only ever pushed optimistically from the click handler
+    // (WorkspaceBrowser::set_body_checked()), never derived here -- so a
+    // body/occurrence row's own checkbox reverted to its GObject-property
+    // default (checked) on any full tree rebuild that didn't go through
+    // that push, such as reloading a saved file, even though the real
+    // visibility (and therefore the 3D view) was correctly restored.
+    it_body.m_check_active = doc_view.body_is_visible(it_body.m_uuid);
+    it_body.m_solid_model_active = doc_view.body_solid_model_is_visible(it_body.m_uuid);
+    it_body.m_expanded = doc_view.body_is_expanded(it_body.m_uuid) | is_current_body;
+    if (it_body.m_is_occurrence)
+        update_nested_checkbox_state(it_body.m_occurrence_children, doc_view,
+                                     parent_enabled && it_body.m_check_active.get_value());
+
+    for (size_t i_group = 0; i_group < it_body.m_group_store->get_n_items(); i_group++) {
+        auto &it_group = *it_body.m_group_store->get_item(i_group);
+        bool is_current = current_group_uu == it_group.m_uuid;
+        it_group.m_active = is_current && is_current_doc;
+        auto &gr = doc.get_group(it_group.m_uuid);
+        it_group.m_dof = gr.m_dof;
+        if (!it_group.m_is_body_label)
+            it_group.m_name = gr.m_name;
+        it_group.m_source_group = source_groups.contains(it_group.m_uuid);
+        // The child remains actionable when its own visibility is off.
+        // Only the Bodies/Meshes parent should disable its children.
+        it_group.m_check_sensitive = parent_enabled && it_body.m_check_active.get_value();
+        // Body1's own checked state lives in m_group_views like any other
+        // feature (Cut1, Join1, ...) -- see
+        // Editor::on_workspace_browser_group_checked(). Unchecking the body
+        // still hides everything in it (Body1 included): that's the
+        // separate m_body_views gate above, ANDed in by
+        // Renderer::group_is_visible() regardless of Body1's own bit.
+        it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
+        auto msgs = gr.get_messages();
+        it_group.m_status = GroupStatusMessage::summarize(msgs);
+        Glib::ustring txt;
+        for (auto &msg : msgs) {
+            if (txt.size())
+                txt += "\n";
+            txt += msg.message;
+        }
+        it_group.m_status_message = txt;
     }
 }
 
@@ -624,56 +696,22 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
                 }
                 continue;
             }
-            const bool is_current_body = body_uu == it_body.m_uuid && is_current_doc;
-            // The active body can also be hidden.  Keep its checkbox usable so
-            // the tree behaves consistently for the current and inactive body.
-            it_body.m_check_sensitive = true;
-            // Previously only ever pushed optimistically from the click
-            // handler (WorkspaceBrowser::set_body_checked()), never derived
-            // here -- so a body/occurrence row's own checkbox reverted to
-            // its GObject-property default (checked) on any full tree
-            // rebuild that didn't go through that push, such as reloading a
-            // saved file, even though the real visibility (and therefore
-            // the 3D view) was correctly restored.
-            it_body.m_check_active = doc_view.body_is_visible(it_body.m_uuid);
-            it_body.m_solid_model_active = doc_view.body_solid_model_is_visible(it_body.m_uuid);
-            it_body.m_expanded = doc_view.body_is_expanded(it_body.m_uuid) | is_current_body;
-            if (it_body.m_is_occurrence)
-                update_nested_checkbox_state(it_body.m_occurrence_children, doc_view,
-                                             it_body.m_check_active.get_value());
-
-
-            for (size_t i_group = 0; i_group < it_body.m_group_store->get_n_items(); i_group++) {
-                auto &it_group = *it_body.m_group_store->get_item(i_group);
-                bool is_current = doci.get_current_group() == it_group.m_uuid;
-                it_group.m_active = is_current && is_current_doc;
-                auto &gr = doc.get_group(it_group.m_uuid);
-                it_group.m_dof = gr.m_dof;
-                if (!it_group.m_is_body_label)
-                    it_group.m_name = gr.m_name;
-                it_group.m_source_group = source_groups.contains(it_group.m_uuid);
-                // The child remains actionable when its own visibility is
-                // off.  Only the Bodies parent should disable its children.
-                it_group.m_check_sensitive = it_body.m_check_active.get_value();
-                // Body1's own checked state lives in m_group_views like any
-                // other feature (Cut1, Join1, ...) -- see
-                // Editor::on_workspace_browser_group_checked(). Unchecking
-                // the body still hides everything in it (Body1 included):
-                // that's the separate m_body_views gate above, ANDed in by
-                // Renderer::group_is_visible() regardless of Body1's own bit.
-                it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
-                {
-                    auto msgs = gr.get_messages();
-                    it_group.m_status = GroupStatusMessage::summarize(msgs);
-                    Glib::ustring txt;
-                    for (auto &msg : msgs) {
-                        if (txt.size())
-                            txt += "\n";
-                        txt += msg.message;
+            if (it_body.m_is_mesh_folder) {
+                it_body.m_expanded = it_body.m_mesh_children && it_body.m_mesh_children->get_n_items() > 0;
+                it_body.m_check_sensitive = true;
+                it_body.m_check_active = doc_view.mesh_folder_is_visible(it_body.m_mesh_folder_key);
+                const bool folder_enabled = it_body.m_check_active.get_value();
+                if (it_body.m_mesh_children) {
+                    for (guint i_mesh = 0; i_mesh < it_body.m_mesh_children->get_n_items(); i_mesh++) {
+                        auto &mesh_body = *std::dynamic_pointer_cast<BodyItem>(it_body.m_mesh_children->get_object(i_mesh));
+                        refresh_body_row(mesh_body, doc, doc_view, source_groups, is_current_doc,
+                                        doci.get_current_group(), body_uu, folder_enabled);
                     }
-                    it_group.m_status_message = txt;
                 }
+                continue;
             }
+            refresh_body_row(it_body, doc, doc_view, source_groups, is_current_doc, doci.get_current_group(),
+                            body_uu, true);
         }
         select_group(doci.get_uuid(), doci.get_current_group());
     }
@@ -855,6 +893,9 @@ public:
             else if (m_body && m_body->m_is_sketch_folder)
                 m_browser.signal_sketches_checked().emit(m_body->m_doc, m_body->m_occurrence_path,
                                                          m_checkbutton->get_active());
+            else if (m_body && m_body->m_is_mesh_folder)
+                m_browser.signal_meshes_checked().emit(m_body->m_doc, m_body->m_occurrence_path,
+                                                       m_checkbutton->get_active());
             else if (m_body && !m_body->m_is_document_folder)
                 m_browser.signal_body_checked().emit(m_body->m_doc, m_body->m_occurrence_path, m_body->m_uuid,
                                                      m_checkbutton->get_active());
@@ -903,7 +944,7 @@ public:
                 menu = m_browser.m_document_menu;
             }
             else if (m_body && !m_body->m_is_document_folder && !m_body->m_is_sketch_folder
-                     && m_body->m_occurrence_path.empty()) {
+                     && !m_body->m_is_mesh_folder && m_body->m_occurrence_path.empty()) {
                 m_browser.m_body_menu_document = m_body->m_doc;
                 m_browser.m_body_menu_body = m_body->m_uuid;
                 m_browser.m_reset_body_color_action->set_enabled(m_body->m_has_color);
@@ -1098,8 +1139,8 @@ public:
         // the click controller below) and now visibility work on it, same
         // "read before write" rollout as selection/picking was.
         const bool nested = !it.m_occurrence_path.empty();
-        if (it.m_is_document_folder || it.m_is_sketch_folder) {
-            m_checkbutton->set_visible(it.m_is_origin_folder || it.m_is_sketch_folder);
+        if (it.m_is_document_folder || it.m_is_sketch_folder || it.m_is_mesh_folder) {
+            m_checkbutton->set_visible(it.m_is_origin_folder || it.m_is_sketch_folder || it.m_is_mesh_folder);
             m_solid_toggle->set_visible(false);
             m_dof_label->set_visible(false);
             m_status_button->set_visible(false);
@@ -1107,7 +1148,7 @@ public:
             m_source_group_image->set_visible(false);
             m_component_icon->set_visible(false);
             m_label->set_attributes(m_attrs_bold);
-            if (it.m_is_origin_folder || it.m_is_sketch_folder) {
+            if (it.m_is_origin_folder || it.m_is_sketch_folder || it.m_is_mesh_folder) {
                 m_bindings.push_back(Glib::Binding::bind_property_value(
                         it.m_check_active.get_proxy(), m_checkbutton->property_active(),
                         Glib::Binding::Flags::SYNC_CREATE));
@@ -1535,6 +1576,8 @@ Glib::RefPtr<Gio::ListModel> WorkspaceBrowser::create_model(const Glib::RefPtr<G
     if (auto col = std::dynamic_pointer_cast<BodyItem>(item)) {
         if (col->m_is_occurrence)
             return col->m_occurrence_children;
+        if (col->m_is_mesh_folder)
+            return col->m_mesh_children;
         return col->m_group_store;
     }
     return nullptr;

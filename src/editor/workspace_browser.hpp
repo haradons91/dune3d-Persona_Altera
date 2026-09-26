@@ -1,5 +1,6 @@
 #pragma once
 #include <gtkmm.h>
+#include <set>
 #include "util/uuid.hpp"
 #include "document/group/group.hpp"
 #include "document/document.hpp"
@@ -99,6 +100,7 @@ public:
     using type_signal_document_checked = sigc::signal<void(UUID, bool)>;
     using type_signal_origin_checked = sigc::signal<void(UUID, bool)>;
     using type_signal_sketches_checked = sigc::signal<void(UUID, std::vector<UUID>, bool)>;
+    using type_signal_meshes_checked = sigc::signal<void(UUID, std::vector<UUID>, bool)>;
     type_signal_group_checked signal_group_checked()
     {
         return m_signal_group_checked;
@@ -127,6 +129,11 @@ public:
     type_signal_sketches_checked signal_sketches_checked()
     {
         return m_signal_sketches_checked;
+    }
+
+    type_signal_meshes_checked signal_meshes_checked()
+    {
+        return m_signal_meshes_checked;
     }
 
     using type_signal_delete_current_group = sigc::signal<void()>;
@@ -219,6 +226,7 @@ private:
     type_signal_document_checked m_signal_document_checked;
     type_signal_origin_checked m_signal_origin_checked;
     type_signal_sketches_checked m_signal_sketches_checked;
+    type_signal_meshes_checked m_signal_meshes_checked;
 
     type_signal_delete_current_group m_signal_delete_current_group;
     type_signal_add_group m_signal_add_group;
@@ -264,6 +272,18 @@ private:
     // root-level group.
     static void update_nested_checkbox_state(const Glib::RefPtr<Gio::ListModel> &store, const DocumentView &doc_view,
                                              bool parent_enabled = true);
+
+    // Refreshes one generic body row's own fields (checkbox, solid-model
+    // toggle, expansion, and its own feature/group children's DOF/name/
+    // status/checkbox) -- factored out of update_current_group()'s own
+    // per-document loop so the same logic can also refresh each mesh row
+    // nested inside a "Meshes" folder (see populate_body_store()), which
+    // isn't a direct child of the document's own m_body_store any more.
+    // parent_enabled is the folder/ancestor gate (always true at the root
+    // document level, where there's no such folder above a generic body).
+    static void refresh_body_row(BodyItem &it_body, const Document &doc, const DocumentView &doc_view,
+                                 const std::set<UUID> &source_groups, bool is_current_doc,
+                                 const UUID &current_group_uu, const UUID &body_uu, bool parent_enabled);
 
     void block_signals();
     void unblock_signals();

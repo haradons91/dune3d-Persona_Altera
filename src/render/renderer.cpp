@@ -335,7 +335,10 @@ bool Renderer::group_is_visible(const UUID &uu) const
         return false;
     if (!body_visible)
         return false;
-    if (group.get_type() == Group::Type::SKETCH && !m_doc_view->sketch_folder_is_visible(m_sketch_folder_key))
+    if (group.get_type() == Group::Type::SKETCH && !m_doc_view->sketch_folder_is_visible(m_folder_key))
+        return false;
+    if ((group.get_type() == Group::Type::STL || group.get_type() == Group::Type::THREE_MF)
+        && !m_doc_view->mesh_folder_is_visible(m_folder_key))
         return false;
     return true;
 }
@@ -351,7 +354,7 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                       const IWorkspaceView &wrk_view, const std::filesystem::path &containing_dir,
                       std::optional<SelectableRef> sr, const Document *component_registry,
                       glm::dvec3 accum_origin, glm::dquat accum_rot, std::vector<UUID> occurrence_path,
-                      std::vector<UUID> occurrence_active_stack, UUID sketch_folder_key)
+                      std::vector<UUID> occurrence_active_stack, UUID folder_key)
 {
     DUNE3D_TRACE(DebugCategory::RENDER);
     m_doc = &doc;
@@ -367,7 +370,7 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
     m_accum_rot = accum_rot;
     m_occurrence_path = std::move(occurrence_path);
     m_occurrence_active_stack = std::move(occurrence_active_stack);
-    m_sketch_folder_key = sketch_folder_key;
+    m_folder_key = folder_key;
 
     int first_group_index = 0;
     if (m_first_group)
@@ -1471,6 +1474,10 @@ public:
         return true;
     }
     bool sketch_folder_is_visible(const UUID &uu) const override
+    {
+        return true;
+    }
+    bool mesh_folder_is_visible(const UUID &uu) const override
     {
         return true;
     }

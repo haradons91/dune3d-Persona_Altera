@@ -125,6 +125,8 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
             sigc::mem_fun(*this, &Editor::on_workspace_browser_origin_checked));
     m_workspace_browser->signal_sketches_checked().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_sketches_checked));
+    m_workspace_browser->signal_meshes_checked().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_meshes_checked));
     m_workspace_browser->signal_group_checked().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_group_checked));
     m_workspace_browser->signal_body_checked().connect(
@@ -955,6 +957,27 @@ void Editor::on_workspace_browser_sketches_checked(const UUID &uu_doc, const std
         }
     }
     get_current_document_views()[uu_doc].m_sketch_folder_views[key] = checked;
+    m_workspace_browser->update_current_group(get_current_document_views());
+}
+
+void Editor::on_workspace_browser_meshes_checked(const UUID &uu_doc, const std::vector<UUID> &occurrence_path,
+                                                 bool checked)
+{
+    CanvasUpdater canvas_updater{*this};
+    auto &root = m_core.get_root_document();
+    // Same idea as on_workspace_browser_sketches_checked() -- see its own
+    // comment.
+    UUID key;
+    if (!occurrence_path.empty()) {
+        try {
+            if (auto *component = resolve_occurrence_path(root, occurrence_path).component)
+                key = component->m_uuid;
+        }
+        catch (const std::exception &) {
+            return;
+        }
+    }
+    get_current_document_views()[uu_doc].m_mesh_folder_views[key] = checked;
     m_workspace_browser->update_current_group(get_current_document_views());
 }
 

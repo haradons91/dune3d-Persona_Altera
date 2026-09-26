@@ -8,7 +8,8 @@ namespace dune3d {
 DocumentView::DocumentView() = default;
 DocumentView::DocumentView(const DocumentView &other)
     : m_current_group(other.m_current_group), m_group_views(other.m_group_views), m_body_views(other.m_body_views),
-      m_sketch_folder_views(other.m_sketch_folder_views), m_document_is_visible(other.m_document_is_visible)
+      m_sketch_folder_views(other.m_sketch_folder_views), m_mesh_folder_views(other.m_mesh_folder_views),
+      m_document_is_visible(other.m_document_is_visible)
 {
     for (const auto &[uu, it] : other.m_entity_views) {
         m_entity_views.emplace(uu, it->clone());
@@ -46,6 +47,13 @@ bool DocumentView::group_is_visible(const UUID &uu) const
 bool DocumentView::sketch_folder_is_visible(const UUID &uu) const
 {
     if (auto it = m_sketch_folder_views.find(uu); it != m_sketch_folder_views.end())
+        return it->second;
+    return true;
+}
+
+bool DocumentView::mesh_folder_is_visible(const UUID &uu) const
+{
+    if (auto it = m_mesh_folder_views.find(uu); it != m_mesh_folder_views.end())
         return it->second;
     return true;
 }
@@ -120,6 +128,13 @@ json DocumentView::serialize() const
     }
     {
         json o = json::object();
+        for (const auto &[uu, it] : m_mesh_folder_views) {
+            o[uu] = it;
+        }
+        j["mesh_folder_views"] = o;
+    }
+    {
+        json o = json::object();
         for (const auto &[uu, it] : m_entity_views) {
             o[uu] = it->serialize();
         }
@@ -148,6 +163,10 @@ DocumentView::DocumentView(const json &j)
     const auto sketch_folder_views_j = j.value("sketch_folder_views", json::object());
     for (const auto &[uu, it] : sketch_folder_views_j.items()) {
         m_sketch_folder_views.emplace(uu, it.get<bool>());
+    }
+    const auto mesh_folder_views_j = j.value("mesh_folder_views", json::object());
+    for (const auto &[uu, it] : mesh_folder_views_j.items()) {
+        m_mesh_folder_views.emplace(uu, it.get<bool>());
     }
     for (const auto &[uu, it] : j.at("entity_views").items()) {
         m_entity_views.emplace(uu, EntityView::new_from_json(it));
