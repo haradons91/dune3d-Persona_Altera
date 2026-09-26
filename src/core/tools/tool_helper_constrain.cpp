@@ -80,7 +80,18 @@ std::optional<Constraint::Type> ToolHelperConstrain::get_constraint_type()
     if (auto hsel = m_intf.get_hover_selection()) {
         if (hsel->is_entity()) {
             const auto enp = hsel->get_entity_and_point();
-            if (get_doc().is_valid_point(enp)) {
+            // An EntityOccurrence's own origin marker (its only point, index
+            // 1 -- see EntityOccurrence::is_valid_point()) is a placement
+            // gizmo, not a sketch-participable point: it sits at whatever
+            // world position the placed component happens to be at (world
+            // origin by default, easy to snap onto by accident when drawing
+            // a new sketch there), and a sketch point coincident with it can
+            // never be moved into a *different* component afterwards (see
+            // Editor::on_workspace_browser_move_group_into_component()'s
+            // external-dependency check). Excluded here rather than solved
+            // after the fact, since by the time that check runs the
+            // constraint already exists and the user has to go hunt it down.
+            if (get_doc().is_valid_point(enp) && get_entity(enp.entity).get_type() != Entity::Type::OCCURRENCE) {
                 return Constraint::Type::POINTS_COINCIDENT;
             }
             else if (enp.point == 0) {
