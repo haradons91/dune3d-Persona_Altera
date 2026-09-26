@@ -464,7 +464,7 @@ void WorkspaceBrowser::update_name(DocumentItem &it_doc, IDocumentInfo &doci)
 }
 
 void WorkspaceBrowser::update_nested_checkbox_state(const Glib::RefPtr<Gio::ListModel> &store,
-                                                    const DocumentView &doc_view)
+                                                    const DocumentView &doc_view, bool parent_enabled)
 {
     if (!store)
         return;
@@ -474,17 +474,25 @@ void WorkspaceBrowser::update_nested_checkbox_state(const Glib::RefPtr<Gio::List
             continue;
         if (it_body->m_is_sketch_folder) {
             it_body->m_check_active = doc_view.sketch_folder_is_visible(it_body->m_sketch_folder_key);
+            // Sensitivity cascades from every ancestor occurrence, not just
+            // this folder's own checked state -- an unchecked placed
+            // component must gray out everything inside it, including any
+            // further-nested occurrences, all the way down.
+            it_body->m_check_sensitive = parent_enabled;
+            const bool folder_enabled = parent_enabled && it_body->m_check_active.get_value();
             for (guint j = 0; j < it_body->m_group_store->get_n_items(); j++) {
                 auto &it_group = *it_body->m_group_store->get_item(j);
-                it_group.m_check_sensitive = it_body->m_check_active.get_value();
+                it_group.m_check_sensitive = folder_enabled;
                 it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
             }
             continue;
         }
         it_body->m_check_active = doc_view.body_is_visible(it_body->m_uuid);
+        it_body->m_check_sensitive = parent_enabled;
+        const bool body_enabled = parent_enabled && it_body->m_check_active.get_value();
         for (guint j = 0; j < it_body->m_group_store->get_n_items(); j++) {
             auto &it_group = *it_body->m_group_store->get_item(j);
-            it_group.m_check_sensitive = it_body->m_check_active.get_value();
+            it_group.m_check_sensitive = body_enabled;
             // Body1's own checked state lives in m_group_views like any
             // other feature now (see Editor::on_workspace_browser_group_checked)
             // -- it_group.m_uuid equals it_body->m_uuid for that row, but the
@@ -493,7 +501,7 @@ void WorkspaceBrowser::update_nested_checkbox_state(const Glib::RefPtr<Gio::List
             it_group.m_check_active = doc_view.group_is_visible(it_group.m_uuid);
         }
         if (it_body->m_is_occurrence)
-            update_nested_checkbox_state(it_body->m_occurrence_children, doc_view);
+            update_nested_checkbox_state(it_body->m_occurrence_children, doc_view, body_enabled);
     }
 }
 
@@ -556,10 +564,19 @@ void WorkspaceBrowser::update_current_group(const std::map<UUID, DocumentView> &
             // The active body can also be hidden.  Keep its checkbox usable so
             // the tree behaves consistently for the current and inactive body.
             it_body.m_check_sensitive = true;
+            // Previously only ever pushed optimistically from the click
+            // handler (WorkspaceBrowser::set_body_checked()), never derived
+            // here -- so a body/occurrence row's own checkbox reverted to
+            // its GObject-property default (checked) on any full tree
+            // rebuild that didn't go through that push, such as reloading a
+            // saved file, even though the real visibility (and therefore
+            // the 3D view) was correctly restored.
+            it_body.m_check_active = doc_view.body_is_visible(it_body.m_uuid);
             it_body.m_solid_model_active = doc_view.body_solid_model_is_visible(it_body.m_uuid);
             it_body.m_expanded = doc_view.body_is_expanded(it_body.m_uuid) | is_current_body;
             if (it_body.m_is_occurrence)
-                update_nested_checkbox_state(it_body.m_occurrence_children, doc_view);
+                update_nested_checkbox_state(it_body.m_occurrence_children, doc_view,
+                                             it_body.m_check_active.get_value());
 
 
             for (size_t i_group = 0; i_group < it_body.m_group_store->get_n_items(); i_group++) {

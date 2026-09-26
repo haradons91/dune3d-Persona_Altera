@@ -262,7 +262,8 @@ private:
     // DocumentView::group_is_visible()/body_is_visible() are a flat map
     // keyed by the group's own globally-unique UUID, the same lookup as any
     // root-level group.
-    static void update_nested_checkbox_state(const Glib::RefPtr<Gio::ListModel> &store, const DocumentView &doc_view);
+    static void update_nested_checkbox_state(const Glib::RefPtr<Gio::ListModel> &store, const DocumentView &doc_view,
+                                             bool parent_enabled = true);
 
     void block_signals();
     void unblock_signals();
