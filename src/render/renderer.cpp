@@ -1416,6 +1416,42 @@ void Renderer::visit(const EntitySTL &en)
     }
 }
 
+void Renderer::visit(const EntityThreeMF &en)
+{
+    const bool show_only_solids = m_workspace_view->show_only_solid_models();
+
+    if (!show_only_solids)
+        m_ca.add_selectable(m_ca.draw_point(en.m_origin, IconID::POINT_DIAMOND),
+                            SelectableRef{SelectableRef::Type::ENTITY, en.m_uuid, 1});
+
+    if (!show_only_solids) {
+        for (const auto &[idx, p] : en.m_anchors) {
+            m_ca.add_selectable(m_ca.draw_point(en.transform(p), IconID::POINT_TRIANGLE_DOWN),
+                                SelectableRef{SelectableRef::Type::ENTITY, en.m_uuid, idx});
+        }
+    }
+
+    // Reference-only, same rendering shape as EntitySTL -- see the 3MF
+    // import plan.
+    if (en.m_imported && !show_only_solids) {
+        if (m_render_sketch_plane_selector) {
+            unsigned int face_idx = 0;
+            for (const auto &face : en.m_imported->result.faces) {
+                const auto vref =
+                        m_ca.add_face_group({face}, en.m_origin, en.m_normal, ICanvas::FaceColor::AS_IS);
+                m_ca.add_selectable(vref,
+                                    SelectableRef{SelectableRef::Type::SOLID_MODEL_FACE, en.m_uuid, face_idx++});
+            }
+        }
+        else {
+            SelectableRef sr{SelectableRef::Type::ENTITY, en.m_uuid, 0};
+            m_ca.add_selectable(m_ca.add_face_group(en.m_imported->result.faces, en.m_origin, en.m_normal,
+                                                    ICanvas::FaceColor::AS_IS),
+                                sr);
+        }
+    }
+}
+
 class FakeDocumentView : public IDocumentView {
 public:
     bool document_is_visible() const override

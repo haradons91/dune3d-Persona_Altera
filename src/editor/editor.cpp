@@ -19,6 +19,7 @@
 #include "document/entity/entity_workplane.hpp"
 #include "document/entity/entity_step.hpp"
 #include "document/entity/entity_stl.hpp"
+#include "document/entity/entity_threemf.hpp"
 #include "document/group/group_reference.hpp"
 #include "document/group/group_extrude.hpp"
 #include "document/group/group_sketch.hpp"
@@ -179,6 +180,7 @@ void Editor::update_timeline()
             continue;
         bool imported_step_group = group->get_type() == Group::Type::STEP;
         bool imported_stl_group = group->get_type() == Group::Type::STL;
+        bool imported_3mf_group = group->get_type() == Group::Type::THREE_MF;
         for (const auto &[entity_uuid, entity] : doc.m_entities) {
             if (entity->m_group != group->m_uuid)
                 continue;
@@ -186,15 +188,18 @@ void Editor::update_timeline()
                 imported_step_group = true;
             else if (dynamic_cast<const EntitySTL *>(entity.get()))
                 imported_stl_group = true;
+            else if (dynamic_cast<const EntityThreeMF *>(entity.get()))
+                imported_3mf_group = true;
         }
+        const char *fallback_label = imported_step_group ? "STEP" : imported_stl_group ? "STL" : "3MF";
+        const bool imported_group = imported_step_group || imported_stl_group || imported_3mf_group;
         auto feature = Gtk::make_managed<Gtk::ToggleButton>();
-        feature->set_label(imported_step_group ? (group->m_name.empty() ? "STEP" : group->m_name)
-                                    : imported_stl_group ? (group->m_name.empty() ? "STL" : group->m_name)
-                                                          : (group->m_name.empty() ? group->get_type_name()
-                                                                                   : group->m_name));
+        feature->set_label(imported_group ? (group->m_name.empty() ? fallback_label : group->m_name)
+                                          : (group->m_name.empty() ? group->get_type_name() : group->m_name));
         feature->set_active(group->m_uuid == current_group);
         feature->set_tooltip_text(imported_step_group  ? "Imported STEP body"
                                           : imported_stl_group ? "Imported STL mesh"
+                                          : imported_3mf_group ? "Imported 3MF mesh"
                                                                 : group->get_type_name());
         feature->add_css_class("dune3d-timeline-feature");
         feature->signal_clicked().connect([this, current_uuid, uu = group->m_uuid] {

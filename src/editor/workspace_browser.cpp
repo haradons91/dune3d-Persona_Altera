@@ -10,6 +10,7 @@
 #include "document/component.hpp"
 #include "document/entity/entity_step.hpp"
 #include "document/entity/entity_stl.hpp"
+#include "document/entity/entity_threemf.hpp"
 #include "workspace/document_view.hpp"
 #include "util/fs_util.hpp"
 #include "util/debug.hpp"
@@ -330,6 +331,37 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
                 if (const auto *stl = dynamic_cast<const EntitySTL *>(entity.get()); stl
                     && !stl->m_path.filename().empty()) {
                     body_item->m_name = stl->m_path.filename().string();
+                    break;
+                }
+            }
+            body_item->m_has_color = gr->m_body->m_color.has_value();
+            if (gr->m_body->m_color.has_value())
+                body_item->m_color = rgba_from_color(gr->m_body->m_color.value());
+            body_item->m_uuid = gr->m_uuid;
+            body_item->m_doc = doc_uuid;
+            body_item->m_occurrence_path = occurrence_path;
+            body_store->append(body_item);
+
+            auto gi = GroupItem::create();
+            gi->m_name = "Body1";
+            gi->m_is_body_label = true;
+            gi->m_uuid = gr->m_uuid;
+            gi->m_doc = doc_uuid;
+            gi->m_occurrence_path = occurrence_path;
+            body_item->m_group_store->append(gi);
+            body_number++;
+            continue;
+        }
+        if (gr->get_type() == Group::Type::THREE_MF) {
+            body_item = BodyItem::create();
+            body_item->m_name = gr->m_name;
+            for (const auto &[entity_uuid, entity] : doc.m_entities) {
+                (void)entity_uuid;
+                if (entity->m_group != gr->m_uuid)
+                    continue;
+                if (const auto *mf = dynamic_cast<const EntityThreeMF *>(entity.get()); mf
+                    && !mf->m_path.filename().empty()) {
+                    body_item->m_name = mf->m_path.filename().string();
                     break;
                 }
             }

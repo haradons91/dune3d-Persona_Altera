@@ -5,10 +5,13 @@
 namespace dune3d {
 
 class EntitySTL;
+class EntityThreeMF;
 
-// Imports an STL mesh as a positioned, movable reference body (EntitySTL) --
-// see the STL import plan. 3MF is not supported yet: this OpenCascade
-// install has no 3MF reader, so the file dialog only offers .stl for now.
+// Imports a mesh (STL or 3MF, picked by the file dialog's extension) as a
+// positioned, movable reference body -- see the STL/3MF import plans.
+// Exactly one of m_stl/m_threemf is set for the lifetime of a single tool
+// invocation, matching whichever file extension was picked; the two are
+// otherwise driven identically (same fields, same placement UX).
 class ToolImportSTL : public ToolCommon {
 public:
     using ToolCommon::ToolCommon;
@@ -25,9 +28,14 @@ public:
     }
 
 private:
-    EntitySTL *m_mesh = nullptr;
+    EntitySTL *m_stl = nullptr;
+    EntityThreeMF *m_threemf = nullptr;
     bool m_lock_rotation = false;
 
+    bool has_mesh() const
+    {
+        return m_stl || m_threemf;
+    }
     void update_tip();
 };
 } // namespace dune3d

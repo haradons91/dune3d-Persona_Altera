@@ -39,6 +39,7 @@ enum class GroupType {
     SKETCH,
     STEP,
     STL,
+    THREE_MF,
     EXTRUDE,
     LOFT,
     LATHE,

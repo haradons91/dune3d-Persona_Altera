@@ -38,6 +38,8 @@ std::string Entity::get_type_name(Type type, TypeNameStyle style)
         return "STEP model";
     case Type::STL:
         return "STL mesh";
+    case Type::THREE_MF:
+        return "3MF mesh";
     case Type::WORKPLANE:
         return "Workplane";
     case Type::POINT_2D:
@@ -95,6 +97,8 @@ std::string Entity::get_type_name_plural(Type type, TypeNameStyle style)
         return "STEP models";
     case Type::STL:
         return "STL meshes";
+    case Type::THREE_MF:
+        return "3MF meshes";
     case Type::WORKPLANE:
         return "Workplanes";
     case Type::POINT_2D:
@@ -155,6 +159,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Entity::Type, {
                                                    {Entity::Type::WORKPLANE, "workplane"},
                                                    {Entity::Type::STEP, "step"},
                                                    {Entity::Type::STL, "stl"},
+                                                   {Entity::Type::THREE_MF, "three_mf"},
                                                    {Entity::Type::POINT_2D, "point_2d"},
                                                    {Entity::Type::DOCUMENT, "document"},
                                                    {Entity::Type::BEZIER_2D, "bezier_2d"},
@@ -198,6 +203,8 @@ std::unique_ptr<Entity> Entity::new_from_json(const UUID &uu, const json &j,
         return std::make_unique<EntitySTEP>(uu, j, containing_dir);
     case Type::STL:
         return std::make_unique<EntitySTL>(uu, j, containing_dir);
+    case Type::THREE_MF:
+        return std::make_unique<EntityThreeMF>(uu, j, containing_dir);
     case Type::POINT_2D:
         return std::make_unique<EntityPoint2D>(uu, j);
     case Type::DOCUMENT:

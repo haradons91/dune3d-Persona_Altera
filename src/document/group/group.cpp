@@ -67,6 +67,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Group::Type, {
                                                   {Group::Type::SKETCH, "sketch"},
                                                   {Group::Type::STEP, "step"},
                                                   {Group::Type::STL, "stl"},
+                                                  {Group::Type::THREE_MF, "three_mf"},
                                                   {Group::Type::EXTRUDE, "extrude"},
                                                   {Group::Type::FILLET, "fillet"},
                                                   {Group::Type::CHAMFER, "chamfer"},
@@ -104,6 +105,8 @@ std::string Group::get_type_name(Type type)
         return "STEP";
     case Type::STL:
         return "STL";
+    case Type::THREE_MF:
+        return "3MF";
     case Type::CHAMFER:
         return "Chamfer";
     case Type::EXTRUDE:
@@ -158,6 +161,8 @@ std::unique_ptr<Group> Group::new_from_json(const UUID &uu, const json &j)
         return std::make_unique<GroupStep>(uu, j);
     case Type::STL:
         return std::make_unique<GroupSTL>(uu, j);
+    case Type::THREE_MF:
+        return std::make_unique<GroupThreeMF>(uu, j);
     case Type::EXTRUDE:
         return std::make_unique<GroupExtrude>(uu, j);
     case Type::FILLET:

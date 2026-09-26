@@ -11,6 +11,7 @@ class EntityArc3D;
 class EntityWorkplane;
 class EntitySTEP;
 class EntitySTL;
+class EntityThreeMF;
 class EntityPoint2D;
 class EntityDocument;
 class EntityBezier2D;

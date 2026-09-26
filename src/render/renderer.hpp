@@ -88,6 +88,7 @@ private:
     void draw_sketch_grid(const EntityWorkplane &wrkpl);
     void visit(const EntitySTEP &en) override;
     void visit(const EntitySTL &en) override;
+    void visit(const EntityThreeMF &en) override;
     void visit(const EntityPoint2D &en) override;
     void visit(const EntityDocument &en) override;
     void visit(const EntityBezier2D &en) override;

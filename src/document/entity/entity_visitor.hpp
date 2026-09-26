@@ -13,6 +13,7 @@ public:
     virtual void visit(const EntityWorkplane &en) = 0;
     virtual void visit(const EntitySTEP &en) = 0;
     virtual void visit(const EntitySTL &en) = 0;
+    virtual void visit(const EntityThreeMF &en) = 0;
     virtual void visit(const EntityPoint2D &en) = 0;
     virtual void visit(const EntityDocument &en) = 0;
     virtual void visit(const EntityBezier2D &en) = 0;

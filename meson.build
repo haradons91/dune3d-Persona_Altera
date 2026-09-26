@@ -19,6 +19,7 @@ glm = dependency('glm')
 harfbuzz = dependency('harfbuzz')
 freetype = dependency('freetype2')
 png = dependency('libpng')
+zlib = dependency('zlib')
 libpython = dependency('python3', required: false, disabler:true)
 pybind11 = dependency('pybind11', required: false, disabler:true)
 
@@ -62,6 +63,7 @@ src_common = files(
   'src/document/entity/entity_workplane.cpp',
   'src/document/entity/entity_step.cpp',
   'src/document/entity/entity_stl.cpp',
+  'src/document/entity/entity_threemf.cpp',
   'src/document/entity/entity_point2d.cpp',
   'src/document/entity/entity_document.cpp',
   'src/document/entity/entity_bezier2d.cpp',
@@ -123,6 +125,7 @@ src_common = files(
   'src/document/group/group_sketch.cpp',
   'src/document/group/group_step.cpp',
   'src/document/group/group_stl.cpp',
+  'src/document/group/group_threemf.cpp',
   'src/document/group/group_reference.cpp',
   'src/document/group/group_extrude.cpp',
   'src/document/group/group_local_operation.cpp',
@@ -158,6 +161,9 @@ src_common = files(
   'src/import_step/step_import_manager.cpp',
   'src/import_stl/stl_importer.cpp',
   'src/import_stl/stl_import_manager.cpp',
+  'src/import_3mf/zip_reader.cpp',
+  'src/import_3mf/three_mf_importer.cpp',
+  'src/import_3mf/three_mf_import_manager.cpp',
   'src/util/cluster_content.cpp',
   'src/preferences/preferences.cpp',
   'src/action/action.cpp',
@@ -436,7 +442,7 @@ if is_libstdcpp
     stdlibs += cxx.find_library('stdc++fs', required:false)
 endif
 
-build_dependencies = [gtk4, gtkmm, epoxy, opencascade, eigen, glm, stdlibs, spnav, harfbuzz, freetype, png, pthread]
+build_dependencies = [gtk4, gtkmm, epoxy, opencascade, eigen, glm, stdlibs, spnav, harfbuzz, freetype, png, zlib, pthread]
 if glu.found()
   build_dependencies += glu
 endif
