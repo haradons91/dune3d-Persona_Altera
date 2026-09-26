@@ -1134,6 +1134,9 @@ void Editor::on_workspace_browser_new_instance(const UUID &uu_doc, const UUID &u
     new_occ.m_name = new_occ.m_body->m_name;
     root.set_group_generate_pending(new_occ.m_uuid);
 
+    // A direct mutation, not a Tool commit -- see the equivalent note in
+    // on_workspace_browser_move_group_into_component().
+    m_core.set_needs_save();
     m_core.rebuild("new instance");
     canvas_update_keep_selection();
     set_current_group(new_occ.m_uuid);
@@ -1307,6 +1310,14 @@ void Editor::on_workspace_browser_move_group_into_component(const UUID &uu_doc, 
         }
     }
 
+    // Unlike a Tool's own commit path (Core::tool_update()), which always
+    // marks the document dirty on ToolResponse::Result::COMMIT, this direct
+    // Editor method drives the move itself and must mark it explicitly --
+    // Core::rebuild() never does. Without this, Save silently skipped
+    // writing the document (its own dirty flag stayed false) even though
+    // the move was real and undo/redo already worked, since those go
+    // through the history stack instead.
+    m_core.set_needs_save();
     m_core.rebuild("move");
     canvas_update_keep_selection();
 }
