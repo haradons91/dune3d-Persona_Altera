@@ -82,6 +82,16 @@ public:
         return m_signal_new_instance;
     }
 
+    // Dragging a root-level Sketch or BodyN feature row onto a placed
+    // component's row: move it (and everything it depends on, in both
+    // directions) into that component. (doc, dragged seed group, target
+    // occurrence group).
+    using type_signal_move_group_into_component = sigc::signal<void(UUID, UUID, UUID)>;
+    type_signal_move_group_into_component signal_move_group_into_component()
+    {
+        return m_signal_move_group_into_component;
+    }
+
     using type_signal_group_checked = sigc::signal<void(UUID, UUID, bool)>;
     using type_signal_document_checked = sigc::signal<void(UUID, bool)>;
     using type_signal_origin_checked = sigc::signal<void(UUID, bool)>;
@@ -221,6 +231,7 @@ private:
     type_signal_new_component m_signal_new_component;
     type_signal_group_selected m_signal_new_component_from_body;
     type_signal_group_selected m_signal_new_instance;
+    type_signal_move_group_into_component m_signal_move_group_into_component;
 
     type_signal_item_expanded m_signal_body_expanded;
     type_signal_occurrence_activated m_signal_occurrence_activated;

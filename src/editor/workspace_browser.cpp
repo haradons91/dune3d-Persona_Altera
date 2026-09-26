@@ -34,6 +34,10 @@ public:
     UUID m_uuid;
     UUID m_doc;
     bool m_is_body_label = false;
+    // Set for a row inside the "Sketches" folder -- together with
+    // m_is_body_label, identifies which GroupItem rows are drag sources for
+    // moving into a component (see WorkspaceRow's Gtk::DragSource).
+    bool m_is_sketch = false;
     // Which Document (relative to the root) m_uuid actually lives in --
     // empty for the root document itself. Non-empty only for rows nested
     // under an Occurrence's row; see WorkspaceBrowser::populate_body_store().
@@ -251,6 +255,7 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
             gi->m_uuid = gr->m_uuid;
             gi->m_doc = doc_uuid;
             gi->m_occurrence_path = occurrence_path;
+            gi->m_is_sketch = true;
             sketches->m_group_store->append(gi);
             continue;
         }
@@ -831,6 +836,62 @@ public:
             }
         });
         add_controller(activate_controller);
+
+        // Drag a root-level Sketch or BodyN feature row onto a placed
+        // component's row to move it (and its full dependency closure) into
+        // that component -- see Editor::on_workspace_browser_move_group_into_component().
+        auto drag_source = Gtk::DragSource::create();
+        drag_source->set_actions(Gdk::DragAction::MOVE);
+        drag_source->signal_prepare().connect(
+                [this](double, double) -> Glib::RefPtr<Gdk::ContentProvider> {
+                    if (!m_group || !m_group->m_occurrence_path.empty()
+                        || !(m_group->m_is_body_label || m_group->m_is_sketch))
+                        return {};
+                    Glib::Value<Glib::ustring> value;
+                    value.init(Glib::Value<Glib::ustring>::value_type());
+                    value.set(static_cast<std::string>(m_group->m_uuid));
+                    return Gdk::ContentProvider::create(value);
+                },
+                false);
+        add_controller(drag_source);
+
+        auto drop_target = Gtk::DropTarget::create(Glib::Value<Glib::ustring>::value_type(), Gdk::DragAction::MOVE);
+        drop_target->signal_accept().connect(
+                [this](const Glib::RefPtr<Gdk::Drop> &) {
+                    return m_body && m_body->m_is_occurrence && m_body->m_occurrence_path.empty();
+                },
+                false);
+        drop_target->signal_drop().connect(
+                [this](const Glib::ValueBase &value, double, double) {
+                    if (!m_body || !m_body->m_is_occurrence || !m_body->m_occurrence_path.empty())
+                        return false;
+                    Glib::Value<Glib::ustring> str_value;
+                    str_value.init(value.gobj());
+                    UUID seed_group;
+                    try {
+                        seed_group = UUID(static_cast<std::string>(str_value.get()));
+                    }
+                    catch (const std::exception &) {
+                        return false;
+                    }
+                    // Defer the actual move (which rebuilds the tree's whole
+                    // model, via Editor's rebuild -> update_documents()) to
+                    // the next idle iteration rather than doing it here, from
+                    // inside GTK's own drop-handling call stack -- doing it
+                    // synchronously left GTK's TreeExpander/TreeListRow
+                    // machinery for THIS row re-entered mid-update, which
+                    // showed up as the app hanging in a notify::expanded
+                    // feedback loop.
+                    auto &browser = m_browser;
+                    const auto doc = m_body->m_doc;
+                    const auto target = m_body->m_uuid;
+                    Glib::signal_idle().connect_once([&browser, doc, seed_group, target] {
+                        browser.m_signal_move_group_into_component.emit(doc, seed_group, target);
+                    });
+                    return true;
+                },
+                false);
+        add_controller(drop_target);
     }
 
     void bind(DocumentItem &it)
@@ -943,8 +1004,18 @@ public:
                                                                 m_solid_toggle->property_active(),
                                                                 Glib::Binding::Flags::SYNC_CREATE));
         get_list_row()->set_expanded(it.m_expanded);
-        m_connections.push_back(it.m_expanded.get_proxy().signal_changed().connect(
-                [this, &it] { get_list_row()->set_expanded(it.m_expanded); }));
+        m_connections.push_back(it.m_expanded.get_proxy().signal_changed().connect([this, &it] {
+            // Guard against a feedback loop with the property_expanded()
+            // handler below: GTK's own notify::expanded doesn't reliably
+            // no-op on an unchanged value (seen hanging the app when a full
+            // tree rebuild -- Editor::canvas_update()'s
+            // update_documents() -- lands while a row's expanded state is
+            // still settling), so the two handlers must each check they're
+            // not just echoing a value that's already in sync before
+            // touching the other side.
+            if (get_list_row()->get_expanded() != it.m_expanded.get_value())
+                get_list_row()->set_expanded(it.m_expanded);
+        }));
         const bool has_color = it.m_has_color.get_value();
         if (has_color)
             m_solid_toggle->set_body_color(it.m_color.get_value());
@@ -959,10 +1030,10 @@ public:
         const auto body_uu = it.m_uuid;
         m_connections.push_back(get_list_row()->property_expanded().signal_changed().connect([this, body_uu, &it] {
             const auto expanded = get_list_row()->get_expanded();
-            if (m_browser.emit_body_expanded(body_uu, expanded))
-                it.m_expanded = expanded;
-            else
-                it.m_expanded = true;
+            const bool new_value = m_browser.emit_body_expanded(body_uu, expanded) ? expanded : true;
+            // See the matching guard on m_expanded's own signal above.
+            if (it.m_expanded.get_value() != new_value)
+                it.m_expanded = new_value;
         }));
 
         m_browser.unblock_signals();

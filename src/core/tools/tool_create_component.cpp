@@ -9,22 +9,6 @@
 
 namespace dune3d {
 
-// get_groups_by_body() returns its vector by value; a BodyGroups reference
-// or pointer taken from it dangles the moment that temporary is destroyed.
-// Return a copy instead -- safe, since BodyGroups::body is a reference into
-// the (stable, long-lived) Group's own storage and groups holds pointers
-// into that same storage, not into the temporary vector itself.
-static std::optional<Document::BodyGroups> find_body_groups(Document &doc, const UUID &current_group)
-{
-    for (auto &bg : doc.get_groups_by_body()) {
-        for (const auto *group : bg.groups) {
-            if (group->m_uuid == current_group)
-                return bg;
-        }
-    }
-    return std::nullopt;
-}
-
 // get_groups_by_body()'s span folds groups that don't own their own body
 // (e.g. a plain sketch) into whichever body-owning group's span was open at
 // that point in the timeline -- for a fresh [Reference, Sketch, Extrude]
@@ -71,7 +55,7 @@ static std::vector<UUID> collect_extraction_set(Document &doc, const Document::B
 ToolBase::CanBegin ToolCreateComponent::can_begin()
 {
     auto &doc = get_doc();
-    auto bg = find_body_groups(doc, m_core.get_current_group());
+    auto bg = doc.find_body_groups(m_core.get_current_group());
     if (!bg || bg->groups.empty())
         return false;
     const auto type = bg->groups.front()->get_type();
@@ -89,7 +73,7 @@ ToolBase::CanBegin ToolCreateComponent::can_begin()
 ToolResponse ToolCreateComponent::begin(const ToolArgs &args)
 {
     auto &doc = get_doc();
-    auto bg = find_body_groups(doc, m_core.get_current_group());
+    auto bg = doc.find_body_groups(m_core.get_current_group());
     if (!bg || bg->groups.empty())
         return ToolResponse::end();
 

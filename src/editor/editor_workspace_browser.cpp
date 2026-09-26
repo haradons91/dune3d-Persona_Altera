@@ -146,6 +146,8 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
             sigc::mem_fun(*this, &Editor::on_workspace_browser_new_component_from_body));
     m_workspace_browser->signal_new_instance().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_new_instance));
+    m_workspace_browser->signal_move_group_into_component().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_move_group_into_component));
     m_workspace_browser->signal_body_expanded().connect([this](const UUID &body_uu, bool expanded) {
         // body_uu is always root-relative -- see signal_group_activated's
         // handler above for why this can't use Core::get_current_document()/
@@ -1101,6 +1103,104 @@ void Editor::on_workspace_browser_new_instance(const UUID &uu_doc, const UUID &u
     m_core.rebuild("new instance");
     canvas_update_keep_selection();
     set_current_group(new_occ.m_uuid);
+}
+
+void Editor::on_workspace_browser_move_group_into_component(const UUID &uu_doc, const UUID &uu_seed_group,
+                                                             const UUID &uu_target_occurrence)
+{
+    if (m_core.tool_is_active())
+        return;
+    m_core.set_current_document(uu_doc);
+    // The drag source and drop target are both always root-relative today
+    // (nested tree content is still read-only/non-interactive), same
+    // reasoning as the other direct-mutation handlers above.
+    m_core.set_active_occurrence_path({});
+    update_active_occurrence_breadcrumb();
+
+    auto &root = m_core.get_root_document();
+    if (!root.get_groups().contains(uu_seed_group) || !root.get_groups().contains(uu_target_occurrence))
+        return;
+
+    // A dragged BodyN row seeds the whole body span (so a chained Cut/Join
+    // travels with it); a dragged Sketch row seeds just itself. Distinguish
+    // by whether the seed group owns a body -- find_body_groups() itself
+    // isn't a useful test here, since every group belongs to *some* body's
+    // span (a plain sketch gets folded into whichever span was open), so it
+    // would never return nullopt for a sketch either.
+    std::set<UUID> seed;
+    if (root.get_group(uu_seed_group).m_body.has_value()) {
+        auto bg = root.find_body_groups(uu_seed_group);
+        for (auto group : bg->groups)
+            seed.insert(group->m_uuid);
+    }
+    else {
+        seed = {uu_seed_group};
+    }
+    const auto closure = root.compute_move_closure(seed);
+    if (closure.empty())
+        return;
+
+    auto &target_occ = root.get_group<GroupOccurrence>(uu_target_occurrence);
+    auto &target_comp = root.get_component(target_occ.m_component);
+
+    // compute_move_closure() only understands IGroupSourceGroup edges
+    // (what a group needs to *regenerate*). It doesn't know about a sketch
+    // attached to a face of some OTHER occurrence's solid -- that dependency
+    // lives on the entity/constraint itself (referencing that occurrence's
+    // generated EntityOccurrence), not on any group. Validate for that
+    // before mutating anything: any entity/constraint reference whose
+    // owning group is neither in the closure nor the root's own Reference
+    // group (whose entities -- the three default workplanes -- are
+    // guaranteed to already exist in the target, since every Component's
+    // Document shares the same Reference group UUID as its parent) means
+    // the move would leave a dangling reference on one side or the other.
+    {
+        const auto reference_uuid = root.get_reference_group().m_uuid;
+        std::set<UUID> closure_set(closure.begin(), closure.end());
+        auto has_external_dependency = [&](const std::set<UUID> &refs) {
+            for (const auto &ref : refs) {
+                auto *ent = root.get_entity_ptr(ref);
+                if (ent && !closure_set.contains(ent->m_group) && ent->m_group != reference_uuid)
+                    return true;
+            }
+            return false;
+        };
+        bool blocked = false;
+        for (const auto &[euu, entity] : root.m_entities) {
+            if (closure_set.contains(entity->m_group) && has_external_dependency(entity->get_referenced_entities())) {
+                blocked = true;
+                break;
+            }
+        }
+        if (!blocked) {
+            for (const auto &[cuu, constraint] : root.m_constraints) {
+                if (closure_set.contains(constraint->m_group)
+                    && has_external_dependency(constraint->get_referenced_entities())) {
+                    blocked = true;
+                    break;
+                }
+            }
+        }
+        if (blocked) {
+            // Seen in practice: a sketch point pulled coincident with another
+            // placed component's origin marker (easy to do by accident when
+            // both happen to sit at the world origin), or a sketch attached
+            // to a face of another component's solid -- either way, a real
+            // dependency the move can't safely take along.
+            m_workspace_browser->show_toast(
+                    "Can't move this -- it depends on something outside the move (e.g. a point "
+                    "coincident with, or a sketch attached to a face of, another component)");
+            return;
+        }
+    }
+
+    root.extract_groups(closure, target_comp.m_document);
+    target_comp.m_document.set_group_solve_pending(closure.front());
+    target_comp.m_document.update_pending();
+    root.set_group_generate_pending(uu_target_occurrence);
+
+    m_core.rebuild("move into component");
+    canvas_update_keep_selection();
 }
 
 } // namespace dune3d

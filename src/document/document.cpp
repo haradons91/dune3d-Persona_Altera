@@ -11,6 +11,7 @@
 #include "group/group_reference.hpp"
 #include "group/group_sketch.hpp"
 #include "group/group_step.hpp"
+#include "group/igroup_source_group.hpp"
 #include "component.hpp"
 #include "system/system.hpp"
 #include "util/debug.hpp"
@@ -318,6 +319,57 @@ std::vector<Document::BodyGroups> Document::get_groups_by_body() const
     }
 
     return r;
+}
+
+std::optional<Document::BodyGroups> Document::find_body_groups(const UUID &current_group) const
+{
+    for (auto &bg : get_groups_by_body()) {
+        for (const auto *group : bg.groups) {
+            if (group->m_uuid == current_group)
+                return bg;
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<UUID> Document::compute_move_closure(std::set<UUID> seed) const
+{
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const auto &uu : std::vector<UUID>(seed.begin(), seed.end())) {
+            if (!m_groups.contains(uu))
+                continue;
+            const auto &group = get_group(uu);
+            if (const auto *src = dynamic_cast<const IGroupSourceGroup *>(&group)) {
+                for (const auto &req : src->get_source_groups(*this)) {
+                    if (req && m_groups.contains(req) && !seed.contains(req)) {
+                        seed.insert(req);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        for (const auto &[uu, group] : m_groups) {
+            if (seed.contains(uu))
+                continue;
+            const auto *src = dynamic_cast<const IGroupSourceGroup *>(group.get());
+            if (!src)
+                continue;
+            const auto sources = src->get_source_groups(*this);
+            if (std::ranges::any_of(sources, [&seed](const auto &req) { return seed.contains(req); })) {
+                seed.insert(uu);
+                changed = true;
+            }
+        }
+    }
+    seed.erase(get_reference_group().m_uuid);
+
+    std::vector<UUID> ordered;
+    for (const auto *group : get_groups_sorted())
+        if (seed.contains(group->m_uuid))
+            ordered.push_back(group->m_uuid);
+    return ordered;
 }
 
 void Document::update_pending(const UUID &last_group_to_update_i, const std::vector<EntityAndPoint> &dragged)

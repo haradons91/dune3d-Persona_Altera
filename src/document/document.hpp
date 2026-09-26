@@ -4,6 +4,7 @@
 #include <memory>
 #include "nlohmann/json_fwd.hpp"
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <glm/glm.hpp>
@@ -219,7 +220,18 @@ public:
         std::vector<const Group *> groups;
     };
     std::vector<BodyGroups> get_groups_by_body() const;
+    // The BodyGroups span containing current_group, if any -- current_group
+    // need not itself be the body-owning group, just somewhere in its span.
+    std::optional<BodyGroups> find_body_groups(const UUID &current_group) const;
     UUID get_group_rel(const UUID &group, int delta) const;
+
+    // The transitive closure of seed under IGroupSourceGroup edges in BOTH
+    // directions (what each member depends on, and what depends on each
+    // member), minus the Reference group, ordered by get_groups_sorted().
+    // Used to move a group (and everything that would otherwise dangle) into
+    // another Document via extract_groups() without leaving a broken
+    // reference behind on either side -- see workspace browser drag-and-drop.
+    std::vector<UUID> compute_move_closure(std::set<UUID> seed) const;
 
     void erase_invalid();
     void update_pending(const UUID &last_group = UUID(), const std::vector<EntityAndPoint> &dragged = {});
