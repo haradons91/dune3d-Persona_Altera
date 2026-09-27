@@ -1,5 +1,6 @@
 #include "conversion_progress_dialog.hpp"
 #include "util/gtk_util.hpp"
+#include <string>
 
 namespace dune3d {
 
@@ -34,13 +35,21 @@ ConversionProgressDialog::ConversionProgressDialog()
     box->append(*Gtk::make_managed<Gtk::Label>("Converting mesh to body…"));
     m_progress_bar = Gtk::make_managed<Gtk::ProgressBar>();
     m_progress_bar->set_pulse_step(0.1);
+    m_progress_bar->set_show_text(true);
     box->append(*m_progress_bar);
     set_child(*box);
 }
 
 void ConversionProgressDialog::pulse()
 {
+    m_progress_bar->set_text("");
     m_progress_bar->pulse();
+}
+
+void ConversionProgressDialog::set_progress(double progress)
+{
+    m_progress_bar->set_fraction(progress);
+    m_progress_bar->set_text(std::to_string((int)(progress * 100 + 0.5)) + "%");
 }
 
 } // namespace dune3d

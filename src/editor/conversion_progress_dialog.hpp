@@ -12,6 +12,11 @@ class ConversionProgressDialog : public Gtk::Window {
 public:
     ConversionProgressDialog();
     void pulse();
+    // `progress` is 0..1, straight from OpenCascade's own
+    // Message_ProgressIndicator::GetPosition() -- real, but paces unevenly
+    // against wall-clock time (see WorkContext::progress), so this can look
+    // like it stalls then jumps rather than filling smoothly.
+    void set_progress(double progress);
     bool cancel_requested() const
     {
         return m_cancel_requested;
