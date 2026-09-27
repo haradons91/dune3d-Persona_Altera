@@ -40,8 +40,13 @@ constexpr unsigned int s_direct_triangle_cap = 10000;
 // OpenCascade's own algorithms below have no cancellation API and have been
 // confirmed (on a real mesh) to hang indefinitely regardless of tolerance --
 // see bounded_execute.hpp. This bounds the wait so a pathological mesh can
-// only ever cost the user this much time, not the whole app.
-constexpr auto s_geometry_timeout = std::chrono::seconds(30);
+// only ever cost the user this much time, not the whole app -- now mostly a
+// last-resort safety net rather than the primary way to stop a long wait,
+// since Cancel actually interrupts the sewing/fixing steps in ~tens of
+// milliseconds (see CancelToken below); set generously (comfortably above
+// the ~140s worst case seen in testing on a large real mesh) so it almost
+// never fires on a merely-slow-but-working conversion.
+constexpr auto s_geometry_timeout = std::chrono::seconds(120);
 
 template <typename TEntity>
 std::vector<MeshTriangle> triangles_from_entity(const TEntity &en)
