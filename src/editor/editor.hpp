@@ -27,6 +27,7 @@ class Canvas;
 class ClippingPlaneWindow;
 class SelectionFilterWindow;
 class Buffer;
+class EditorWaitProgressReporter;
 enum class SelectionMode;
 enum class CommitMode;
 enum class WorkspaceBrowserAddGroupMode;
@@ -413,6 +414,11 @@ private:
     std::unique_ptr<SelectionFilterWindow> m_selection_filter_window;
 
     SelectionMenuCreator m_selection_menu_creator;
+
+    // Shows a "please wait" dialog with Cancel while a mesh conversion's
+    // sewing/merging step takes a while -- see bounded_execute.hpp's
+    // WaitProgressReporter, which this implements and registers with.
+    std::unique_ptr<EditorWaitProgressReporter> m_wait_progress_reporter;
 
     void update_error_overlay();
 

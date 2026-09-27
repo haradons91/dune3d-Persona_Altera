@@ -1,7 +1,5 @@
 #include "mesh_weld.hpp"
-#include <map>
-#include <tuple>
-#include <cmath>
+#include "mesh_edge_collapse.hpp"
 
 namespace dune3d {
 
@@ -9,27 +7,14 @@ std::vector<MeshTriangle> weld_mesh(const std::vector<MeshTriangle> &triangles, 
 {
     if (tolerance <= 0)
         return triangles;
-
-    std::map<std::tuple<long, long, long>, gp_Pnt> buckets;
-    auto weld = [&](const gp_Pnt &p) {
-        auto key = std::make_tuple((long)std::floor(p.X() / tolerance), (long)std::floor(p.Y() / tolerance),
-                                   (long)std::floor(p.Z() / tolerance));
-        auto it = buckets.find(key);
-        if (it != buckets.end())
-            return it->second;
-        buckets.emplace(key, p);
-        return p;
-    };
-
-    std::vector<MeshTriangle> out;
-    out.reserve(triangles.size());
-    for (const auto &t : triangles) {
-        MeshTriangle w{weld(t.a), weld(t.b), weld(t.c)};
-        if (w.a.IsEqual(w.b, 0) || w.b.IsEqual(w.c, 0) || w.a.IsEqual(w.c, 0))
-            continue;
-        out.push_back(w);
-    }
-    return out;
+    // No face-count target -- keep collapsing manifold-safe edges shorter
+    // than `tolerance` until none remain. Previously used naive grid
+    // bucketing (snap each vertex to a cell, drop any triangle that
+    // collapses to zero area) instead of this shared edge-collapse core;
+    // that tore real meshes into as many as 13 disconnected shells at
+    // larger tolerances, same "drops a triangle without patching the hole"
+    // flaw decimation already hit -- see mesh_edge_collapse.cpp.
+    return edge_collapse(triangles, 0, tolerance);
 }
 
 } // namespace dune3d

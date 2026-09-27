@@ -420,6 +420,13 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
         if (connected_extrude)
             continue;
 
+        // No currently-open body to attach a feature row to (e.g. a
+        // GroupConvertMesh that hasn't produced a solid yet -- see
+        // GroupConvertMesh::update_solid_model(), which only claims a body
+        // once there's actually one to show). Nothing to render here.
+        if (!body_item)
+            continue;
+
         auto gi = GroupItem::create();
         const bool is_body_group = gr->m_body.has_value() && !connected_extrude
                                    && gr->get_type() != Group::Type::REFERENCE;

@@ -24,6 +24,8 @@
 #include "document/group/group_extrude.hpp"
 #include "document/group/group_sketch.hpp"
 #include "document/solid_model/solid_model.hpp"
+#include "document/solid_model/bounded_execute.hpp"
+#include "conversion_progress_dialog.hpp"
 #include "logger/logger.hpp"
 #include "document/constraint/constraint.hpp"
 #include "util/fs_util.hpp"
@@ -50,6 +52,55 @@ void sketch_dimension_debug_log(const std::string &message)
 }
 } // namespace
 
+// Registered with bounded_execute.hpp's g_wait_progress_reporter so the
+// GTK-free document/solid_model layer can offer wait-progress UI and
+// cancellation without depending on GTK -- see the Convert Mesh to Body
+// progress-dialog plan for why this indirection exists.
+class EditorWaitProgressReporter : public WaitProgressReporter {
+public:
+    explicit EditorWaitProgressReporter(Dune3DAppWindow &win) : m_win(win)
+    {
+    }
+
+    void begin() override
+    {
+        m_start = std::chrono::steady_clock::now();
+        m_dialog.reset();
+    }
+
+    bool tick() override
+    {
+        // Only actually pop up a dialog once the wait has gone on long
+        // enough to matter -- avoids a flash for the common fast/instant
+        // case, since this runs on every mesh-conversion sew/merge attempt.
+        if (!m_dialog && std::chrono::steady_clock::now() - m_start > std::chrono::milliseconds(400)) {
+            m_dialog = std::make_unique<ConversionProgressDialog>();
+            m_dialog->set_transient_for(m_win);
+            m_dialog->show();
+        }
+        bool cancel = false;
+        if (m_dialog) {
+            m_dialog->pulse();
+            cancel = m_dialog->cancel_requested();
+        }
+        // Keep the window (and the rest of the app) responsive while this
+        // thread is otherwise just polling a background computation.
+        while (Glib::MainContext::get_default()->iteration(false)) {
+        }
+        return cancel;
+    }
+
+    void end() override
+    {
+        m_dialog.reset();
+    }
+
+private:
+    Dune3DAppWindow &m_win;
+    std::chrono::steady_clock::time_point m_start;
+    std::unique_ptr<ConversionProgressDialog> m_dialog;
+};
+
 Editor::CanvasUpdater::CanvasUpdater(Editor &editor) : m_editor(editor)
 {
     m_editor.m_canvas_update_pending++;
@@ -68,9 +119,15 @@ Editor::Editor(Dune3DAppWindow &win, Preferences &prefs)
     : m_preferences(prefs), m_dialogs(win, *this), m_win(win), m_core(*this), m_selection_menu_creator(m_core)
 {
     m_drag_tool = ToolID::NONE;
+    m_wait_progress_reporter = std::make_unique<EditorWaitProgressReporter>(m_win);
+    g_wait_progress_reporter = m_wait_progress_reporter.get();
 }
 
-Editor::~Editor() = default;
+Editor::~Editor()
+{
+    if (g_wait_progress_reporter == m_wait_progress_reporter.get())
+        g_wait_progress_reporter = nullptr;
+}
 
 void Editor::ensure_new_document()
 {

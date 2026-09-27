@@ -59,6 +59,15 @@ const SolidModel *GroupConvertMesh::get_solid_model() const
 void GroupConvertMesh::update_solid_model(const Document &doc)
 {
     m_solid_model = SolidModel::create(doc, *this);
+    // Unlike Fillet/Chamfer/etc, this group never combines with a prior
+    // body -- it always starts a fresh one -- so a failed conversion has no
+    // earlier geometry to fall back to. Rather than leaving an empty "Body"
+    // row in the tree with nothing behind it, only claim a body once there's
+    // actually a solid to show.
+    if (!m_solid_model)
+        m_body.reset();
+    else if (!m_body)
+        m_body.emplace();
 }
 
 } // namespace dune3d

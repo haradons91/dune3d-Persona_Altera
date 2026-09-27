@@ -180,14 +180,19 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupC
         return nullptr;
     }
 
-    auto sew_result = run_with_timeout([triangles] { return sew_into_solid_impl(triangles); }, s_geometry_timeout);
+    bool sew_cancelled = false;
+    auto sew_result =
+            run_with_timeout([triangles] { return sew_into_solid_impl(triangles); }, s_geometry_timeout, &sew_cancelled);
     if (!sew_result) {
-        group.m_solve_messages.emplace_back(
-                GroupStatusMessage::Status::ERR,
-                std::format("Conversion is taking too long and was aborted after {}s -- this mesh may be too "
-                            "complex or malformed for this algorithm; try a different algorithm or a lower "
-                            "decimation target",
-                            s_geometry_timeout.count()));
+        if (sew_cancelled)
+            group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR, "Conversion was cancelled");
+        else
+            group.m_solve_messages.emplace_back(
+                    GroupStatusMessage::Status::ERR,
+                    std::format("Conversion is taking too long and was aborted after {}s -- this mesh may be too "
+                                "complex or malformed for this algorithm; try a different algorithm or a lower "
+                                "decimation target",
+                                s_geometry_timeout.count()));
         return nullptr;
     }
     if (sew_result->status == SewResult::Status::MULTI_SHELL) {
@@ -205,13 +210,18 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupC
     }
     TopoDS_Solid solid = sew_result->solid;
 
-    auto merge_result = run_with_timeout([solid] { return merge_coplanar_faces_impl(solid); }, s_geometry_timeout);
+    bool merge_cancelled = false;
+    auto merge_result = run_with_timeout([solid] { return merge_coplanar_faces_impl(solid); }, s_geometry_timeout,
+                                         &merge_cancelled);
     if (!merge_result) {
-        group.m_solve_messages.emplace_back(
-                GroupStatusMessage::Status::ERR,
-                std::format("Merging coplanar faces is taking too long and was aborted after {}s -- try a "
-                            "different algorithm",
-                            s_geometry_timeout.count()));
+        if (merge_cancelled)
+            group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR, "Conversion was cancelled");
+        else
+            group.m_solve_messages.emplace_back(
+                    GroupStatusMessage::Status::ERR,
+                    std::format("Merging coplanar faces is taking too long and was aborted after {}s -- try a "
+                                "different algorithm",
+                                s_geometry_timeout.count()));
         return nullptr;
     }
     if (!merge_result->ok) {
