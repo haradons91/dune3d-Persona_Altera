@@ -23,6 +23,7 @@
 #include "document/group/igroup_solid_model.hpp"
 #include "widgets/select_groups_dialog.hpp"
 #include "core/tool_data_create_circular_sweep_group.hpp"
+#include "core/tool_data_convert_mesh_to_body.hpp"
 #include "util/glm_util.hpp"
 #include "util/paths.hpp"
 #include "util/debug.hpp"
@@ -150,6 +151,8 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
             sigc::mem_fun(*this, &Editor::on_workspace_browser_new_component_from_body));
     m_workspace_browser->signal_new_instance().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_new_instance));
+    m_workspace_browser->signal_convert_mesh_to_body().connect(
+            sigc::mem_fun(*this, &Editor::on_workspace_browser_convert_mesh_to_body));
     m_workspace_browser->signal_move_group_into_component().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_move_group_into_component));
     m_workspace_browser->signal_body_expanded().connect([this](const UUID &body_uu, bool expanded) {
@@ -1131,6 +1134,19 @@ void Editor::on_workspace_browser_new_component_from_body(const UUID &uu_doc, co
     update_active_occurrence_breadcrumb();
     set_current_group(uu_body);
     trigger_action(ToolID::CREATE_COMPONENT);
+}
+
+void Editor::on_workspace_browser_convert_mesh_to_body(const UUID &uu_doc, const UUID &uu_mesh_group, int algorithm)
+{
+    if (m_core.tool_is_active())
+        return;
+    m_core.set_current_document(uu_doc);
+    m_core.set_active_occurrence_path({});
+    update_active_occurrence_breadcrumb();
+    set_current_group(uu_mesh_group);
+    tool_begin(ToolID::CONVERT_MESH_TO_BODY,
+              std::make_unique<ToolDataConvertMeshToBody>(
+                      static_cast<GroupConvertMesh::Algorithm>(algorithm)));
 }
 
 void Editor::on_workspace_browser_new_instance(const UUID &uu_doc, const UUID &uu_body)

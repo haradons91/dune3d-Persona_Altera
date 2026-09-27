@@ -82,6 +82,15 @@ public:
         return m_signal_new_instance;
     }
 
+    // Right-click "Convert to Body" submenu on a mesh's own row (uu_doc, the
+    // mesh's owning GroupSTL/GroupThreeMF UUID, which algorithm was picked --
+    // matches GroupConvertMesh::Algorithm's underlying value).
+    using type_signal_convert_mesh_to_body = sigc::signal<void(UUID, UUID, int)>;
+    type_signal_convert_mesh_to_body signal_convert_mesh_to_body()
+    {
+        return m_signal_convert_mesh_to_body;
+    }
+
     // Dragging a Sketch/BodyN/Occurrence row (root-level or nested, to any
     // depth) onto either a placed component's row or the top-level document
     // row: move it (and everything it depends on, in both directions) into
@@ -242,6 +251,7 @@ private:
     type_signal_new_component m_signal_new_component;
     type_signal_group_selected m_signal_new_component_from_body;
     type_signal_group_selected m_signal_new_instance;
+    type_signal_convert_mesh_to_body m_signal_convert_mesh_to_body;
     type_signal_move_group_into_component m_signal_move_group_into_component;
 
     type_signal_item_expanded m_signal_body_expanded;
@@ -305,6 +315,7 @@ private:
     Glib::RefPtr<Gio::Menu> m_document_menu = nullptr;
     Glib::RefPtr<Gio::Menu> m_body_menu_plain = nullptr;
     Glib::RefPtr<Gio::Menu> m_body_menu_occurrence = nullptr;
+    Glib::RefPtr<Gio::Menu> m_mesh_menu = nullptr;
     Glib::RefPtr<Gio::Menu> m_body_label_menu = nullptr;
     UUID m_body_menu_document;
     UUID m_body_menu_body;

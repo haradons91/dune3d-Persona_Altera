@@ -83,6 +83,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Group::Type, {
                                                   {Group::Type::CLONE, "clone"},
                                                   {Group::Type::PIPE, "pipe"},
                                                   {Group::Type::OCCURRENCE, "occurrence"},
+                                                  {Group::Type::CONVERT_MESH, "convert_mesh"},
                                           })
 
 json Group::serialize() const
@@ -139,6 +140,8 @@ std::string Group::get_type_name(Type type)
         return "Pipe";
     case Type::OCCURRENCE:
         return "Occurrence";
+    case Type::CONVERT_MESH:
+        return "Convert Mesh to Body";
     default:
         return "Group";
     }
@@ -193,6 +196,8 @@ std::unique_ptr<Group> Group::new_from_json(const UUID &uu, const json &j)
         return std::make_unique<GroupPipe>(uu, j);
     case Type::OCCURRENCE:
         return std::make_unique<GroupOccurrence>(uu, j);
+    case Type::CONVERT_MESH:
+        return std::make_unique<GroupConvertMesh>(uu, j);
     case Type::INVALID:
         throw std::runtime_error("unknown group type " + j.at("type").get<std::string>());
     }

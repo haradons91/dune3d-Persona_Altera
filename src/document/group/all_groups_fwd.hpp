@@ -23,4 +23,5 @@ class GroupSolidModelOperation;
 class GroupClone;
 class GroupPipe;
 class GroupOccurrence;
+class GroupConvertMesh;
 } // namespace dune3d

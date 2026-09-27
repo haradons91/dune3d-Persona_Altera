@@ -13,6 +13,7 @@
 #include "group_editor_pipe.hpp"
 #include "group_editor_clone.hpp"
 #include "group_editor_exploded_cluster.hpp"
+#include "group_editor_convert_mesh.hpp"
 #include "core/core.hpp"
 
 namespace dune3d {
@@ -68,6 +69,8 @@ GroupEditor *GroupEditor::create(Core &core, const UUID &group_uu)
         return Gtk::make_managed<GroupEditorClone>(core, group_uu);
     case Group::Type::PIPE:
         return Gtk::make_managed<GroupEditorPipe>(core, group_uu);
+    case Group::Type::CONVERT_MESH:
+        return Gtk::make_managed<GroupEditorConvertMesh>(core, group_uu);
     default:
         return Gtk::make_managed<GroupEditor>(core, group_uu);
     }

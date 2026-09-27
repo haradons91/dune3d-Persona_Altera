@@ -28,6 +28,7 @@
 #include "tools/tool_toggle_construction.hpp"
 #include "tools/tool_import_step.hpp"
 #include "tools/tool_import_stl.hpp"
+#include "tools/tool_convert_mesh_to_body.hpp"
 #include "tools/tool_constrain_diameter_radius.hpp"
 #include "tools/tool_select_edges.hpp"
 #include "tools/tool_constrain_perpendicular.hpp"
@@ -368,6 +369,9 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
 
     case ToolID::NEW_COMPONENT:
         return std::make_unique<ToolNewComponent>(tool_id, *this, m_intf, flags);
+
+    case ToolID::CONVERT_MESH_TO_BODY:
+        return std::make_unique<ToolConvertMeshToBody>(tool_id, *this, m_intf, flags);
     }
     throw std::runtime_error("unknown tool");
 }

@@ -955,7 +955,9 @@ public:
                 m_browser.m_body_menu_document = m_body->m_doc;
                 m_browser.m_body_menu_body = m_body->m_uuid;
                 m_browser.m_reset_body_color_action->set_enabled(m_body->m_has_color);
-                menu = m_body->m_is_occurrence ? m_browser.m_body_menu_occurrence : m_browser.m_body_menu_plain;
+                menu = m_body->m_is_mesh ? m_browser.m_mesh_menu
+                       : m_body->m_is_occurrence ? m_browser.m_body_menu_occurrence
+                                                  : m_browser.m_body_menu_plain;
             }
             else if (m_group && m_group->m_is_body_label && m_group->m_occurrence_path.empty()) {
                 m_browser.m_body_menu_document = m_group->m_doc;
@@ -1526,6 +1528,27 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
                         [this] { signal_new_component_from_body().emit(m_body_menu_document, m_body_menu_body); });
     actions->add_action("new_instance",
                         [this] { signal_new_instance().emit(m_body_menu_document, m_body_menu_body); });
+    actions->add_action("convert_to_body_direct", [this] {
+        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 0);
+    });
+    actions->add_action("convert_to_body_merge_faces", [this] {
+        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 1);
+    });
+    actions->add_action("convert_to_body_decimate_sew", [this] {
+        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 2);
+    });
+    actions->add_action("convert_to_body_weld_sew", [this] {
+        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 3);
+    });
+    actions->add_action("convert_to_body_decimate_merge_faces", [this] {
+        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 4);
+    });
+    actions->add_action("convert_to_body_convex_hull", [this] {
+        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 5);
+    });
+    actions->add_action("convert_to_body_bounding_box", [this] {
+        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 6);
+    });
     insert_action_group("body", actions);
 
     m_document_menu = Gio::Menu::create();
@@ -1538,6 +1561,27 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
     m_body_menu_plain->append("Set color", "body.set_color");
     m_body_menu_plain->append("Reset color", "body.reset_color");
     m_body_menu_plain->append("Rename", "body.rename");
+
+    m_mesh_menu = Gio::Menu::create();
+    m_mesh_menu->append("Export STL", "body.export_stl");
+    m_mesh_menu->append("Export STEP", "body.export_step");
+    m_mesh_menu->append_section("", Gio::Menu::create());
+    m_mesh_menu->append("Set color", "body.set_color");
+    m_mesh_menu->append("Reset color", "body.reset_color");
+    m_mesh_menu->append("Rename", "body.rename");
+    m_mesh_menu->append_section("", Gio::Menu::create());
+    {
+        auto convert_submenu = Gio::Menu::create();
+        convert_submenu->append("Direct (small/clean meshes)", "body.convert_to_body_direct");
+        convert_submenu->append("Direct + Merge Faces (small/clean meshes)", "body.convert_to_body_merge_faces");
+        convert_submenu->append("Decimate + Sew (larger meshes)", "body.convert_to_body_decimate_sew");
+        convert_submenu->append("Weld + Sew (fixes tiny gaps, keeps detail)", "body.convert_to_body_weld_sew");
+        convert_submenu->append("Decimate + Merge Faces (larger meshes)",
+                                "body.convert_to_body_decimate_merge_faces");
+        convert_submenu->append("Convex Hull (always succeeds, approximate)", "body.convert_to_body_convex_hull");
+        convert_submenu->append("Bounding Box (always succeeds, approximate)", "body.convert_to_body_bounding_box");
+        m_mesh_menu->append_submenu("Convert to Body", convert_submenu);
+    }
 
     // "New Component from Body" lives on the BodyN feature row itself (a
     // GroupItem, is_body_label -- see populate_body_store()), not the
