@@ -17,6 +17,8 @@
 #include <ShapeFix_Solid.hxx>
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <BRepCheck_Analyzer.hxx>
+#include <Message_ProgressIndicator.hxx>
+#include <Message_ProgressScope.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shell.hxx>
@@ -25,6 +27,7 @@
 #include <TopAbs_ShapeEnum.hxx>
 #include <format>
 #include <algorithm>
+#include <atomic>
 
 namespace dune3d {
 
@@ -77,8 +80,34 @@ std::vector<MeshTriangle> collect_triangles(const Document &doc, GroupConvertMes
     return {};
 }
 
+// Adapts a plain cancellation flag to OpenCascade's own
+// Message_ProgressIndicator::UserBreak() mechanism -- confirmed (by direct
+// testing against a real mesh) that BRepBuilderAPI_Sewing::Perform() and
+// ShapeFix_Solid::Perform() both check this frequently enough for real,
+// responsive interruption (~45ms from request to return, mid-computation).
+// `cancel` must outlive this object; the caller in bounded_execute.hpp keeps
+// it alive via a shared_ptr for exactly this reason.
+class CancelToken : public Message_ProgressIndicator {
+public:
+    explicit CancelToken(const std::atomic<bool> &cancel) : m_cancel(cancel)
+    {
+    }
+
+protected:
+    Standard_Boolean UserBreak() override
+    {
+        return m_cancel.load() ? Standard_True : Standard_False;
+    }
+    void Show(const Message_ProgressScope &, const Standard_Boolean) override
+    {
+    }
+
+private:
+    const std::atomic<bool> &m_cancel;
+};
+
 struct SewResult {
-    enum class Status { OK, MULTI_SHELL, MAKE_SOLID_FAILED } status = Status::MULTI_SHELL;
+    enum class Status { OK, MULTI_SHELL, MAKE_SOLID_FAILED, CANCELLED } status = Status::MULTI_SHELL;
     int n_shells = 0;
     TopoDS_Solid solid;
 };
@@ -86,8 +115,11 @@ struct SewResult {
 // Pure function: takes/returns plain values only (no Group/Document access)
 // so it's safe to run on a detached worker thread via run_with_timeout --
 // see that header for why this needs to be bulletproof against the caller
-// moving on before the worker finishes.
-SewResult sew_into_solid_impl(const std::vector<MeshTriangle> &triangles)
+// moving on before the worker finishes. `cancel_requested` is checked after
+// each interruptible OpenCascade call; once it's seen, the (now unsafe to
+// query further -- confirmed calling SewedShape() after a break segfaults)
+// objects are abandoned immediately rather than touched again.
+SewResult sew_into_solid_impl(const std::vector<MeshTriangle> &triangles, const std::atomic<bool> &cancel_requested)
 {
     SewResult result;
 
@@ -106,7 +138,12 @@ SewResult sew_into_solid_impl(const std::vector<MeshTriangle> &triangles)
             sewing.Add(f);
         }
     }
-    sewing.Perform();
+    Handle(CancelToken) cancel_token = new CancelToken(cancel_requested);
+    sewing.Perform(cancel_token->Start());
+    if (cancel_requested.load()) {
+        result.status = SewResult::Status::CANCELLED;
+        return result;
+    }
     const TopoDS_Shape sewed = sewing.SewedShape();
 
     int n_shells = 0;
@@ -126,7 +163,11 @@ SewResult sew_into_solid_impl(const std::vector<MeshTriangle> &triangles)
     }
     TopoDS_Solid solid = mk_solid.Solid();
     ShapeFix_Solid fix(solid);
-    fix.Perform();
+    fix.Perform(cancel_token->Start());
+    if (cancel_requested.load()) {
+        result.status = SewResult::Status::CANCELLED;
+        return result;
+    }
     result.solid = TopoDS::Solid(fix.Solid());
     result.status = SewResult::Status::OK;
     return result;
@@ -140,8 +181,12 @@ struct MergeResult {
 // Always run after sewing, for every algorithm -- merging coplanar triangles
 // back into real flat faces is a strict quality improvement (a cube reads as
 // 6 faces instead of 12) with no accuracy cost, so it isn't a separate
-// user-facing choice.
-MergeResult merge_coplanar_faces_impl(TopoDS_Solid solid)
+// user-facing choice. ShapeUpgrade_UnifySameDomain::Build() has no
+// progress/cancellation hook at all, so `cancel_requested` (needed only to
+// match run_with_timeout's callable shape) is unused here -- this path can
+// only ever fall back to bounded_execute's orphan-on-timeout behavior, never
+// stop cleanly like the sewing path can.
+MergeResult merge_coplanar_faces_impl(TopoDS_Solid solid, const std::atomic<bool> &)
 {
     MergeResult result;
     ShapeUpgrade_UnifySameDomain unify(solid, true, true, false);
@@ -181,9 +226,15 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupC
     }
 
     bool sew_cancelled = false;
-    auto sew_result =
-            run_with_timeout([triangles] { return sew_into_solid_impl(triangles); }, s_geometry_timeout, &sew_cancelled);
+    auto sew_result = run_with_timeout(
+            [triangles](const std::atomic<bool> &cancel_requested) {
+                return sew_into_solid_impl(triangles, cancel_requested);
+            },
+            s_geometry_timeout, &sew_cancelled);
     if (!sew_result) {
+        // Fell back to orphaning the worker -- either it was cancelled but
+        // didn't stop within the grace period, or the 30s timeout hit with
+        // no cancel request at all.
         if (sew_cancelled)
             group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR, "Conversion was cancelled");
         else
@@ -193,6 +244,12 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupC
                                 "complex or malformed for this algorithm; try a different algorithm or a lower "
                                 "decimation target",
                                 s_geometry_timeout.count()));
+        return nullptr;
+    }
+    if (sew_result->status == SewResult::Status::CANCELLED) {
+        // Cooperative cancellation via UserBreak() -- stopped cleanly well
+        // within the grace period, no orphaned thread left behind.
+        group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR, "Conversion was cancelled");
         return nullptr;
     }
     if (sew_result->status == SewResult::Status::MULTI_SHELL) {
@@ -211,8 +268,11 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupC
     TopoDS_Solid solid = sew_result->solid;
 
     bool merge_cancelled = false;
-    auto merge_result = run_with_timeout([solid] { return merge_coplanar_faces_impl(solid); }, s_geometry_timeout,
-                                         &merge_cancelled);
+    auto merge_result = run_with_timeout(
+            [solid](const std::atomic<bool> &cancel_requested) {
+                return merge_coplanar_faces_impl(solid, cancel_requested);
+            },
+            s_geometry_timeout, &merge_cancelled);
     if (!merge_result) {
         if (merge_cancelled)
             group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR, "Conversion was cancelled");
