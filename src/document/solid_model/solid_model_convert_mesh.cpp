@@ -143,6 +143,7 @@ SewResult sew_into_solid_impl(const std::vector<MeshTriangle> &triangles, WorkCo
         }
     }
     Handle(CancelToken) cancel_token = new CancelToken(context);
+    context.phase_label.store("Sewing mesh…");
     sewing.Perform(cancel_token->Start());
     if (context.cancel_requested.load()) {
         result.status = SewResult::Status::CANCELLED;
@@ -168,6 +169,7 @@ SewResult sew_into_solid_impl(const std::vector<MeshTriangle> &triangles, WorkCo
     TopoDS_Solid solid = mk_solid.Solid();
     ShapeFix_Solid fix(solid);
     context.progress.store(0.0);
+    context.phase_label.store("Closing solid…");
     fix.Perform(cancel_token->Start());
     if (context.cancel_requested.load()) {
         result.status = SewResult::Status::CANCELLED;
@@ -187,12 +189,14 @@ struct MergeResult {
 // back into real flat faces is a strict quality improvement (a cube reads as
 // 6 faces instead of 12) with no accuracy cost, so it isn't a separate
 // user-facing choice. ShapeUpgrade_UnifySameDomain::Build() has no
-// progress/cancellation hook at all, so `context` (needed only to match
-// run_with_timeout's callable shape) is unused here -- this path can only
-// ever fall back to bounded_execute's orphan-on-timeout behavior, never stop
-// cleanly or report real progress like the sewing path can.
-MergeResult merge_coplanar_faces_impl(TopoDS_Solid solid, WorkContext &)
+// progress/cancellation hook at all, so `context.progress`/`cancel_requested`
+// are never touched here -- this path can only ever fall back to
+// bounded_execute's orphan-on-timeout behavior, never stop cleanly or report
+// real progress like the sewing path can. Still sets a phase label so the
+// dialog explains the (indeterminate) wait rather than just going quiet.
+MergeResult merge_coplanar_faces_impl(TopoDS_Solid solid, WorkContext &context)
 {
+    context.phase_label.store("Merging coplanar faces…");
     MergeResult result;
     ShapeUpgrade_UnifySameDomain unify(solid, true, true, false);
     unify.Build();

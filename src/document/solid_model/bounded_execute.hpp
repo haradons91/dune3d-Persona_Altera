@@ -20,8 +20,9 @@ public:
     virtual void begin() = 0;
     // Called roughly every 20ms while waiting with the work's self-reported
     // progress (0..1, or left at 0 by work that doesn't report any -- see
-    // WorkContext); return true to cancel.
-    virtual bool tick(double progress) = 0;
+    // WorkContext) and a short label naming what it's currently doing;
+    // return true to cancel.
+    virtual bool tick(double progress, const char *phase_label) = 0;
     virtual void end() = 0;
 };
 extern WaitProgressReporter *g_wait_progress_reporter;
@@ -39,6 +40,14 @@ struct WorkContext {
     // solid_model_convert_mesh.cpp), which the reporter should treat as
     // "unknown" rather than "0%".
     std::atomic<double> progress{0.0};
+    // A single `fn` call can legitimately run several distinct OpenCascade
+    // operations in sequence, each restarting its own 0..1 progress range
+    // (e.g. sew_into_solid_impl's sewing step, then its separate
+    // ShapeFix_Solid step) -- without a label, that reset looks like a bug
+    // ("progress jumped backward") rather than "moved on to the next step".
+    // Always points at a string literal with static storage duration, so a
+    // plain atomic pointer is safe to share with no lifetime concerns.
+    std::atomic<const char *> phase_label{"Converting mesh to body…"};
 };
 
 // Runs `fn(context)` on a detached background thread and waits up to
@@ -119,7 +128,8 @@ auto run_with_timeout(F fn, std::chrono::milliseconds timeout, bool *was_cancell
         // has already been signalled, so the progress dialog stays
         // responsive during the (short) grace period too.
         const bool ticked_cancel =
-                g_wait_progress_reporter && g_wait_progress_reporter->tick(shared->context.progress.load());
+                g_wait_progress_reporter
+                && g_wait_progress_reporter->tick(shared->context.progress.load(), shared->context.phase_label.load());
 
         if (!cancel_signalled && (timed_out || ticked_cancel)) {
             if (ticked_cancel && was_cancelled)

@@ -68,7 +68,7 @@ public:
         m_dialog.reset();
     }
 
-    bool tick(double progress) override
+    bool tick(double progress, const char *phase_label) override
     {
         // Only actually pop up a dialog once the wait has gone on long
         // enough to matter -- avoids a flash for the common fast/instant
@@ -80,6 +80,7 @@ public:
         }
         bool cancel = false;
         if (m_dialog) {
+            m_dialog->set_phase(phase_label);
             // progress==0 covers both "genuinely just started" and "this
             // step has no progress hook at all" (e.g. the merge step) --
             // can't tell those apart here, so fall back to an indeterminate
