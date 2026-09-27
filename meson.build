@@ -123,7 +123,6 @@ src_common = files(
   'src/document/solid_model/solid_model_convert_mesh.cpp',
   'src/document/solid_model/mesh_decimate.cpp',
   'src/document/solid_model/mesh_weld.cpp',
-  'src/document/solid_model/mesh_convex_hull.cpp',
   'src/document/group/group.cpp',
   'src/document/group/igroup_solid_model.cpp',
   'src/document/group/group_sketch.cpp',

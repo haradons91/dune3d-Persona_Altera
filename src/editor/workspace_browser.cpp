@@ -1531,23 +1531,11 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
     actions->add_action("convert_to_body_direct", [this] {
         signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 0);
     });
-    actions->add_action("convert_to_body_merge_faces", [this] {
+    actions->add_action("convert_to_body_weld_sew", [this] {
         signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 1);
     });
     actions->add_action("convert_to_body_decimate_sew", [this] {
         signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 2);
-    });
-    actions->add_action("convert_to_body_weld_sew", [this] {
-        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 3);
-    });
-    actions->add_action("convert_to_body_decimate_merge_faces", [this] {
-        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 4);
-    });
-    actions->add_action("convert_to_body_convex_hull", [this] {
-        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 5);
-    });
-    actions->add_action("convert_to_body_bounding_box", [this] {
-        signal_convert_mesh_to_body().emit(m_body_menu_document, m_body_menu_body, 6);
     });
     insert_action_group("body", actions);
 
@@ -1573,13 +1561,8 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
     {
         auto convert_submenu = Gio::Menu::create();
         convert_submenu->append("Direct (small/clean meshes)", "body.convert_to_body_direct");
-        convert_submenu->append("Direct + Merge Faces (small/clean meshes)", "body.convert_to_body_merge_faces");
-        convert_submenu->append("Decimate + Sew (larger meshes)", "body.convert_to_body_decimate_sew");
         convert_submenu->append("Weld + Sew (fixes tiny gaps, keeps detail)", "body.convert_to_body_weld_sew");
-        convert_submenu->append("Decimate + Merge Faces (larger meshes)",
-                                "body.convert_to_body_decimate_merge_faces");
-        convert_submenu->append("Convex Hull (always succeeds, approximate)", "body.convert_to_body_convex_hull");
-        convert_submenu->append("Bounding Box (always succeeds, approximate)", "body.convert_to_body_bounding_box");
+        convert_submenu->append("Decimate + Sew (larger meshes)", "body.convert_to_body_decimate_sew");
         m_mesh_menu->append_submenu("Convert to Body", convert_submenu);
     }
 

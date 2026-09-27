@@ -12,12 +12,8 @@ GroupEditorConvertMesh::GroupEditorConvertMesh(Core &core, const UUID &group_uu)
 
     auto items = Gtk::StringList::create();
     items->append("Direct");
-    items->append("Direct + Merge Faces");
-    items->append("Decimate + Sew");
     items->append("Weld + Sew");
-    items->append("Decimate + Merge Faces");
-    items->append("Convex Hull");
-    items->append("Bounding Box");
+    items->append("Decimate + Sew");
     m_algorithm_combo = Gtk::make_managed<Gtk::DropDown>(items);
     m_algorithm_combo->set_selected(static_cast<guint>(group.m_algorithm));
     m_algorithm_combo->property_selected().signal_changed().connect([this] {
@@ -71,8 +67,7 @@ GroupEditorConvertMesh::GroupEditorConvertMesh(Core &core, const UUID &group_uu)
 void GroupEditorConvertMesh::update_param_sensitivity()
 {
     const auto algo = get_group().m_algorithm;
-    m_decimate_target_sp->set_sensitive(algo == GroupConvertMesh::Algorithm::DECIMATE_SEW
-                                        || algo == GroupConvertMesh::Algorithm::DECIMATE_MERGE_FACES);
+    m_decimate_target_sp->set_sensitive(algo == GroupConvertMesh::Algorithm::DECIMATE_SEW);
     m_weld_tolerance_sp->set_sensitive(algo == GroupConvertMesh::Algorithm::WELD_SEW);
 }
 

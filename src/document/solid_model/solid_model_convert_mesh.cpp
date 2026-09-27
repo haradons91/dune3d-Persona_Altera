@@ -2,7 +2,6 @@
 #include "solid_model_occ.hpp"
 #include "mesh_decimate.hpp"
 #include "mesh_weld.hpp"
-#include "mesh_convex_hull.hpp"
 #include "bounded_execute.hpp"
 #include "document/group/group_convert_mesh.hpp"
 #include "document/document.hpp"
@@ -15,7 +14,6 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_Sewing.hxx>
 #include <BRepBuilderAPI_MakeSolid.hxx>
-#include <BRepPrimAPI_MakeBox.hxx>
 #include <ShapeFix_Solid.hxx>
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <BRepCheck_Analyzer.hxx>
@@ -139,6 +137,10 @@ struct MergeResult {
     TopoDS_Solid solid;
 };
 
+// Always run after sewing, for every algorithm -- merging coplanar triangles
+// back into real flat faces is a strict quality improvement (a cube reads as
+// 6 faces instead of 12) with no accuracy cost, so it isn't a separate
+// user-facing choice.
 MergeResult merge_coplanar_faces_impl(TopoDS_Solid solid)
 {
     MergeResult result;
@@ -152,29 +154,6 @@ MergeResult merge_coplanar_faces_impl(TopoDS_Solid solid)
     return result;
 }
 
-bool build_bounding_box(const std::vector<MeshTriangle> &triangles, TopoDS_Solid &solid)
-{
-    gp_Pnt lo = triangles.front().a;
-    gp_Pnt hi = lo;
-    auto expand = [&](const gp_Pnt &p) {
-        lo.SetX(std::min(lo.X(), p.X()));
-        lo.SetY(std::min(lo.Y(), p.Y()));
-        lo.SetZ(std::min(lo.Z(), p.Z()));
-        hi.SetX(std::max(hi.X(), p.X()));
-        hi.SetY(std::max(hi.Y(), p.Y()));
-        hi.SetZ(std::max(hi.Z(), p.Z()));
-    };
-    for (const auto &t : triangles) {
-        expand(t.a);
-        expand(t.b);
-        expand(t.c);
-    }
-    if (hi.X() <= lo.X() || hi.Y() <= lo.Y() || hi.Z() <= lo.Z())
-        return false;
-    solid = BRepPrimAPI_MakeBox(lo, hi).Solid();
-    return true;
-}
-
 } // namespace
 
 std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupConvertMesh &group)
@@ -186,90 +165,61 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupC
         return nullptr;
     }
 
-    TopoDS_Solid solid;
-
-    if (group.m_algorithm == Algorithm::BOUNDING_BOX) {
-        if (!build_bounding_box(triangles, solid)) {
-            group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR,
-                                                "Mesh is degenerate -- bounding box has no volume");
-            return nullptr;
-        }
+    if (group.m_algorithm == Algorithm::WELD_SEW) {
+        triangles = weld_mesh(triangles, group.m_weld_tolerance);
     }
-    else {
-        if (group.m_algorithm == Algorithm::CONVEX_HULL) {
-            triangles = convex_hull(triangles);
-            if (triangles.empty()) {
-                group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR,
-                                                    "Mesh is degenerate -- convex hull has no volume");
-                return nullptr;
-            }
-        }
-        else if (group.m_algorithm == Algorithm::WELD_SEW) {
-            triangles = weld_mesh(triangles, group.m_weld_tolerance);
-        }
+    else if (group.m_algorithm == Algorithm::DECIMATE_SEW) {
+        triangles = decimate_mesh(triangles, group.m_decimate_target_faces);
+    }
+    else if (triangles.size() > s_direct_triangle_cap) {
+        group.m_solve_messages.emplace_back(
+                GroupStatusMessage::Status::ERR,
+                std::format("Mesh has {} triangles; Direct supports up to {} -- use Weld + Sew or Decimate + Sew "
+                            "instead",
+                            triangles.size(), s_direct_triangle_cap));
+        return nullptr;
+    }
 
-        const bool should_decimate =
-                group.m_algorithm == Algorithm::DECIMATE_SEW || group.m_algorithm == Algorithm::DECIMATE_MERGE_FACES;
-        if (should_decimate) {
-            triangles = decimate_mesh(triangles, group.m_decimate_target_faces);
-        }
-        else if (group.m_algorithm != Algorithm::CONVEX_HULL && triangles.size() > s_direct_triangle_cap) {
-            group.m_solve_messages.emplace_back(
-                    GroupStatusMessage::Status::ERR,
-                    std::format("Mesh has {} triangles; this algorithm supports up to {} -- use Decimate + Sew "
-                                "instead",
-                                triangles.size(), s_direct_triangle_cap));
-            return nullptr;
-        }
-
-        auto sew_result = run_with_timeout([triangles] { return sew_into_solid_impl(triangles); },
-                                           s_geometry_timeout);
-        if (!sew_result) {
-            group.m_solve_messages.emplace_back(
-                    GroupStatusMessage::Status::ERR,
-                    std::format("Conversion is taking too long and was aborted after {}s -- this mesh may be too "
-                                "complex or malformed for this algorithm; try a different algorithm or a lower "
-                                "decimation target",
-                                s_geometry_timeout.count()));
-            return nullptr;
-        }
-        if (sew_result->status == SewResult::Status::MULTI_SHELL) {
-            group.m_solve_messages.emplace_back(
-                    GroupStatusMessage::Status::ERR,
-                    std::format(
-                            "Mesh did not sew into a single closed surface (got {} separate piece(s)) -- this mesh "
+    auto sew_result = run_with_timeout([triangles] { return sew_into_solid_impl(triangles); }, s_geometry_timeout);
+    if (!sew_result) {
+        group.m_solve_messages.emplace_back(
+                GroupStatusMessage::Status::ERR,
+                std::format("Conversion is taking too long and was aborted after {}s -- this mesh may be too "
+                            "complex or malformed for this algorithm; try a different algorithm or a lower "
+                            "decimation target",
+                            s_geometry_timeout.count()));
+        return nullptr;
+    }
+    if (sew_result->status == SewResult::Status::MULTI_SHELL) {
+        group.m_solve_messages.emplace_back(
+                GroupStatusMessage::Status::ERR,
+                std::format("Mesh did not sew into a single closed surface (got {} separate piece(s)) -- this mesh "
                             "isn't clean/watertight enough to convert; try a lower decimation target or a "
                             "different algorithm",
                             std::max(sew_result->n_shells, 1)));
-            return nullptr;
-        }
-        if (sew_result->status == SewResult::Status::MAKE_SOLID_FAILED) {
-            group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR, "Could not close mesh into a solid");
-            return nullptr;
-        }
-        solid = sew_result->solid;
-
-        const bool should_merge =
-                group.m_algorithm == Algorithm::MERGE_FACES || group.m_algorithm == Algorithm::DECIMATE_MERGE_FACES;
-        if (should_merge) {
-            auto merge_result = run_with_timeout([solid] { return merge_coplanar_faces_impl(solid); },
-                                                 s_geometry_timeout);
-            if (!merge_result) {
-                group.m_solve_messages.emplace_back(
-                        GroupStatusMessage::Status::ERR,
-                        std::format("Merging coplanar faces is taking too long and was aborted after {}s -- try a "
-                                    "different algorithm",
-                                    s_geometry_timeout.count()));
-                return nullptr;
-            }
-            if (!merge_result->ok) {
-                group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR,
-                                                    "Merging coplanar faces did not produce a solid");
-                return nullptr;
-            }
-            solid = merge_result->solid;
-        }
+        return nullptr;
     }
+    if (sew_result->status == SewResult::Status::MAKE_SOLID_FAILED) {
+        group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR, "Could not close mesh into a solid");
+        return nullptr;
+    }
+    TopoDS_Solid solid = sew_result->solid;
+
+    auto merge_result = run_with_timeout([solid] { return merge_coplanar_faces_impl(solid); }, s_geometry_timeout);
+    if (!merge_result) {
+        group.m_solve_messages.emplace_back(
+                GroupStatusMessage::Status::ERR,
+                std::format("Merging coplanar faces is taking too long and was aborted after {}s -- try a "
+                            "different algorithm",
+                            s_geometry_timeout.count()));
+        return nullptr;
+    }
+    if (!merge_result->ok) {
+        group.m_solve_messages.emplace_back(GroupStatusMessage::Status::ERR,
+                                            "Merging coplanar faces did not produce a solid");
+        return nullptr;
+    }
+    solid = merge_result->solid;
 
     BRepCheck_Analyzer analyzer(solid);
     if (!analyzer.IsValid()) {

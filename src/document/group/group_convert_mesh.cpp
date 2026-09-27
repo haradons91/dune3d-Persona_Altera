@@ -8,12 +8,8 @@ namespace dune3d {
 NLOHMANN_JSON_SERIALIZE_ENUM(GroupConvertMesh::Algorithm,
                              {
                                      {GroupConvertMesh::Algorithm::DIRECT, "direct"},
-                                     {GroupConvertMesh::Algorithm::MERGE_FACES, "merge_faces"},
-                                     {GroupConvertMesh::Algorithm::DECIMATE_SEW, "decimate_sew"},
                                      {GroupConvertMesh::Algorithm::WELD_SEW, "weld_sew"},
-                                     {GroupConvertMesh::Algorithm::DECIMATE_MERGE_FACES, "decimate_merge_faces"},
-                                     {GroupConvertMesh::Algorithm::CONVEX_HULL, "convex_hull"},
-                                     {GroupConvertMesh::Algorithm::BOUNDING_BOX, "bounding_box"},
+                                     {GroupConvertMesh::Algorithm::DECIMATE_SEW, "decimate_sew"},
                              })
 
 GroupConvertMesh::GroupConvertMesh(const UUID &uu) : Group(uu)

@@ -6,9 +6,11 @@
 namespace dune3d {
 
 // Converts an imported reference-only mesh (EntitySTL/EntityThreeMF, owned
-// by m_source_group) into a real solid-model Body via one of two sewing
-// algorithms -- see solid_model_convert_mesh.cpp for why there are two and
-// why a failure is surfaced as an error rather than silently accepted.
+// by m_source_group) into a real solid-model Body. Every algorithm runs the
+// same sew-then-merge-coplanar-faces pipeline; they differ only in what (if
+// anything) pre-processes the triangles first -- see
+// solid_model_convert_mesh.cpp for why a failure is surfaced as an error
+// rather than silently accepted.
 class GroupConvertMesh : public Group, public IGroupSolidModel, public IGroupSourceGroup {
 public:
     explicit GroupConvertMesh(const UUID &uu);
@@ -33,12 +35,8 @@ public:
 
     enum class Algorithm {
         DIRECT,
-        MERGE_FACES,
-        DECIMATE_SEW,
         WELD_SEW,
-        DECIMATE_MERGE_FACES,
-        CONVEX_HULL,
-        BOUNDING_BOX,
+        DECIMATE_SEW,
     };
     Algorithm m_algorithm = Algorithm::DIRECT;
     unsigned int m_decimate_target_faces = 1500;
