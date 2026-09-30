@@ -60,9 +60,11 @@ for that history.
 
 The general build process still follows upstream Dune 3D's own
 [build instructions](https://docs.dune3d.org/en/latest/build-linux.html)
-(CMake/meson, OpenCASCADE, gtkmm4). This fork additionally supports building
-against OpenCASCADE 8.0.1 built from source; see `meson.build` for the
-relevant linker flags if you're doing that.
+(CMake/meson, OpenCASCADE, gtkmm4), but this fork specifically targets
+**OpenCASCADE 8.0.1 built from source**, not whatever older OCCT release
+your distro happens to package -- version-conditional support for older
+OCCT releases has been removed from the code. See `meson.build` for the
+rpath/dtags linker flags a from-source OCCT install needs.
 
 ## TODO
 
@@ -91,6 +93,24 @@ Known loose ends in this fork, not yet acted on:
    Split Body, Silhouette Split, Move/Copy, Align, Remove, Simplify,
    Physical Material, Appearance, Manage Materials, Change Parameters,
    Compute All, Bill of Materials.
+ - **Same pattern in the "Insert" dropdown**: items like "Insert SVG" and
+   "Insert Derive" exist in the menu as disabled placeholders too.
+ - **Multi-view workspace splitting is half-removed**: the "+" button that
+   was its only UI entry point was deleted as dead code, but the backend
+   (`create_workspace_view()`/`duplicate_workspace_view()`) is still
+   there. Either give it a UI again or finish removing the backend.
+ - **CI still doesn't build against OCCT 8.0.1**: this project now
+   targets OCCT 8.0.1 exclusively (see below), but every CI workflow
+   under `.github/workflows/` still installs whatever OCCT version each
+   distro/package-manager happens to ship (Windows CI specifically
+   pinned OCCT 7.9.2 via a prebuilt mingw package, which has been
+   removed since there's no 8.0.1 equivalent available). None of them
+   build OCCT 8.0.1 from source, so CI currently can't be trusted to
+   reflect what actually gets built and tested locally.
+ - **Leftover debug print sweep**: forgotten `std::cout` debug
+   instrumentation has been found and removed twice now, right before
+   pushing. Worth a deliberate one-time audit of the whole codebase
+   instead of relying on catching it at push time.
 
 ### Known incomplete features
 
