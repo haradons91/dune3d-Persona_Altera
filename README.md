@@ -90,9 +90,7 @@ Known loose ends in this fork, not yet acted on:
    present in the menu (so it shows its intended full shape) but wired up
    as permanently disabled placeholders, not real features yet:
    Press/Pull, Shell, Draft, Scale, Offset Face, Replace Face, Split Face,
-   Split Body, Silhouette Split, Move/Copy, Align, Remove, Simplify,
-   Physical Material, Appearance, Manage Materials, Change Parameters,
-   Compute All, Bill of Materials.
+   Split Body, Silhouette Split, Move/Copy, Align, Remove, Simplify.
  - **Same pattern in the "Insert" dropdown**: items like "Insert SVG" and
    "Insert Derive" exist in the menu as disabled placeholders too.
  - **Multi-view workspace splitting is half-removed**: the "+" button that

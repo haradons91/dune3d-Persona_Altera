@@ -1375,8 +1375,7 @@ void Editor::init_header_bar()
         actions->add_action("delete", [this] { trigger_action(ToolID::DELETE); });
         for (const char *name : {"press_pull", "shell", "draft", "scale", "offset_face", "replace_face",
                                  "split_face", "split_body", "silhouette_split", "move_copy", "align", "remove",
-                                 "simplify", "physical_material", "appearance", "manage_materials",
-                                 "change_parameters", "compute_all", "bill_of_materials"})
+                                 "simplify"})
             actions->add_action(name, [] {})->set_enabled(false);
         m_win.insert_action_group("ribbon_modify", actions);
         menu->append("Press/Pull", "ribbon_modify.press_pull");
@@ -1397,12 +1396,6 @@ void Editor::init_header_bar()
         menu->append("Delete", "ribbon_modify.delete");
         menu->append("Remove", "ribbon_modify.remove");
         menu->append("Simplify", "ribbon_modify.simplify");
-        menu->append("Physical Material", "ribbon_modify.physical_material");
-        menu->append("Appearance", "ribbon_modify.appearance");
-        menu->append("Manage Materials", "ribbon_modify.manage_materials");
-        menu->append("Change Parameters", "ribbon_modify.change_parameters");
-        menu->append("Compute All", "ribbon_modify.compute_all");
-        menu->append("Bill of Materials", "ribbon_modify.bill_of_materials");
         auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
         m_win.get_ribbon_modify_menu_button().set_popover(*popover);
     }
