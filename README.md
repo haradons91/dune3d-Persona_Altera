@@ -64,6 +64,50 @@ The general build process still follows upstream Dune 3D's own
 against OpenCASCADE 8.0.1 built from source; see `meson.build` for the
 relevant linker flags if you're doing that.
 
+## TODO
+
+Known loose ends in this fork, not yet acted on:
+
+ - **Screenshot**: the README no longer references one (it used to show
+   upstream Dune 3D's own screenshot, which doesn't match this fork's
+   current UI). Needs a real screenshot of this fork's actual interface.
+ - **Naming consistency**: the GitHub repo is named `dune3d-Persona_Altera`
+   and this README's title still says "Dune3D Persona Altera", while the
+   running app itself now displays simply as "Persona Altera". Worth
+   deciding on one consistent name across all three.
+ - **Full internal rebrand**: the app still uses the upstream GTK
+   application ID (`org.dune3d.dune3d`), the `~/.config/dune3d` settings
+   folder, and the `dune3d` binary/icon names internally -- only
+   user-visible text was renamed so far (see the "Rename the app's display
+   name" commit for why the rest was deliberately left alone).
+ - **This fork's own changelog**: `CHANGELOG.md` only covers upstream
+   Dune 3D's pre-fork release history. Everything since forking only
+   exists in this repo's own `git log`, with no user-facing changelog of
+   its own yet.
+ - **Unimplemented items in the ribbon's "Modify" dropdown**: these are
+   present in the menu (so it shows its intended full shape) but wired up
+   as permanently disabled placeholders, not real features yet:
+   Press/Pull, Shell, Draft, Scale, Offset Face, Replace Face, Split Face,
+   Split Body, Silhouette Split, Move/Copy, Align, Remove, Simplify,
+   Physical Material, Appearance, Manage Materials, Change Parameters,
+   Compute All, Bill of Materials.
+
+### Known incomplete features
+
+ - Fix the sketch Mirror implementation.
+ - Implement sketch Text.
+ - Implement sketch Pattern.
+ - Implement sketch Project/Include.
+ - Implement the Constraints ribbon.
+ - Implement Offset extrude.
+ - Implement the Construction ribbon.
+ - Implement Timeline functionality.
+ - Implement Document Settings, Named Views, and Origin in the tree.
+ - Implement the spacebar tools into the ribbon, and remove the spacebar
+   tools.
+ - Fix the perspective cube's arrows.
+ - Implement the Create menu's remaining items.
+
 ## Questions
 
 This is a personal fork with no separate community, discussion board, or
