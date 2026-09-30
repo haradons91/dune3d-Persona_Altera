@@ -365,7 +365,6 @@ private:
     std::map<UUID, DocumentView> &get_current_document_views();
 
     UUID create_workspace_view();
-    UUID create_workspace_view_from_current();
     void set_current_workspace_view(const UUID &uu);
     void update_workspace_view_names();
     void update_can_close_workspace_view_pages();

@@ -196,11 +196,6 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     // header, so keep the notebook available internally but hide its strip.
     m_workspace_notebook->set_visible(false);
 
-    m_workspace_add_button = Gtk::make_managed<Gtk::Button>();
-    m_workspace_add_button->set_has_frame(false);
-    m_workspace_add_button->set_icon_name("list-add-symbolic");
-    m_workspace_notebook->set_action_widget(m_workspace_add_button, Gtk::PackType::END);
-
     refBuilder->get_widget<Gtk::Box>("canvas_box")->insert_child_at_start(*m_canvas);
     get_canvas().set_vexpand(true);
     get_canvas().set_hexpand(true);

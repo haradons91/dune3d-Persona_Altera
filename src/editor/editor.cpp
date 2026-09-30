@@ -357,7 +357,12 @@ void Editor::init()
                 wsv.m_documents[doc->get_uuid()];
             }
         }
-        m_win.get_workspace_notebook().set_visible(m_core.has_documents());
+        // The workspace notebook itself stays permanently hidden (see its
+        // setup in Dune3DAppWindow's constructor) -- its tab strip is what
+        // used to show a second, document-name-duplicating row above the
+        // Timeline before document tabs in the header replaced it as the
+        // way to switch documents. This used to unconditionally re-show it
+        // whenever any document existed, undoing that.
         CanvasUpdater canvas_updater{*this};
         for (auto doc : m_core.get_documents())
             ensure_workspace_browser(doc->get_uuid());
@@ -422,11 +427,6 @@ void Editor::init()
 
     update_action_sensitivity();
     reset_key_hint_label();
-
-    m_win.get_workspace_add_button().signal_clicked().connect([this] {
-        auto new_wv_uu = create_workspace_view_from_current();
-        set_current_workspace_view(new_wv_uu);
-    });
 
     m_win.get_canvas().signal_view_changed().connect([this] {
         if (!m_current_workspace_view)
@@ -1611,6 +1611,14 @@ void Editor::on_save_as(const ActionConnection &conn)
             m_workspace_browser->update_documents(get_current_document_views());
             update_version_info();
             update_title();
+            // update_title() only covers the window's own titlebar -- the
+            // document-tab row at the top (built by update_document_tabs(),
+            // from each open Document's own get_name()) and the workspace
+            // view's own notebook tab label (update_workspace_view_names())
+            // are both separate state that stays showing the pre-save-as
+            // name until each is refreshed explicitly.
+            update_document_tabs();
+            update_workspace_view_names();
             if (m_after_save_cb)
                 m_after_save_cb();
             m_after_save_cb = nullptr;
@@ -2597,6 +2605,12 @@ void Editor::open_file(const std::filesystem::path &path)
         update_title();
         update_version_info();
         update_view_hints();
+        // m_core.add_document() above fires signal_documents_changed()
+        // synchronously, rebuilding the document-tab row via
+        // update_document_tabs() before set_current_workspace_view() (called
+        // afterward) actually switches the current document -- so it
+        // highlights the previous tab as active. Rebuild it again now.
+        update_document_tabs();
 
 
         load_linked_documents(doc_uu);

@@ -1148,6 +1148,7 @@ blah</property>
                 <child>
                   <object class="GtkNotebook" id="workspace_notebook">
                     <property name="show-border">False</property>
+                    <property name="show-tabs">False</property>
                     <property name="tab-pos">bottom</property>
                   </object>
                 </child>

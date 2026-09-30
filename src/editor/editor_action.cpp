@@ -95,6 +95,13 @@ void Editor::init_actions()
         set_current_workspace_view(wsv);
         update_title();
         update_workspace_view_names();
+        // m_core.add_document() above fires signal_documents_changed()
+        // synchronously, which already rebuilt the document-tab row via
+        // update_document_tabs() -- but that happened before
+        // set_current_workspace_view() switched the actually-current
+        // document, so it highlighted the previous tab as active. Rebuild
+        // it again now that the switch is done.
+        update_document_tabs();
     });
     connect_action(ActionID::OPEN_DOCUMENT, sigc::mem_fun(*this, &Editor::on_open_document));
 

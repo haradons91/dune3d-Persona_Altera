@@ -149,11 +149,6 @@ public:
         return *m_timeline_items_box;
     }
 
-    Gtk::Button &get_workspace_add_button()
-    {
-        return *m_workspace_add_button;
-    }
-
     Gtk::Button &get_ribbon_btn_sketch() { return *m_ribbon_btn_sketch; }
     Gtk::Box &get_ribbon_create_group() { return *m_ribbon_create_group; }
     Gtk::MenuButton &get_ribbon_create_menu_button() { return *m_ribbon_create_menu_button; }
@@ -384,7 +379,6 @@ Gtk::Button *m_ribbon_btn_line = nullptr;
     Gtk::Label *m_workplane_label = nullptr;
     Gtk::Notebook *m_workspace_notebook = nullptr;
     Gtk::Box *m_timeline_items_box = nullptr;
-    Gtk::Button *m_workspace_add_button = nullptr;
 
     Gtk::MenuButton *m_view_options_button = nullptr;
     Gtk::Label *m_view_hints_label = nullptr;

@@ -21,11 +21,6 @@ UUID Editor::create_workspace_view()
     return uu;
 }
 
-UUID Editor::create_workspace_view_from_current()
-{
-    return duplicate_workspace_view(m_current_workspace_view);
-}
-
 UUID Editor::duplicate_workspace_view(const UUID &wv_uu)
 {
     auto uu = UUID::random();
@@ -159,9 +154,24 @@ void Editor::update_workspace_view_names()
         }
         else
             name_count.emplace(name, 1);
-        dynamic_cast<Dune3DAppWindow::WorkspaceTabLabel &>(*m_win.get_workspace_notebook().get_tab_label(it))
-                .set_label(name);
+        // Mutating the existing tab-label widget's text in place never
+        // repaints -- confirmed the new text is genuinely set (get_label()
+        // reads it back correctly) on a mapped, realized, visible widget,
+        // and neither queue_draw()/queue_resize() at every level up to the
+        // window nor re-registering the *same* widget via set_tab_label()
+        // helps. A brand new widget, attached fresh, always paints
+        // correctly (that's exactly what opening another tab does and why
+        // it "fixes" a stale one as a side effect) -- so build a genuinely
+        // new tab label instead of relying on any invalidation path.
+        auto &new_label = *Gtk::make_managed<Dune3DAppWindow::WorkspaceTabLabel>(name);
+        const auto page_uuid = it.m_uuid;
+        new_label.signal_close().connect([this, page_uuid] { close_workspace_view(page_uuid); });
+        new_label.signal_rename().connect([this, page_uuid] { rename_workspace_view(page_uuid); });
+        new_label.signal_duplicate().connect(
+                [this, page_uuid] { set_current_workspace_view(duplicate_workspace_view(page_uuid)); });
+        m_win.get_workspace_notebook().set_tab_label(it, new_label);
     }
+    update_can_close_workspace_view_pages();
 }
 
 void Editor::set_current_workspace_view(const UUID &uu)
@@ -227,6 +237,10 @@ void Editor::set_current_workspace_view(const UUID &uu)
         set_current_group(get_current_document_view().m_current_group);
         show_workspace_browser(m_core.get_current_idocument_info().get_uuid());
         update_version_info();
+        // update_timeline() builds its row from m_core.get_current_document(),
+        // so switching documents without calling it again just leaves the
+        // previous document's feature history on screen.
+        update_timeline();
     }
     update_action_sensitivity();
 }
