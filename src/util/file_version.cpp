@@ -34,12 +34,12 @@ const std::string FileVersion::learn_more_markup =
 std::string FileVersion::get_message() const
 {
     if (m_app > m_file) {
-        return "This Document has been created with an older version of Dune 3D. Saving will update it to the latest "
-               "version that might be incompatible with older versions of Dune 3D. "
+        return "This Document has been created with an older version of Persona Altera. Saving will update it to the "
+               "latest version that might be incompatible with older versions of Persona Altera. "
                + learn_more_markup;
     }
     else if (m_file > m_app) {
-        return "This Document has been created with a newer version of Dune 3D. Some content may not display "
+        return "This Document has been created with a newer version of Persona Altera. Some content may not display "
                "correctly. To preserve fidelity, this Document has been opened read-only. "
                + learn_more_markup;
     }

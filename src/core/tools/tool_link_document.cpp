@@ -29,7 +29,7 @@ ToolResponse ToolLinkDocument::begin(const ToolArgs &args)
     auto filters = Gio::ListStore<Gtk::FileFilter>::create();
 
     auto filter_any = Gtk::FileFilter::create();
-    filter_any->set_name("Dune 3D documents");
+    filter_any->set_name("Persona Altera documents");
     filter_any->add_pattern("*.d3ddoc");
     filters->append(filter_any);
 
