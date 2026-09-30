@@ -63,6 +63,7 @@ ToolResponse ToolDrawThreeTangentCircle::begin(const ToolArgs &args)
     m_circle->m_radius = std::abs(glm::dot(center - lines.at(0)->m_p1, normal));
     m_circle->m_selection_invisible = true;
     m_intf.enable_hover_selection();
+    m_intf.refresh_hover_selection();
     return ToolResponse();
 }
 

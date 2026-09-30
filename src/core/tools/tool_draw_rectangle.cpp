@@ -30,6 +30,7 @@ ToolResponse ToolDrawRectangle::begin(const ToolArgs &args)
         m_mode = Mode::THREE_POINT;
     m_wrkpl = get_workplane();
     m_intf.enable_hover_selection();
+    m_intf.refresh_hover_selection();
     m_lines = {nullptr};
     return ToolResponse();
 }
@@ -282,18 +283,31 @@ ToolResponse ToolDrawRectangle::update(const ToolArgs &args)
             }
             else {
                 m_first_point = get_cursor_pos_in_plane();
+
+                if (m_constrain) {
+                    m_first_constraint = get_constraint_type();
+                    if (auto hsel = m_intf.get_hover_selection(); hsel && hsel->is_entity()) {
+                        m_first_enp = hsel->get_entity_and_point();
+                        // The actual coincidence constraint against m_first_enp
+                        // is only added once the rectangle is completed (its
+                        // real corner entity doesn't exist until then), but
+                        // that left the corner sitting wherever the raw
+                        // cursor happened to be for the entire drag instead
+                        // of visibly snapping the way every other draw tool's
+                        // first point does. Move the preview point itself
+                        // here so it looks and behaves the same; the deferred
+                        // constraint still gets added for real on completion.
+                        if (m_first_constraint == Constraint::Type::POINTS_COINCIDENT)
+                            m_first_point = m_wrkpl->project(get_doc().get_point(m_first_enp));
+                    }
+                }
+
                 for (auto &it : m_lines) {
                     it = &add_entity<EntityLine2D>();
                     it->m_selection_invisible = true;
                     it->m_wrkpl = m_wrkpl->m_uuid;
                     it->m_p1 = m_first_point;
                     it->m_p2 = m_first_point;
-                }
-
-                if (m_constrain) {
-                    m_first_constraint = get_constraint_type();
-                    if (auto hsel = m_intf.get_hover_selection(); hsel && hsel->is_entity())
-                        m_first_enp = hsel->get_entity_and_point();
                 }
                 m_width = 0;
                 m_height = 0;
@@ -491,7 +505,18 @@ void ToolDrawRectangle::update_tip()
         update_constraint_icons(constraint_icons);
     }
     m_intf.tool_bar_set_actions(actions);
-    m_intf.set_constraint_icons(get_cursor_pos_for_workplane(*m_wrkpl), m_wrkpl->transform_relative({1, 1}),
-                                constraint_icons);
+    // Before the first corner is placed, point the constraint-icon overlay
+    // at the actual point it would snap to (matching the LMB handler's own
+    // snap logic) instead of the raw cursor -- otherwise there's no visible
+    // confirmation a snap is even available until after clicking.
+    glm::vec3 icon_pos = get_cursor_pos_for_workplane(*m_wrkpl);
+    if (m_constrain && !m_lines.front()) {
+        if (auto hsel = m_intf.get_hover_selection(); hsel && hsel->is_entity()) {
+            const auto enp = hsel->get_entity_and_point();
+            if (get_constraint_type() == Constraint::Type::POINTS_COINCIDENT)
+                icon_pos = get_doc().get_point(enp);
+        }
+    }
+    m_intf.set_constraint_icons(icon_pos, m_wrkpl->transform_relative({1, 1}), constraint_icons);
 }
 } // namespace dune3d

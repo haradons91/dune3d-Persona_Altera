@@ -67,6 +67,7 @@ public:
     void tool_update_data(std::unique_ptr<ToolData> data) override;
     void enable_hover_selection(bool enable) override;
     std::optional<SelectableRef> get_hover_selection() const override;
+    void refresh_hover_selection() override;
     void set_no_canvas_update(bool v) override
     {
         m_no_canvas_update = v;
@@ -409,6 +410,13 @@ private:
     std::vector<ConstraintType> m_constraint_tip_icons;
     glm::vec3 m_constraint_tip_pos;
     glm::vec3 m_constraint_tip_vec;
+
+    // Set by get_cursor_pos_for_workplane() whenever grid/vertex snapping
+    // finds a candidate; render_document() draws a marker there so a snap
+    // is visible before the click that uses it, not just after. mutable
+    // because get_cursor_pos_for_workplane() is const (an EditorInterface
+    // override) -- this is a rendering hint, not real state.
+    mutable std::optional<glm::dvec3> m_snap_indicator_pos;
 
     std::unique_ptr<SelectionFilterWindow> m_selection_filter_window;
 

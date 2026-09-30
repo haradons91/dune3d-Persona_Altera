@@ -23,6 +23,7 @@ ToolResponse ToolDrawSlot::begin(const ToolArgs &args)
     else if (m_tool_id == ToolID::DRAW_SLOT_CENTER_POINT_ARC)
         m_mode = Mode::CENTER_POINT_ARC;
     m_intf.enable_hover_selection();
+    m_intf.refresh_hover_selection();
     return ToolResponse();
 }
 

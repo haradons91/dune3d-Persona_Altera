@@ -29,7 +29,15 @@ void main() {
         vec4 v4 = proj*view*vec4(vec, 0);
         v4.y *= -1;
         vec_to_geom = normalize(v4.xy/t.xy);
-        if(vec_to_geom.x < vec_to_geom.y)
+        // This canonicalizes to one of two equivalent orientations, correct
+        // for a symmetric icon (e.g. a horizontal/vertical constraint bar,
+        // which looks identical either way) but wrong for a genuinely
+        // directional one like an arrow, which must keep pointing the way
+        // it was actually told to -- VERTEX_FLAG_ICON_EXACT_DIRECTION (bit
+        // 10, see vertex_flags.hpp) opts out of it. Using the raw bit
+        // instead of the usual ubo.glsl macros/FLAG_IS_SET to avoid pulling
+        // that whole shared uniform block into this shader stage.
+        if((flags & (1u << 10)) == 0u && vec_to_geom.x < vec_to_geom.y)
             vec_to_geom *= -1;
     }
     else {

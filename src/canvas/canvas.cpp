@@ -820,8 +820,31 @@ unsigned int Canvas::get_hover_pick(const std::vector<pick_buf_t> &pick_buf) con
                 return pick;
         }
     }
-    if (!pick || any_of(get_vertex_ref_for_pick(pick).type, VertexType::FACE_GROUP, VertexType::PICTURE)) {
-        int box_size = 10;
+    // Widen the search past the exact pixel not just when nothing is there
+    // (or it's a face/picture), but also when what's there isn't actually
+    // selectable at all -- confirmed via direct instrumentation that the
+    // workplane grid (or other reference-only geometry) commonly renders a
+    // non-selectable LINE vertex at the very pixel a sketch line intersects
+    // another, exactly where a user would expect to snap. Without this, the
+    // exact-pixel pick returns that unselectable line and stops there,
+    // never searching nearby pixels for the real sketch geometry right next
+    // to (or under) it -- which is why hovering an intersection to place a
+    // tool's first point found nothing, while every later point (placed
+    // after moving the mouse off that exact pixel even slightly) worked.
+    if (!pick || any_of(get_vertex_ref_for_pick(pick).type, VertexType::FACE_GROUP, VertexType::PICTURE)
+        || !get_selectable_ref_for_pick(pick)) {
+        // The blank/face/picture cases (nothing useful under the cursor at
+        // all) keep a generous radius. But when something IS there and it's
+        // just not selectable -- typically a workplane grid line sitting
+        // exactly on top of the real, selectable geometry the user meant to
+        // hover -- a wide radius made ordinary hovering trigger from much
+        // further away than expected (e.g. highlighting the origin point
+        // while the cursor was still several pixels off it). Keep that case
+        // tight: it only needs to reach immediately adjacent pixels to find
+        // what's directly underneath/next to the unselectable line.
+        const bool nothing_here = !pick || any_of(get_vertex_ref_for_pick(pick).type, VertexType::FACE_GROUP,
+                                                  VertexType::PICTURE);
+        int box_size = nothing_here ? 10 : 3;
         float best_distance = glm::vec2(box_size, box_size).length();
         unsigned int best_pick = pick;
         for (int dx = -box_size; dx <= box_size; dx++) {
@@ -831,6 +854,8 @@ unsigned int Canvas::get_hover_pick(const std::vector<pick_buf_t> &pick_buf) con
                 if (px >= 0 && px < m_dev_width && py >= 0 && py < m_dev_height) {
                     if (auto p = read_pick_buf(pick_buf, px, py)) {
                         if (any_of(get_vertex_ref_for_pick(p).type, VertexType::FACE_GROUP, VertexType::PICTURE))
+                            continue;
+                        if (!get_selectable_ref_for_pick(p))
                             continue;
                         const auto d = glm::vec2(dx, dy).length();
                         if (d <= best_distance) {
@@ -1702,6 +1727,10 @@ void Canvas::apply_flags(VertexFlags &flags)
         flags |= VertexFlags::CONSTRUCTION;
     if (m_state.vertex_hover_only)
         flags |= VertexFlags::HOVER_ONLY;
+    if (m_state.icon_exact_direction)
+        flags |= VertexFlags::ICON_EXACT_DIRECTION;
+    if (m_state.icon_always_visible)
+        flags |= VertexFlags::ICON_ALWAYS_VISIBLE;
 }
 
 void Canvas::apply_line_flags(VertexFlags &flags)

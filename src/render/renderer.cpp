@@ -618,7 +618,26 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             const auto tip = base + extrude.m_dvec;
             const auto handle = SelectableRef{SelectableRef::Type::EXTRUSION_HANDLE, group->m_uuid, 0};
             m_ca.add_selectable(m_ca.draw_line(base, tip), handle);
-            m_ca.add_selectable(m_ca.draw_point(tip, IconID::POINT_DIAMOND), handle);
+            // ARROW_RIGHT is drawn pointing along +X in its own icon space,
+            // which is the rotation the icon shader leaves untouched for a
+            // (1,0) direction vector (see icon-vertex.glsl) -- passing the
+            // extrusion direction here rotates it to visually point the way
+            // the extrusion is actually going, instead of the direction-less
+            // diamond this used to be. set_icon_exact_direction() opts out
+            // of the shader's default canonicalization, which would
+            // otherwise sometimes flip a true directional icon like this
+            // one to point backwards or fail to react to the direction
+            // actually flipping (see VERTEX_FLAG_ICON_EXACT_DIRECTION).
+            {
+                AutoSaveRestore asr{*this};
+                m_ca.set_icon_exact_direction(true);
+                // Stay visible (and draggable) even when the extrusion goes
+                // into existing solid material and would otherwise occlude
+                // the handle.
+                m_ca.set_icon_always_visible(true);
+                m_ca.add_selectable(m_ca.draw_icon(IconID::ARROW_RIGHT, tip, {0, 0}, glm::vec3(extrude.m_dvec)),
+                                    handle);
+            }
         }
         bool is_extrusion_source_overlay = false;
         if (m_is_current_document && m_render_extrusion_editor && m_current_group
@@ -904,6 +923,25 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
         }
     }
 
+    // Draw the cut-preview overlay only after all bodies' real solid faces
+    // have been added above: it lives in the same chunk as the currently
+    // edited extrude group's own solid faces (both use
+    // set_chunk_from_group() with that group), and within a chunk, face
+    // groups draw in the order they were added (see FaceRenderer::render()).
+    // Adding it last makes it draw on top of the opaque solid instead of
+    // being invisibly overwritten by it, so its depth-test-disabled
+    // rendering (see ICanvas::FaceColor::CUT_PREVIEW) actually shows through.
+    if (m_is_current_document && m_render_extrusion_editor && m_current_group
+        && m_current_group->get_type() == Group::Type::EXTRUDE) {
+        const auto &extrude = dynamic_cast<const GroupExtrude &>(*m_current_group);
+        const auto *solid_model = extrude.get_solid_model();
+        if (solid_model && solid_model->m_cut_preview_faces.size()) {
+            set_chunk_from_group(*m_current_group);
+            m_ca.add_face_group(solid_model->m_cut_preview_faces, {0, 0, 0},
+                                glm::quat_identity<float, glm::defaultp>(), ICanvas::FaceColor::CUT_PREVIEW);
+        }
+    }
+
 
     if (!sr && !m_workspace_view->show_only_solid_models()) {
         set_chunk_from_group(*m_current_group);
@@ -919,6 +957,8 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
             }
         }
         draw_constraints();
+        if (m_snap_indicator_pos)
+            m_ca.draw_point(*m_snap_indicator_pos, IconID::POINT_PLUS);
     }
 
     m_ca.update_bbox();
@@ -2585,6 +2625,19 @@ void Renderer::add_constraint_icons(glm::vec3 p, glm::vec3 v, const std::vector<
             icon = IconID::CONSTRAINT_HORIZONTAL;
         add_constraint(p, icon, {}, v);
     }
+}
+
+void Renderer::add_snap_indicator(const std::optional<glm::dvec3> &pos)
+{
+    // Just remember it here -- render() draws it later at a point where
+    // set_chunk_from_group() has already set up this frame's chunk state.
+    // Calling m_ca.draw_point() directly from here (before render() has
+    // run) drew into whatever chunk was left over from the end of the
+    // *previous* frame instead, which isn't guaranteed to be cleared this
+    // frame -- confirmed via screenshots showing a stale marker left
+    // behind at an old position alongside the current, correctly-tracking
+    // one.
+    m_snap_indicator_pos = pos;
 }
 
 

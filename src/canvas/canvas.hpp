@@ -83,6 +83,20 @@ public:
     {
         m_state.show_default_points = c;
     }
+    // See VERTEX_FLAG_ICON_EXACT_DIRECTION (vertex_flags.hpp) -- opts a
+    // directional icon (e.g. an arrow) out of the canonicalization the icon
+    // shader otherwise applies, which is only correct for icons that look
+    // the same drawn in either of two opposite orientations.
+    void set_icon_exact_direction(bool c) override
+    {
+        m_state.icon_exact_direction = c;
+    }
+    // See VERTEX_FLAG_ICON_ALWAYS_VISIBLE -- keeps an icon visible through
+    // occluding geometry instead of being hidden behind it as usual.
+    void set_icon_always_visible(bool c) override
+    {
+        m_state.icon_always_visible = c;
+    }
     void set_line_style(LineStyle style) override
     {
         m_state.line_style = style;
@@ -133,6 +147,25 @@ public:
     }
 
     void set_hover_selection(const std::optional<SelectableRef> &sr);
+
+    // Forces a hover-selection re-pick at the current cursor position.
+    // update_cursor_position() (the normal trigger, called from mouse-motion
+    // handling) only re-picks when x/y actually changes since last time --
+    // but a tool's very first point is placed by whatever click started the
+    // tool, which the user reaches without necessarily moving the mouse
+    // again first (immediately after choosing a workplane, or just clicking
+    // a toolbar button/pressing a shortcut with the cursor already over the
+    // canvas). The scene under that same on-screen position can genuinely
+    // be different now (a new sketch's workplane reorients the camera), or
+    // hover may simply never have been evaluated there this tool session,
+    // so every *subsequent* point (placed only after moving the mouse to
+    // position it) ends up snapping to nearby geometry while the first one
+    // doesn't. Tools call this once when they begin for the same snap
+    // behavior on point 1 too.
+    void refresh_hover_selection()
+    {
+        update_hover_selection();
+    }
 
     void set_selection_invisible(bool selection_invisible) override
     {
@@ -567,6 +600,8 @@ private:
         bool vertex_construction = false;
         bool no_points = false;
         bool show_default_points = false;
+        bool icon_exact_direction = false;
+        bool icon_always_visible = false;
         LineStyle line_style = LineStyle::DEFAULT;
     };
 

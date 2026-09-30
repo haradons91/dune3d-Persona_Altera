@@ -70,7 +70,13 @@ public:
         OTHER_BODY_SOLID_MODEL,
         SKETCH_PLANE,
         SKETCH_PLANE_HIGHLIGHT,
-        SKETCH_PROFILE
+        SKETCH_PROFILE,
+        // Red, semi-transparent, and rendered through occluding geometry
+        // (depth test disabled just for this group) -- the live boolean
+        // intersection of an in-progress cut extrusion with the material it
+        // would remove, so it's visible even from outside the solid it's
+        // cutting into.
+        CUT_PREVIEW
     };
     virtual VertexRef add_face_group(const face::Faces &faces, glm::vec3 origin, glm::quat normal,
                                      FaceColor face_color) = 0;
@@ -94,6 +100,8 @@ public:
     virtual void set_vertex_construction(bool c) = 0;
     virtual void set_no_points(bool c) = 0;
     virtual void set_show_default_points(bool c) = 0;
+    virtual void set_icon_exact_direction(bool c) = 0;
+    virtual void set_icon_always_visible(bool c) = 0;
     virtual void set_line_style(LineStyle style) = 0;
     virtual void set_transform(const glm::mat4 &transform) = 0;
     // Like set_transform, but the translation is a double-precision origin

@@ -132,6 +132,31 @@ std::shared_ptr<const SolidModel> SolidModel::create(const Document &doc, GroupE
         return nullptr;
     }
 
+    // Live cut preview: while dragging the extrude handle into existing
+    // material (a DIFFERENCE), also compute the boolean *intersection* of
+    // this extrusion's own swept volume (mod->m_shape, before the real cut
+    // below removed it from the target) with the target solid it's cutting
+    // into -- exactly the material that's about to be removed. Rendered
+    // separately (see the CUT_PREVIEW FaceColor) as a red, see-through
+    // overlay so it's visible even from outside the solid being cut.
+    // Cosmetic only: any failure here must not fail the real cut above.
+    if (group.get_operation() == IGroupSolidModel::Operation::DIFFERENCE) {
+        try {
+            const auto *last_solid_model_base = SolidModel::get_last_solid_model(doc, group);
+            if (const auto *last_solid_model = dynamic_cast<const SolidModelOcc *>(last_solid_model_base)) {
+                const auto intersection = SolidModelOcc::calc(IGroupSolidModel::Operation::INTERSECTION,
+                                                              last_solid_model->m_shape_acc, mod->m_shape);
+                SolidModelOcc::triangulate_shape(intersection, mod->m_color, mod->m_cut_preview_faces);
+            }
+        }
+        catch (const std::exception &e) {
+            mod->m_cut_preview_faces.clear();
+        }
+        catch (...) {
+            mod->m_cut_preview_faces.clear();
+        }
+    }
+
     return mod;
 }
 } // namespace dune3d

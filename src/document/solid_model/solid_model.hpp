@@ -19,6 +19,11 @@ class SolidModel {
 public:
     face::Faces m_faces;
     std::map<unsigned int, std::vector<glm::dvec3>> m_edges;
+    // Only populated for a cut (DIFFERENCE) extrude: the live boolean
+    // intersection of the extrusion's swept volume with the material it's
+    // cutting into, i.e. exactly the material that will be removed. Empty
+    // otherwise. See solid_model_extrude.cpp and the CUT_PREVIEW FaceColor.
+    face::Faces m_cut_preview_faces;
 
     static std::shared_ptr<const SolidModel> create(const Document &doc, GroupExtrude &group);
     static std::shared_ptr<const SolidModel> create(const Document &doc, GroupFillet &group);

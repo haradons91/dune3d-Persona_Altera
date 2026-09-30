@@ -16,6 +16,7 @@ ToolResponse ToolDrawPoint2D::begin(const ToolArgs &args)
 {
     m_wrkpl = get_workplane();
     m_intf.enable_hover_selection();
+    m_intf.refresh_hover_selection();
     m_temp_point = &add_entity<EntityPoint2D>();
     m_temp_point->m_selection_invisible = true;
     m_temp_point->m_p = get_cursor_pos_in_plane();

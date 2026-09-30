@@ -167,11 +167,17 @@ void FaceRenderer::render()
         const auto &chunk = m_ca.m_chunks.at(chunk_id);
 
         for (const auto &group : chunk.m_face_groups) {
-            const bool transparent = group.color == ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT;
+            const bool transparent = group.color == ICanvas::FaceColor::SOLID_MODEL_TRANSPARENT
+                                     || group.color == ICanvas::FaceColor::CUT_PREVIEW;
+            const bool always_visible = group.color == ICanvas::FaceColor::CUT_PREVIEW;
             glUniform1ui(m_pick_base_loc, m_type_pick_base + group_idx);
             glUniform1ui(m_flags_loc, static_cast<uint32_t>(group.flags));
             glUniform3fv(m_origin_loc, 1, glm::value_ptr(group.origin));
-            if (group.color == ICanvas::FaceColor::AS_IS) {
+            if (group.color == ICanvas::FaceColor::CUT_PREVIEW) {
+                glUniform3f(m_override_color_loc, 0.9f, 0.1f, 0.1f);
+                glUniform1f(m_override_alpha_loc, 0.55f);
+            }
+            else if (group.color == ICanvas::FaceColor::AS_IS) {
                 glUniform3f(m_override_color_loc, NAN, NAN, NAN);
                 glUniform1f(m_override_alpha_loc, 1.0f);
             }
@@ -214,9 +220,13 @@ void FaceRenderer::render()
             glUniformMatrix3fv(m_normal_mat_loc, 1, GL_FALSE, glm::value_ptr(normal_mat));
             if (transparent)
                 glDepthMask(GL_FALSE);
+            if (always_visible)
+                glDisable(GL_DEPTH_TEST);
             glDrawElementsBaseVertex(GL_TRIANGLES, group.length, GL_UNSIGNED_INT,
                                      (void *)((group.offset + chunk.m_index_offset) * sizeof(unsigned int)),
                                      chunk.m_face_offset);
+            if (always_visible)
+                glEnable(GL_DEPTH_TEST);
             if (transparent)
                 glDepthMask(GL_TRUE);
             group_idx++;

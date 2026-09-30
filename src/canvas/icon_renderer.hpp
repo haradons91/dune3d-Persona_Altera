@@ -20,6 +20,7 @@ private:
     GLuint m_texture_size_loc;
     GLuint m_texture_icon;
     GLuint m_scale_factor_loc;
+    GLuint m_always_visible_pass_loc;
 
     static GLuint create_vao(GLuint program, GLuint &vbo_out);
 

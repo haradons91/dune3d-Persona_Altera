@@ -40,6 +40,10 @@ ToolResponse ToolDrawContour::begin(const ToolArgs &args)
 {
     m_wrkpl = get_workplane();
     m_intf.enable_hover_selection();
+    // Without this, the very first point placed after starting the tool
+    // doesn't snap to nearby geometry the way every later point does -- see
+    // Canvas::refresh_hover_selection() for why.
+    m_intf.refresh_hover_selection();
     if (m_tool_id == ToolID::DRAW_CONTOUR_FROM_POINT || m_tool_id == ToolID::DRAW_ARC_TANGENT) {
         if (m_selection.size() != 1)
             return ToolResponse();
@@ -499,7 +503,7 @@ ToolResponse ToolDrawContour::update(const ToolArgs &args)
                             m_close_path = check_close_path();
                     }
                     m_bezier_head_tangent_point.reset();
-                    if (auto hsel = m_intf.get_hover_selection()) {
+                    if (auto hsel = m_intf.get_hover_selection(); hsel && hsel->is_entity()) {
                         auto enp = hsel->get_entity_and_point();
                         auto &en = get_entity(enp.entity);
                         if (auto en_tangent = dynamic_cast<const IEntityTangent *>(&en)) {
@@ -677,7 +681,7 @@ ToolResponse ToolDrawContour::update(const ToolArgs &args)
 
             if (m_entities.size() == 0) {
                 auto hsel = m_intf.get_hover_selection();
-                if (hsel) {
+                if (hsel && hsel->is_entity()) {
                     const auto enp = hsel->get_entity_and_point();
                     if (is_valid_tangent_point(enp))
                         m_last_tangent_point = enp;

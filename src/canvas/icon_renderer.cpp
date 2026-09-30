@@ -126,6 +126,7 @@ void IconRenderer::realize()
     GET_LOC(this, icon_border);
     GET_LOC(this, texture_size);
     GET_LOC(this, scale_factor);
+    GET_LOC(this, always_visible_pass);
 }
 
 void IconRenderer::push()
@@ -186,10 +187,22 @@ void IconRenderer::render()
     glUniformMatrix3fv(m_screen_loc, 1, GL_FALSE, glm::value_ptr(m_ca.m_screenmat));
     load_uniforms();
 
+    glUniform1i(m_always_visible_pass_loc, 0);
     glDrawArrays(GL_POINTS, 0, m_ca.m_n_icons);
     glColorMaski(1, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
     glDrawArrays(GL_POINTS, m_ca.m_n_icons, m_ca.m_n_icons_selection_invisible);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    // Second pass: redraw just the VERTEX_FLAG_ICON_ALWAYS_VISIBLE icons
+    // (the fragment shader discards everything else) with depth testing
+    // off, so they stay visible on top of whatever would otherwise occlude
+    // them -- e.g. the extrude handle arrow when dragging the extrusion
+    // into existing solid material. Left enabled for the pick buffer too,
+    // so the handle stays draggable at the same on-screen spot it's drawn.
+    glUniform1i(m_always_visible_pass_loc, 1);
+    glDisable(GL_DEPTH_TEST);
+    glDrawArrays(GL_POINTS, 0, m_ca.m_n_icons + m_ca.m_n_icons_selection_invisible);
+    glEnable(GL_DEPTH_TEST);
 }
 
 } // namespace dune3d

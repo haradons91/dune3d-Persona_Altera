@@ -158,6 +158,8 @@ void Editor::handle_tool_change()
     m_win.tool_bar_set_visible(tool_id != ToolID::NONE);
     tool_bar_clear_actions();
     update_action_bar_visibility();
+    if (tool_id == ToolID::NONE)
+        m_snap_indicator_pos.reset();
 }
 
 } // namespace dune3d

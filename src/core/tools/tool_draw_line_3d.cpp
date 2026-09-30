@@ -17,6 +17,7 @@ ToolResponse ToolDrawLine3D::begin(const ToolArgs &args)
 {
     update_tip();
     m_intf.enable_hover_selection();
+    m_intf.refresh_hover_selection();
     return ToolResponse();
 }
 

@@ -57,6 +57,7 @@ ToolResponse ToolDrawTangentCircle::begin(const ToolArgs &args)
     m_circle->m_wrkpl = m_wrkpl->m_uuid;
     m_circle->m_selection_invisible = true;
     m_intf.enable_hover_selection();
+    m_intf.refresh_hover_selection();
     return ToolResponse();
 }
 

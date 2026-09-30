@@ -74,6 +74,7 @@ public:
     std::set<unsigned int> m_selected_sketch_profiles;
 
     void add_constraint_icons(glm::vec3 p, glm::vec3 v, const std::vector<ConstraintType> &constraints);
+    void add_snap_indicator(const std::optional<glm::dvec3> &pos);
     static unsigned int get_chunk_from_group(const Group &group);
 
 private:
@@ -176,6 +177,8 @@ private:
     void add_constraint(const glm::vec3 &pos, IconTexture::IconTextureID icon, const UUID &constraint,
                         const glm::vec3 &v = {NAN, NAN, NAN});
     void draw_constraints();
+
+    std::optional<glm::dvec3> m_snap_indicator_pos;
 
     void draw_distance_line(const glm::vec3 &from, const glm::vec3 &to, const glm::vec3 &text_p,
                             const std::string &label, const UUID &uu,

@@ -911,6 +911,51 @@
          y="8.0697918" />
     </g>
     <g
+       id="POINT_PLUS">
+      <rect
+         style="color:#000000;overflow:visible;fill:#ffffff;stroke:none;stroke-width:0.0649999;stroke-linejoin:round;paint-order:markers fill stroke"
+         id="rect59plus"
+         width="4.2333331"
+         height="4.2333331"
+         x="19.049999"
+         y="7.4083328" />
+      <rect
+         style="color:#000000;overflow:visible;fill:#000000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers"
+         id="rect_plus_h"
+         width="3.4333331"
+         height="0.7"
+         x="19.449999"
+         y="9.1749994" />
+      <rect
+         style="color:#000000;overflow:visible;fill:#000000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers"
+         id="rect_plus_v"
+         width="0.7"
+         height="3.4333331"
+         x="20.816666"
+         y="7.8083328" />
+    </g>
+    <g
+       id="ARROW_RIGHT">
+      <rect
+         style="color:#000000;overflow:visible;fill:#ffffff;stroke:none;stroke-width:0.0649999;stroke-linejoin:round;paint-order:markers fill stroke"
+         id="rect_arrow_bg"
+         width="4.2333331"
+         height="4.2333331"
+         x="19.049999"
+         y="7.4083328" />
+      <rect
+         style="color:#000000;overflow:visible;fill:#000000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers"
+         id="rect_arrow_tail"
+         width="1.6"
+         height="1.0"
+         x="19.366665"
+         y="9.025" />
+      <path
+         style="color:#000000;fill:#000000;stroke:none;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers"
+         id="path_arrow"
+         d="M 22.966665,9.525 20.966665,7.925 20.966665,11.125 Z" />
+    </g>
+    <g
        id="POINT_TRIANGLE_DOWN">
       <rect
          style="color:#000000;overflow:visible;fill:#ffffff;stroke:none;stroke-width:0.0649999;stroke-linejoin:round;paint-order:markers fill stroke"

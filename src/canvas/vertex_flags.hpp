@@ -16,6 +16,17 @@ enum class CanvasVertexFlags : uint32_t {
     LINE_THIN = (1 << 7),
     LINE_THINNER = (1 << 8),
     HOVER_ONLY = (1 << 9),
+    // Icon-only: the icon shader normally canonicalizes a direction vector
+    // to one of two equivalent orientations, correct for a symmetric icon
+    // (a horizontal/vertical constraint bar looks the same either way) but
+    // wrong for a genuinely directional one (an arrow, which must keep
+    // pointing the way it was actually told to). See icon-vertex.glsl.
+    ICON_EXACT_DIRECTION = (1 << 10),
+    // Icon-only: drawn a second time in IconRenderer::render(), with depth
+    // testing off, so it stays visible through occluding geometry (e.g. the
+    // extrude handle arrow when dragging the extrusion into existing solid
+    // material) instead of disappearing behind it like every other icon.
+    ICON_ALWAYS_VISIBLE = (1 << 11),
     COLOR_MASK = SELECTED | HOVER | INACTIVE | CONSTRAINT | CONSTRUCTION | HIGHLIGHT,
 };
 }

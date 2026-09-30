@@ -11,6 +11,7 @@ ToolResponse ToolDrawConic::begin(const ToolArgs &args)
 {
     m_wrkpl = get_workplane();
     m_intf.enable_hover_selection();
+    m_intf.refresh_hover_selection();
     return ToolResponse();
 }
 

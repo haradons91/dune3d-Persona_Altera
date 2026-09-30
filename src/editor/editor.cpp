@@ -1950,8 +1950,10 @@ void Editor::render_document(const IDocumentInfo &doc)
             renderer.m_sketch_plane_hovered = hover->item;
     }
 
-    if (doc.get_uuid() == m_core.get_current_idocument_info().get_uuid())
+    if (doc.get_uuid() == m_core.get_current_idocument_info().get_uuid()) {
         renderer.add_constraint_icons(m_constraint_tip_pos, m_constraint_tip_vec, m_constraint_tip_icons);
+        renderer.add_snap_indicator(m_snap_indicator_pos);
+    }
 
     try {
         renderer.render(doc.get_document(), doc.get_current_group(), doc_view,
@@ -2024,6 +2026,11 @@ std::optional<SelectableRef> Editor::get_hover_selection() const
     return get_canvas().get_hover_selection();
 }
 
+void Editor::refresh_hover_selection()
+{
+    get_canvas().refresh_hover_selection();
+}
+
 glm::dvec3 Editor::get_cursor_pos() const
 {
     return get_canvas().get_cursor_pos();
@@ -2047,8 +2054,10 @@ glm::dvec3 Editor::get_cursor_pos_for_plane(glm::dvec3 origin, glm::dvec3 normal
 glm::dvec3 Editor::get_cursor_pos_for_workplane(const EntityWorkplane &workplane) const
 {
     const auto cursor = get_canvas().get_cursor_pos_for_plane(workplane.m_origin, workplane.get_normal_vector());
-    if (!m_sketch_editing)
+    if (!m_sketch_editing) {
+        m_snap_indicator_pos.reset();
         return cursor;
+    }
 
     // Keep this in sync with Renderer::draw_sketch_grid.  The minor spacing
     // is the snap spacing; major intersections are included automatically.
@@ -2127,7 +2136,13 @@ glm::dvec3 Editor::get_cursor_pos_for_workplane(const EntityWorkplane &workplane
         }
     }
 
-    return best_snap.value_or(cursor);
+    // Remember this for render_document() to draw a marker at -- always the
+    // actual point a click would place right now (snapped if one's in
+    // range, the raw cursor otherwise), so the indicator acts like a
+    // persistent crosshair rather than only appearing once a snap engages.
+    const auto result = best_snap.value_or(cursor);
+    m_snap_indicator_pos = result;
+    return result;
 }
 
 void Editor::show_rectangle_dimensions(double width, double height, bool width_visible, bool height_visible)

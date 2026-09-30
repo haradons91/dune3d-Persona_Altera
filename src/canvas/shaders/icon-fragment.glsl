@@ -11,12 +11,21 @@ flat in uint flags_to_frag;
 uniform sampler2D tex;
 smooth in vec2 texcoord_to_fragment;
 uniform float texture_size;
+// Set only for IconRenderer::render()'s second, depth-test-disabled pass,
+// which exists purely to redraw VERTEX_FLAG_ICON_ALWAYS_VISIBLE icons on
+// top of whatever would otherwise occlude them -- the first, normal pass
+// already drew every icon (including these) with depth testing as usual,
+// so this pass discards everything except those specific icons instead of
+// drawing the whole scene's icons a confusing second time.
+uniform bool always_visible_pass;
 
 ##ubo
 
 void main() {
     if(test_peel(pick_to_frag))
 		discard;
+    if(always_visible_pass && !FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_ICON_ALWAYS_VISIBLE))
+        discard;
 
   vec3 color = color_to_frag;
   
