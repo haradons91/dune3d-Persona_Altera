@@ -31,10 +31,11 @@ if target_machine.system() != 'darwin'
   # confirmed some TK libraries dune3d only needs transitively (through
   # another OCCT library's own dependencies, e.g. TKV3d/TKService/TKCAF)
   # aren't found at runtime without this, even though the build links fine.
-  # A normal system-package OCCT install (e.g. apt's 7.9.2) doesn't need
-  # this because /usr/lib is always in the default search path; a
-  # from-source install to a custom prefix is not, so its own library
-  # directory needs to be added as an rpath explicitly.
+  # A normal system-package OCCT install doesn't need this because
+  # /usr/lib is always in the default search path; a from-source install
+  # to a custom prefix (this project targets OpenCASCADE 8.0.1 built from
+  # source) is not, so its own library directory needs to be added as an
+  # rpath explicitly.
   occt_libdir = opencascade.get_variable(cmake: 'OpenCASCADE_LIBRARY_DIR')
   # --disable-new-dtags: without it, ld emits DT_RUNPATH, which (unlike the
   # older DT_RPATH) only applies to resolving *this* binary's own direct
@@ -57,11 +58,9 @@ if target_machine.system() == 'darwin'
     brew_prefix = brew_prefix_cmd.stdout().strip() + '/lib'
     opencascade_link_args += ['-Wl,-L' + brew_prefix]
   endif
-  if opencascade.version().version_compare('>=7.8')
-    opencascade_link_args += ['-lTKDESTEP', '-lTKernel', '-lTKXCAF', '-lTKXSBase', '-lTKBRep', '-lTKCDF', '-lTKLCAF', '-lTKMath', '-lTKMesh', '-lTKTopAlgo', '-lTKPrim', '-lTKBO', '-lTKShHealing', '-lTKG3d', '-lTKGeomBase', '-lTKHLR', '-lTKDESTL', '-lTKFillet', '-lTKOffset']
-  else
-    opencascade_link_args += ['-lTKSTEP', '-lTKernel', '-lTKXCAF', '-lTKXSBase', '-lTKBRep', '-lTKCDF', '-lTKXDESTEP', '-lTKLCAF', '-lTKMath', '-lTKMesh', '-lTKTopAlgo', '-lTKPrim', '-lTKBO', '-lTKShHealing', '-lTKG3d', '-lTKGeomBase', '-lTKHLR', '-lTKSTL', '-lTKFillet', '-lTKOffset']
-  endif
+  # Library names as of OCCT 8.0.1 (TKDESTEP/TKDESTL replaced the older
+  # TKSTEP/TKXDESTEP/TKSTL split used before 7.8).
+  opencascade_link_args += ['-lTKDESTEP', '-lTKernel', '-lTKXCAF', '-lTKXSBase', '-lTKBRep', '-lTKCDF', '-lTKLCAF', '-lTKMath', '-lTKMesh', '-lTKTopAlgo', '-lTKPrim', '-lTKBO', '-lTKShHealing', '-lTKG3d', '-lTKGeomBase', '-lTKHLR', '-lTKDESTL', '-lTKFillet', '-lTKOffset']
 
   opencascade = declare_dependency(dependencies: opencascade.partial_dependency(compile_args: true, includes:true), link_args: opencascade_link_args)
 endif

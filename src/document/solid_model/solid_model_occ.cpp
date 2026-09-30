@@ -20,7 +20,6 @@
 
 #include <Poly_PolygonOnTriangulation.hxx>
 #include <Poly_Triangulation.hxx>
-#include <TShort_Array1OfShortReal.hxx>
 #include <Precision.hxx>
 #include <BRepTools_WireExplorer.hxx>
 #include <ShapeAnalysis_Edge.hxx>
@@ -78,14 +77,6 @@ Triangulator::Triangulator(const TopoDS_Shape &shape, const Color &color, face::
     processNode(shape);
 }
 
-// Was `OCC_VERSION_MAJOR >= 7 && OCC_VERSION_MINOR >= 6`, which silently
-// evaluated to false for OCCT 8.0 (0 >= 6 is false) despite 8.0 obviously
-// being newer than 7.6 -- dormant for years since OCCT stayed on major
-// version 7 the whole time, only surfacing once 8.0 actually shipped.
-#if OCC_VERSION_MAJOR > 7 || (OCC_VERSION_MAJOR == 7 && OCC_VERSION_MINOR >= 6)
-#define HORIZON_NEW_OCC
-#endif
-
 #define USER_PREC (0.14)
 #define USER_ANGLE (0.52359878)
 
@@ -132,13 +123,6 @@ bool Triangulator::processFace(const TopoDS_Face &face, const glm::dmat4 &mat_in
 
     Poly::ComputeNormals(triangulation);
 
-#ifndef HORIZON_NEW_OCC
-    const TColgp_Array1OfPnt &arrPolyNodes = triangulation->Nodes();
-    const Poly_Array1OfTriangle &arrTriangles = triangulation->Triangles();
-    const TShort_Array1OfShortReal &arrNormals = triangulation->Normals();
-#endif
-
-
     m_faces.emplace_back();
     auto &face_out = m_faces.back();
     face_out.color = m_color;
@@ -146,11 +130,7 @@ bool Triangulator::processFace(const TopoDS_Face &face, const glm::dmat4 &mat_in
 
     std::map<face::Vertex, std::vector<size_t>> pts_map;
     for (int i = 1; i <= triangulation->NbNodes(); i++) {
-#ifdef HORIZON_NEW_OCC
         gp_XYZ v(triangulation->Node(i).Coord());
-#else
-        gp_XYZ v(arrPolyNodes(i).Coord());
-#endif
         const glm::vec4 vg(v.X(), v.Y(), v.Z(), 1);
         const auto vt = mat * vg;
         const face::Vertex vertex(vt.x, vt.y, vt.z);
@@ -160,16 +140,8 @@ bool Triangulator::processFace(const TopoDS_Face &face, const glm::dmat4 &mat_in
 
     face_out.normals.reserve(triangulation->NbNodes());
     for (int i = 1; i <= triangulation->NbNodes(); i++) {
-#ifdef HORIZON_NEW_OCC
         const auto n = triangulation->Normal(i);
         glm::vec4 vg(n.X(), n.Y(), n.Z(), 0);
-#else
-        auto offset = (i - 1) * 3 + 1;
-        auto x = arrNormals(offset + 0);
-        auto y = arrNormals(offset + 1);
-        auto z = arrNormals(offset + 2);
-        glm::vec4 vg(x, y, z, 0);
-#endif
         auto vt = mat * vg;
         vt /= vt.length();
         face_out.normals.emplace_back(vt.x, vt.y, vt.z);
@@ -192,13 +164,8 @@ bool Triangulator::processFace(const TopoDS_Face &face, const glm::dmat4 &mat_in
     face_out.triangle_indices.reserve(triangulation->NbTriangles());
     for (int i = 1; i <= triangulation->NbTriangles(); i++) {
         int a, b, c;
-#ifdef HORIZON_NEW_OCC
         triangulation->Triangle(i).Get(a, b, c);
-#else
-        arrTriangles(i).Get(a, b, c);
-#endif
         face_out.triangle_indices.emplace_back(a - 1, b - 1, c - 1);
-        // std::cout << "tr " << a - 1 << " " << b - 1 << " " << c - 1 << std::endl;
     }
 
     return true;
@@ -338,19 +305,12 @@ void SolidModelOcc::export_stl(const std::filesystem::path &path) const
 {
     StlAPI_Writer writer;
     double deflection = 0.001;
-#if OCC_VERSION_HEX < 0x060801
-    if (deflection > 0) {
-        writer.RelativeMode() = false;
-        writer.SetDeflection(deflection);
-    }
-#else
     TopoDS_Shape sh = m_shape_acc;
     BRepMesh_IncrementalMesh aMesh(m_shape_acc, deflection,
                                    /*isRelative*/ Standard_False,
                                    /*theAngDeflection*/
                                    0.5,
                                    /*isInParallel*/ true);
-#endif
     writer.Write(m_shape_acc, path_to_string(path).c_str());
 }
 

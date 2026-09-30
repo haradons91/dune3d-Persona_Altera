@@ -48,10 +48,8 @@ void STEPExporter::add_model(const char *name, const TopoDS_Shape &shape, const 
 
 void STEPExporter::write(const std::filesystem::path &path) const
 {
-#if OCC_VERSION_MAJOR >= 7 && OCC_VERSION_MINOR >= 2
     auto shape_tool = XCAFDoc_DocumentTool::ShapeTool(m_impl->doc->Main());
     shape_tool->UpdateAssemblies();
-#endif
 
     STEPCAFControl_Writer writer;
     writer.SetColorMode(Standard_True);
