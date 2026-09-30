@@ -1,5 +1,16 @@
 [
     {
+        "action": "SCREENSHOT",
+        "keys": [
+            [
+                {
+                    "key": "p",
+                    "mod": 4
+                }
+            ]
+        ]
+    },
+    {
         "action": "SAVE",
         "keys": [
             [

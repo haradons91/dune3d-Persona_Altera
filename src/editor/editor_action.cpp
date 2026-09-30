@@ -453,6 +453,10 @@ void Editor::init_actions()
         pwin->set_transient_for(m_win);
     });
 
+    connect_action(ActionID::SCREENSHOT, [this](const auto &a) {
+        Glib::spawn_command_line_async("spectacle -b -n -a -o /tmp/dune3dscreenshot.png");
+    });
+
 
     connect_action(ActionID::VIEW_ALL, [this](auto &a) {
         get_canvas().set_cam_quat(glm::quat_identity<float, glm::defaultp>());
