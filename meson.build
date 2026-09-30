@@ -24,6 +24,30 @@ libpython = dependency('python3', required: false, disabler:true)
 pybind11 = dependency('pybind11', required: false, disabler:true)
 
 opencascade = dependency('OpenCASCADE', method : 'cmake')
+if target_machine.system() != 'darwin'
+  # meson's CMake-based dependency resolution links directly against OCCT's
+  # imported targets' absolute .so paths, which the linker can always find,
+  # but that alone doesn't give the *runtime* loader anywhere to look --
+  # confirmed some TK libraries dune3d only needs transitively (through
+  # another OCCT library's own dependencies, e.g. TKV3d/TKService/TKCAF)
+  # aren't found at runtime without this, even though the build links fine.
+  # A normal system-package OCCT install (e.g. apt's 7.9.2) doesn't need
+  # this because /usr/lib is always in the default search path; a
+  # from-source install to a custom prefix is not, so its own library
+  # directory needs to be added as an rpath explicitly.
+  occt_libdir = opencascade.get_variable(cmake: 'OpenCASCADE_LIBRARY_DIR')
+  # --disable-new-dtags: without it, ld emits DT_RUNPATH, which (unlike the
+  # older DT_RPATH) only applies to resolving *this* binary's own direct
+  # dependencies, not dependencies-of-dependencies -- confirmed several OCCT
+  # libraries dune3d only needs transitively (e.g. TKV3d/TKService/TKCAF,
+  # needed by TKXCAF/TKLCAF which dune3d links directly) stayed unresolved
+  # at runtime with a plain -rpath because of exactly this. DT_RPATH on the
+  # executable is consulted for the whole process's dependency resolution,
+  # so this covers the full transitive closure without needing every OCCT
+  # library to carry its own rpath too.
+  opencascade = declare_dependency(dependencies: opencascade,
+    link_args: ['-Wl,--disable-new-dtags', '-Wl,-rpath,' + occt_libdir])
+endif
 if target_machine.system() == 'darwin'
   message('meson\'s framework handling on macos with the cmake method is broken, replacing')
   opencascade_link_args = []
