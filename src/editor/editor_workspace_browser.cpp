@@ -1147,6 +1147,20 @@ void Editor::on_workspace_browser_convert_mesh_to_body(const UUID &uu_doc, const
     tool_begin(ToolID::CONVERT_MESH_TO_BODY,
               std::make_unique<ToolDataConvertMeshToBody>(
                       static_cast<GroupConvertMesh::Algorithm>(algorithm)));
+    // Once converted, the source mesh's own rendering is redundant with the
+    // new body -- hide it, same idea as finish_extrusion() hiding its source
+    // sketch once the extrusion commits. A mesh's checkbox is backed by
+    // m_body_views (see populate_body_store()'s "Meshes" folder handling),
+    // not m_group_views like a sketch's.
+    get_current_document_view().m_body_views[uu_mesh_group].m_visible = false;
+    // tool_begin() already rendered once as part of committing the tool, so
+    // without this the canvas keeps showing that stale frame (mesh still
+    // visible) even though the checkbox binding above updates immediately --
+    // same two calls finish_extrusion() makes right after its own visibility
+    // change, for the same reason.
+    canvas_update();
+    if (m_workspace_browser)
+        m_workspace_browser->update_documents(get_current_document_views());
 }
 
 void Editor::on_workspace_browser_new_instance(const UUID &uu_doc, const UUID &uu_body)

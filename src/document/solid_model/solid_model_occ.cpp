@@ -16,6 +16,7 @@
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopTools_MapOfShape.hxx>
 
 #include <Poly_PolygonOnTriangulation.hxx>
 #include <Poly_Triangulation.hxx>
@@ -77,7 +78,11 @@ Triangulator::Triangulator(const TopoDS_Shape &shape, const Color &color, face::
     processNode(shape);
 }
 
-#if OCC_VERSION_MAJOR >= 7 && OCC_VERSION_MINOR >= 6
+// Was `OCC_VERSION_MAJOR >= 7 && OCC_VERSION_MINOR >= 6`, which silently
+// evaluated to false for OCCT 8.0 (0 >= 6 is false) despite 8.0 obviously
+// being newer than 7.6 -- dormant for years since OCCT stayed on major
+// version 7 the whole time, only surfacing once 8.0 actually shipped.
+#if OCC_VERSION_MAJOR > 7 || (OCC_VERSION_MAJOR == 7 && OCC_VERSION_MINOR >= 6)
 #define HORIZON_NEW_OCC
 #endif
 
@@ -313,6 +318,12 @@ void SolidModelOcc::triangulate()
     Triangulator tri{m_shape_acc, m_color, m_faces};
 }
 
+void SolidModelOcc::triangulate_shape(const TopoDS_Shape &shape, const Color &color, face::Faces &faces)
+{
+    faces.clear();
+    Triangulator tri{shape, color, faces};
+}
+
 inline double defaultAngularDeflection(double linearTolerance)
 {
     // Default OCC angular deflection is 0.5 radians, or about 28.6 degrees.
@@ -352,23 +363,25 @@ void SolidModelOcc::find_edges()
 {
     m_edges.clear();
     TopExp_Explorer topex(m_shape_acc, TopAbs_EDGE);
-    std::list<TopoDS_Shape> edges;
+    // TopExp_Explorer visits a shared edge once per adjacent face, so
+    // dedup is required -- but scanning a growing list with IsSame() per
+    // visit (the original approach) is O(edges^2), which is exactly the
+    // same blowup class fixed in Renderer::render(): confirmed on a real
+    // 27k-face converted body to cost most of a minute with zero progress
+    // feedback, since this runs after SolidModel::create() returns (outside
+    // the sew/merge progress dialog's coverage) and is invisible to the
+    // user as a silent hang between "Merging..." closing and the result
+    // appearing. TopTools_MapOfShape is OCCT's own hash set over shape
+    // identity (same IsSame() semantics), making Add() O(1) on average.
+    TopTools_MapOfShape seen_edges;
     unsigned int edge_idx = 0;
     while (topex.More()) {
         auto edge = TopoDS::Edge(topex.Current());
-        bool skip = false;
-        for (const auto &other : edges) {
-            if (other.IsSame(topex.Current())) {
-                skip = true;
-                break;
-            }
-        }
-        if (skip) {
+        if (!seen_edges.Add(edge)) {
             topex.Next();
             edge_idx++;
             continue;
         }
-        edges.push_back(edge);
         {
             auto curve = BRepAdaptor_Curve(edge);
             GCPnts_TangentialDeflection discretizer(curve, M_PI / 16, 1e3);

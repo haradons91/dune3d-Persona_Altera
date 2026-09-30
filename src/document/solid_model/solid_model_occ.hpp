@@ -19,6 +19,10 @@ public:
     void finish(const Document &doc, const Group &group);
 
     static TopoDS_Shape calc(IGroupSolidModel::Operation op, TopoDS_Shape argument, TopoDS_Shape tool);
+    // Exposes the .cpp-local Triangulator to other solid_model_*.cpp files
+    // (e.g. solid_model_extrude.cpp's cut preview, which needs to
+    // triangulate a shape that isn't m_shape_acc).
+    static void triangulate_shape(const TopoDS_Shape &shape, const Color &color, face::Faces &faces);
 
 private:
     void update_acc(IGroupSolidModel::Operation op, const TopoDS_Shape &last);

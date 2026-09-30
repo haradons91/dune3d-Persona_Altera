@@ -5,6 +5,7 @@
 #include "document/group/group_extrude.hpp"
 #include "document/group/group_sketch.hpp"
 #include "document/group/group_reference.hpp"
+#include "document/group/group_convert_mesh.hpp"
 #include "document/group/igroup_source_group.hpp"
 #include "document/group/group_occurrence.hpp"
 #include "document/component.hpp"
@@ -434,6 +435,28 @@ void WorkspaceBrowser::populate_body_store(const Document &root, const Document 
         if (is_body_group || is_first_extrusion_body) {
             gi->m_name = "Body" + std::to_string(body_number++);
             gi->m_is_body_label = true;
+            // A converted mesh's body is more useful named after the source
+            // file than a generic "BodyN" -- same idea as the STL/THREE_MF
+            // mesh row above and the STEP body row, which both use the
+            // imported file's name instead of a synthetic label.
+            if (gr->get_type() == Group::Type::CONVERT_MESH) {
+                const auto &convert_mesh = dynamic_cast<const GroupConvertMesh &>(*gr);
+                for (const auto &[entity_uuid, entity] : doc.m_entities) {
+                    (void)entity_uuid;
+                    if (entity->m_group != convert_mesh.m_source_group)
+                        continue;
+                    if (const auto *stl = dynamic_cast<const EntitySTL *>(entity.get());
+                        stl && !stl->m_path.filename().empty()) {
+                        gi->m_name = stl->m_path.filename().string();
+                        break;
+                    }
+                    if (const auto *mf = dynamic_cast<const EntityThreeMF *>(entity.get());
+                        mf && !mf->m_path.filename().empty()) {
+                        gi->m_name = mf->m_path.filename().string();
+                        break;
+                    }
+                }
+            }
         }
         else if (connected_extrude) {
             const auto &extrude = dynamic_cast<const GroupExtrude &>(*gr);

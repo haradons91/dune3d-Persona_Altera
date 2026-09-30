@@ -9,6 +9,7 @@
 
 #include <TopExp_Explorer.hxx>
 #include <TopExp.hxx>
+#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 
 namespace dune3d {
 

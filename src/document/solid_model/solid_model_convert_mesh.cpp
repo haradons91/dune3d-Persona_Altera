@@ -15,6 +15,7 @@
 #include <BRepBuilderAPI_Sewing.hxx>
 #include <BRepBuilderAPI_MakeSolid.hxx>
 #include <ShapeFix_Solid.hxx>
+#include <ShapeFix_Shell.hxx>
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <Message_ProgressIndicator.hxx>
@@ -43,10 +44,11 @@ constexpr unsigned int s_direct_triangle_cap = 10000;
 // only ever cost the user this much time, not the whole app -- now mostly a
 // last-resort safety net rather than the primary way to stop a long wait,
 // since Cancel actually interrupts the sewing/fixing steps in ~tens of
-// milliseconds (see CancelToken below); set generously (comfortably above
-// the ~140s worst case seen in testing on a large real mesh) so it almost
-// never fires on a merely-slow-but-working conversion.
-constexpr auto s_geometry_timeout = std::chrono::seconds(120);
+// milliseconds (see CancelToken below). On OCCT 8.0.1 the full pipeline
+// (weld, sew, fix, merge) on the largest real mesh tested end-to-end takes
+// ~23s, so 60s leaves comfortable headroom without making a user wait
+// minutes on a mesh that's genuinely too pathological to convert.
+constexpr auto s_geometry_timeout = std::chrono::seconds(60);
 
 template <typename TEntity>
 std::vector<MeshTriangle> triangles_from_entity(const TEntity &en)
@@ -171,16 +173,47 @@ SewResult sew_into_solid_impl(const std::vector<MeshTriangle> &triangles, WorkCo
         result.status = SewResult::Status::MAKE_SOLID_FAILED;
         return result;
     }
-    TopoDS_Solid solid = mk_solid.Solid();
-    ShapeFix_Solid fix(solid);
+    const TopoDS_Solid solid = mk_solid.Solid();
+
+    // ShapeFix_Solid's FixOrientationMode (a whole-shell face-winding
+    // consistency check) can dominate its total runtime -- confirmed
+    // empirically at 30-40x the total time on some real meshes -- for
+    // seemingly no benefit when the mesh's winding was already consistent.
+    // But it's not always a no-op: on another real mesh, skipping it left
+    // the shape not even closed into a proper solid. So: try without it
+    // first, and only use that result if it's a fully valid solid; if not,
+    // fall back to the slower, safer default -- see the plan for the
+    // before/after numbers across several real meshes that led to this.
     context.progress.store(0.0);
     context.phase_label.store("Closing solid…");
+    ShapeFix_Solid fix(solid);
+    fix.FixShellTool()->FixOrientationMode() = 0;
     fix.Perform(cancel_token->Start());
     if (context.cancel_requested.load()) {
         result.status = SewResult::Status::CANCELLED;
         return result;
     }
-    result.solid = TopoDS::Solid(fix.Solid());
+    const TopoDS_Shape fast_result = fix.Solid();
+    if (fast_result.ShapeType() == TopAbs_SOLID && BRepCheck_Analyzer(fast_result).IsValid()) {
+        result.solid = TopoDS::Solid(fast_result);
+        result.status = SewResult::Status::OK;
+        return result;
+    }
+
+    context.progress.store(0.0);
+    context.phase_label.store("Closing solid (thorough)…");
+    ShapeFix_Solid fix2(solid);
+    fix2.Perform(cancel_token->Start());
+    if (context.cancel_requested.load()) {
+        result.status = SewResult::Status::CANCELLED;
+        return result;
+    }
+    const TopoDS_Shape slow_result = fix2.Solid();
+    if (slow_result.ShapeType() != TopAbs_SOLID) {
+        result.status = SewResult::Status::MAKE_SOLID_FAILED;
+        return result;
+    }
+    result.solid = TopoDS::Solid(slow_result);
     result.status = SewResult::Status::OK;
     return result;
 }

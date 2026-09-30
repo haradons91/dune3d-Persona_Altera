@@ -16,6 +16,7 @@
 #include <TopoDS_Face.hxx>
 #include <gp_Pnt.hxx>
 #include <NCollection_Array1.hxx>
+#include <TColgp_Array1OfPnt.hxx>
 #include <Geom_BezierCurve.hxx>
 #include <gp_Circ.hxx>
 #include "util/debug.hpp"

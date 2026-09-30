@@ -11,6 +11,7 @@
 #include <format>
 #include <gp_Pnt.hxx>
 #include <NCollection_Array1.hxx>
+#include <TColgp_Array1OfPnt.hxx>
 #include <Geom_BezierCurve.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>

@@ -142,7 +142,11 @@ void STEPImporter::processWire(const TopoDS_Wire &wire, const glm::dmat4 &mat)
     }
 }
 
-#if OCC_VERSION_MAJOR >= 7 && OCC_VERSION_MINOR >= 6
+// Was `OCC_VERSION_MAJOR >= 7 && OCC_VERSION_MINOR >= 6`, which silently
+// evaluated to false for OCCT 8.0 (0 >= 6 is false) despite 8.0 obviously
+// being newer than 7.6 -- dormant for years since OCCT stayed on major
+// version 7 the whole time, only surfacing once 8.0 actually shipped.
+#if OCC_VERSION_MAJOR > 7 || (OCC_VERSION_MAJOR == 7 && OCC_VERSION_MINOR >= 6)
 #define HORIZON_NEW_OCC
 #endif
 

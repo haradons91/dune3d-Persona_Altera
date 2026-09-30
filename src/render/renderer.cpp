@@ -34,6 +34,8 @@
 #include <glm/gtx/io.hpp>
 #include <format>
 #include <fstream>
+#include <cmath>
+#include <unordered_map>
 #include <GL/glu.h>
 
 namespace {
@@ -46,6 +48,157 @@ struct TessOutput {
     std::vector<std::tuple<size_t, size_t, size_t>> triangles;
     GLenum mode = GL_TRIANGLES;
     std::vector<size_t> current;
+};
+
+// Nearest-vertex lookup across every face's tessellated vertices, used to
+// snap solid-model edge endpoints onto the visible surface (see
+// snap_edge_endpoint below). A converted-mesh solid can easily have tens of
+// thousands of faces/vertices, so a plain "scan every vertex" nearest search
+// (the original implementation) costs O(edges x vertices) -- confirmed to
+// balloon into the tens of billions of comparisons on a real 27k-face
+// converted body, which is what was actually making OCCT-8.0.1-era mesh
+// conversions look hung/frozen (the OCCT geometry work itself takes ~20s;
+// this lookup was taking minutes). A uniform grid keyed by cell makes each
+// query O(1) on average: candidates can only be closer than the current best
+// once no unexamined ring is closer than that best, at which point the
+// search stops.
+class VertexSnapIndex {
+public:
+    explicit VertexSnapIndex(const dune3d::face::Faces &faces)
+    {
+        size_t n = 0;
+        glm::dvec3 lo(std::numeric_limits<double>::max());
+        glm::dvec3 hi(std::numeric_limits<double>::lowest());
+        for (const auto &face : faces) {
+            for (const auto &v : face.vertices) {
+                const glm::dvec3 p{v.x, v.y, v.z};
+                lo = glm::min(lo, p);
+                hi = glm::max(hi, p);
+                n++;
+            }
+        }
+        if (n == 0)
+            return;
+        const double diag = glm::length(hi - lo);
+        m_cell = std::max(diag / std::cbrt(static_cast<double>(n) + 1.0), 1e-6);
+        m_origin = lo;
+        for (const auto &face : faces) {
+            for (const auto &v : face.vertices)
+                m_buckets[key_of({v.x, v.y, v.z})].push_back({v.x, v.y, v.z});
+        }
+    }
+
+    glm::dvec3 nearest(const glm::dvec3 &query) const
+    {
+        if (m_buckets.empty())
+            return query;
+        glm::dvec3 best = query;
+        double best_dist = std::numeric_limits<double>::max();
+        const auto qkey = key_of(query);
+        for (long ring = 0; ring < 1000; ring++) {
+            for (long dx = -ring; dx <= ring; dx++) {
+                for (long dy = -ring; dy <= ring; dy++) {
+                    for (long dz = -ring; dz <= ring; dz++) {
+                        if (std::max({std::abs(dx), std::abs(dy), std::abs(dz)}) != ring)
+                            continue; // only the newly-added outer shell of this ring
+                        const auto it = m_buckets.find(Key{qkey.x + dx, qkey.y + dy, qkey.z + dz});
+                        if (it == m_buckets.end())
+                            continue;
+                        for (const auto &p : it->second) {
+                            const double d = glm::length(p - query);
+                            if (d < best_dist) {
+                                best_dist = d;
+                                best = p;
+                            }
+                        }
+                    }
+                }
+            }
+            if (best_dist < std::numeric_limits<double>::max() && static_cast<double>(ring) * m_cell >= best_dist)
+                break;
+        }
+        return best;
+    }
+
+private:
+    struct Key {
+        long x, y, z;
+        bool operator==(const Key &) const = default;
+    };
+    struct KeyHash {
+        size_t operator()(const Key &k) const
+        {
+            size_t h = std::hash<long>()(k.x);
+            h ^= std::hash<long>()(k.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<long>()(k.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+
+    Key key_of(const glm::dvec3 &p) const
+    {
+        return {static_cast<long>(std::floor((p.x - m_origin.x) / m_cell)),
+                static_cast<long>(std::floor((p.y - m_origin.y) / m_cell)),
+                static_cast<long>(std::floor((p.z - m_origin.z) / m_cell))};
+    }
+
+    double m_cell = 1;
+    glm::dvec3 m_origin{0, 0, 0};
+    std::unordered_map<Key, std::vector<glm::dvec3>, KeyHash> m_buckets;
+};
+
+// Same problem, different spot: collecting unique vertex positions across
+// all of a solid's faces (for hover-point markers) used to scan every
+// already-seen vertex for each new one via std::ranges::any_of, an O(n^2)
+// dedup that's just as catastrophic on a many-faced converted-mesh body as
+// the O(edges x vertices) endpoint snap above. A grid hash makes each
+// insert-if-new check O(1) on average instead.
+class VertexDedupIndex {
+public:
+    // Returns true if a point within `tol` of `p` was already inserted;
+    // otherwise records `p` and returns false.
+    bool contains_or_insert(const glm::dvec3 &p, double tol)
+    {
+        const auto key = key_of(p, tol);
+        for (long dx = -1; dx <= 1; dx++) {
+            for (long dy = -1; dy <= 1; dy++) {
+                for (long dz = -1; dz <= 1; dz++) {
+                    const auto it = m_buckets.find(Key{key.x + dx, key.y + dy, key.z + dz});
+                    if (it == m_buckets.end())
+                        continue;
+                    for (const auto &q : it->second) {
+                        if (glm::length(q - p) <= tol)
+                            return true;
+                    }
+                }
+            }
+        }
+        m_buckets[key].push_back(p);
+        return false;
+    }
+
+private:
+    struct Key {
+        long x, y, z;
+        bool operator==(const Key &) const = default;
+    };
+    struct KeyHash {
+        size_t operator()(const Key &k) const
+        {
+            size_t h = std::hash<long>()(k.x);
+            h ^= std::hash<long>()(k.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<long>()(k.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+
+    static Key key_of(const glm::dvec3 &p, double cell)
+    {
+        return {static_cast<long>(std::floor(p.x / cell)), static_cast<long>(std::floor(p.y / cell)),
+                static_cast<long>(std::floor(p.z / cell))};
+    }
+
+    std::unordered_map<Key, std::vector<glm::dvec3>, KeyHash> m_buckets;
 };
 
 void tess_begin(GLenum mode, void *data)
@@ -696,20 +849,9 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                 m_ca.save();
                 m_ca.set_vertex_hover_only(true);
                 const auto hover_geometry_offset = glm::dvec3(m_ca.get_cam_normal()) * 1e-3;
-                const auto snap_edge_endpoint = [last_solid_model](const glm::dvec3 &endpoint) {
-                    glm::dvec3 snapped = endpoint;
-                    double best_distance = std::numeric_limits<double>::max();
-                    for (const auto &face : last_solid_model->m_faces) {
-                        for (const auto &vertex : face.vertices) {
-                            const glm::dvec3 corner{vertex.x, vertex.y, vertex.z};
-                            const double distance = glm::length(corner - endpoint);
-                            if (distance < best_distance) {
-                                best_distance = distance;
-                                snapped = corner;
-                            }
-                        }
-                    }
-                    return snapped;
+                const VertexSnapIndex snap_index{last_solid_model->m_faces};
+                const auto snap_edge_endpoint = [&snap_index](const glm::dvec3 &endpoint) {
+                    return snap_index.nearest(endpoint);
                 };
                 for (const auto &[edge_idx, path] : last_solid_model->m_edges) {
                     if (path.size() < 2)
@@ -734,12 +876,11 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
                 }
 
                 std::vector<glm::dvec3> vertices;
+                VertexDedupIndex dedup;
                 for (const auto &face : last_solid_model->m_faces) {
                     for (const auto &vertex : face.vertices) {
                         const glm::dvec3 point{vertex.x, vertex.y, vertex.z};
-                        if (std::ranges::any_of(vertices, [&point](const auto &other) {
-                                return glm::length(other - point) <= 1e-6;
-                            }))
+                        if (dedup.contains_or_insert(point, 1e-6))
                             continue;
                         vertices.push_back(point);
                     }
