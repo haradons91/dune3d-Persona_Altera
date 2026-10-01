@@ -73,10 +73,6 @@ Known loose ends in this fork, not yet acted on:
  - **Screenshot**: the README no longer references one (it used to show
    upstream Dune 3D's own screenshot, which doesn't match this fork's
    current UI). Needs a real screenshot of this fork's actual interface.
- - **Naming consistency**: the GitHub repo is named `dune3d-Persona_Altera`
-   and this README's title still says "Dune3D Persona Altera", while the
-   running app itself now displays simply as "Persona Altera". Worth
-   deciding on one consistent name across all three.
  - **Full internal rebrand**: the app still uses the upstream GTK
    application ID (`org.dune3d.dune3d`), the `~/.config/dune3d` settings
    folder, and the `dune3d` binary/icon names internally -- only

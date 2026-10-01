@@ -1,6 +1,6 @@
 #!/usr/bin/env xdg-open
 [Desktop Entry]
-Name=Persona Altera
+Name=Dune3D Persona Altera
 Comment=Parametric 3D CAD (fork of Dune 3D)
 Categories=Graphics;3DGraphics;Engineering;
 Type=Application

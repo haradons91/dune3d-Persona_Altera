@@ -778,7 +778,7 @@ void Dune3DAppWindow::set_window_title_from_path(const std::filesystem::path &pa
 
 void Dune3DAppWindow::set_window_title(const std::string &extra)
 {
-    std::string title = "Persona Altera";
+    std::string title = "Dune3D Persona Altera";
     if (!extra.empty()) {
         title = extra + " - " + title;
     }

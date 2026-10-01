@@ -4,12 +4,12 @@
   <id>org.dune3d.dune3d</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
-  <name>Persona Altera</name>
+  <name>Dune3D Persona Altera</name>
   <summary>Parametric 3D CAD (fork of Dune 3D)</summary>
   <developer_name>haradons91 (AI-assisted fork of Lukas K.'s Dune 3D)</developer_name>
 
   <description>
-    <p>Persona Altera is a personal, AI-assisted fork of Dune 3D, a parametric
+    <p>Dune3D Persona Altera is a personal, AI-assisted fork of Dune 3D, a parametric
     3D CAD application. With it you can:</p>
     <ul>
         <li>Sketch and constrain in 2D and 3D</li>
@@ -23,7 +23,7 @@
 
   <screenshots>
     <screenshot type="default">
-      <caption>The Persona Altera main window</caption>
+      <caption>The Dune3D Persona Altera main window</caption>
       <image>https://dune3d.org/screenshots/screenshot.png</image>
     </screenshot>
   </screenshots>

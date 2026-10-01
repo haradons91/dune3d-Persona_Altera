@@ -10,7 +10,7 @@ AboutDialog::AboutDialog() : Gtk::AboutDialog()
         version += "\nCommit " + std::string(Version::commit);
     }
     set_version(version);
-    set_program_name("Persona Altera");
+    set_program_name("Dune3D Persona Altera");
     std::vector<Glib::ustring> authors;
     authors.push_back("Lukas K. <lukas@dune3d.org> (original Dune 3D author)");
     set_authors(authors);

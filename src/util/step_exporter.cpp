@@ -62,7 +62,7 @@ void STEPExporter::write(const std::filesystem::path &path) const
     hdr.SetName(new TCollection_HAsciiString("Body"));
     hdr.SetAuthorValue(1, new TCollection_HAsciiString("An Author"));
     hdr.SetOrganizationValue(1, new TCollection_HAsciiString("A Company"));
-    hdr.SetOriginatingSystem(new TCollection_HAsciiString("Persona Altera"));
+    hdr.SetOriginatingSystem(new TCollection_HAsciiString("Dune3D Persona Altera"));
     hdr.SetDescriptionValue(1, new TCollection_HAsciiString("Body"));
 
     if (Standard_False == writer.Write(path_to_string(path).c_str()))

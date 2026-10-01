@@ -6,7 +6,7 @@
   <object class="GtkApplicationWindow" id="window">
     <property name="default-height">750</property>
     <property name="default-width">1024</property>
-    <property name="title">Persona Altera</property>
+    <property name="title">Dune3D Persona Altera</property>
     <property name="titlebar">
       <object class="GtkHeaderBar" id="titlebar">
         <property name="title-widget">
@@ -136,7 +136,7 @@ dim-label</property>
                 <child>
                   <object class="GtkButton" id="screenshot_button">
                     <property name="label">Screenshot</property>
-                    <property name="tooltip-text">Save a screenshot of the Persona Altera window</property>
+                    <property name="tooltip-text">Save a screenshot of the Dune3D Persona Altera window</property>
                   </object>
                 </child>
                 <child>
