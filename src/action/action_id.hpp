@@ -8,7 +8,6 @@ enum class ActionID {
     SAVE_ALL,
     UNDO,
     REDO,
-    POPOVER,
     CLOSE_DOCUMENT,
     OPEN_DOCUMENT,
     NEW_DOCUMENT,

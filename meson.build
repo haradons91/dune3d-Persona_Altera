@@ -326,7 +326,6 @@ src_gui = files(
   'src/core/tools/tool_convert_point_on_bezier_constraint.cpp',
   'src/util/history_manager.cpp',
   'src/util/action_label.cpp',
-  'src/editor/tool_popover.cpp',
   'src/editor/workspace_browser.cpp',
   'src/widgets/constraints_box.cpp',
   'src/workspace/document_view.cpp',

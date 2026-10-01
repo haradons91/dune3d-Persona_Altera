@@ -17,7 +17,6 @@ class Dune3DApplication;
 class Preferences;
 enum class ToolID;
 class ActionLabelInfo;
-class ToolPopover;
 class ConstraintsBox;
 class GroupEditor;
 class SelectionEditor;
@@ -106,7 +105,6 @@ private:
     void init_properties_notebook();
     void init_header_bar();
     void init_actions();
-    void init_tool_popover();
     void init_canvas();
     void init_view_options();
     void update_document_tabs();
@@ -324,8 +322,6 @@ private:
     bool m_rectangle_dimensions_negative_x = false;
     bool m_rectangle_dimensions_negative_y = false;
     bool m_solid_model_edge_select_mode = false;
-
-    ToolPopover *m_tool_popover = nullptr;
 
     WorkspaceBrowser *m_workspace_browser = nullptr;
     Gtk::Stack *m_workspace_browser_stack = nullptr;

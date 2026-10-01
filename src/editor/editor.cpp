@@ -11,7 +11,6 @@
 #include "document/entity/entity_document.hpp"
 #include "document/occurrence_path.hpp"
 #include "document/component.hpp"
-#include "tool_popover.hpp"
 #include "dune3d_application.hpp"
 #include "util/selection_util.hpp"
 #include "group_editor/group_editor.hpp"
@@ -307,7 +306,6 @@ void Editor::init()
     init_properties_notebook();
     init_header_bar();
     init_actions();
-    init_tool_popover();
     init_canvas();
     update_document_tabs();
 
@@ -1718,38 +1716,6 @@ void Editor::on_save_as(const ActionConnection &conn)
 }
 
 
-void Editor::init_tool_popover()
-{
-    m_tool_popover = Gtk::make_managed<ToolPopover>();
-    m_tool_popover->set_parent(get_canvas());
-    m_tool_popover->signal_action_activated().connect([this](ActionToolID action_id) { trigger_action(action_id); });
-
-
-    connect_action({ActionID::POPOVER}, [this](const auto &a) {
-        Gdk::Rectangle rect;
-        rect.set_x(m_last_x);
-        rect.set_y(m_last_y);
-
-        m_tool_popover->set_pointing_to(rect);
-
-        this->update_action_sensitivity();
-        std::map<ActionToolID, bool> can_begin;
-        auto sel = get_canvas().get_selection();
-        for (const auto &[id, it] : action_catalog) {
-            if (std::holds_alternative<ToolID>(id)) {
-                bool r = m_core.tool_can_begin(std::get<ToolID>(id), sel).get_can_begin();
-                can_begin[id] = r;
-            }
-            else {
-                can_begin[id] = this->get_action_sensitive(std::get<ActionID>(id));
-            }
-        }
-        m_tool_popover->set_can_begin(can_begin);
-
-        m_tool_popover->popup();
-    });
-}
-
 Canvas &Editor::get_canvas()
 {
     return m_win.get_canvas();
@@ -1915,7 +1881,6 @@ void Editor::apply_preferences()
     for (const auto &[id, it] : m_action_connections) {
         std::string tip = action_catalog.at(id).name.full;
         if (it.key_sequences.size()) {
-            m_tool_popover->set_key_sequences(id, it.key_sequences);
             tip += " (" + key_sequences_to_string(it.key_sequences) + ")";
         }
         if (m_action_bar_buttons.contains(id)) {
@@ -2527,14 +2492,6 @@ ToolID Editor::get_tool_for_drag_move(bool ctrl, const std::set<SelectableRef> &
 
 void Editor::reset_key_hint_label()
 {
-    const auto act = ActionID::POPOVER;
-    if (m_action_connections.count(act)) {
-        if (m_action_connections.at(act).key_sequences.size()) {
-            const auto keys = key_sequence_to_string(m_action_connections.at(act).key_sequences.front());
-            m_win.set_key_hint_label_text("> " + keys + " for menu");
-            return;
-        }
-    }
     m_win.set_key_hint_label_text(">");
 }
 

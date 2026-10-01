@@ -61,17 +61,6 @@
         ]
     },
     {
-        "action": "POPOVER",
-        "keys": [
-            [
-                {
-                    "key": "space",
-                    "mod": 0
-                }
-            ]
-        ]
-    },
-    {
         "action": "CLOSE_DOCUMENT",
         "keys": [
             [
