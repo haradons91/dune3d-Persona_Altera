@@ -150,7 +150,6 @@ void System::visit(const EntityLine3D &line)
         eb.group.v = group;
         for (unsigned int axis = 0; axis < 3; axis++) {
             eb.param[axis].v = add_param(line.m_group, line.m_uuid, point, axis);
-            // std::cout << line.m_name << "." << point << "." << axis << "=" << eb.param[axis].v << std::endl;
         }
         SK.entity.Add(&eb);
         points.at(point - 1) = e;
@@ -2067,14 +2066,9 @@ System::SolveResultWithDof System::solve(std::set<EntityAndPoint> *free_points)
     ::Group g = {};
     g.h.v = gr.get_index() + 1;
 
-    std::cout << "solve group " << gr.m_name << std::endl;
     List<hConstraint> bad = {};
-    auto tbegin = clock();
     int dof = -2;
     ::SolveResult how = m_sys->Solve(&g, NULL, &dof, &bad, false, /*andFindFree=*/free_points != nullptr);
-    auto tend = clock();
-    std::cout << "how " << (int)how << " " << dof << " took " << (double)(tend - tbegin) / CLOCKS_PER_SEC << std::endl
-              << std::endl;
 
     if (free_points) {
         for (const auto &[idx, param_ref] : m_param_refs) {

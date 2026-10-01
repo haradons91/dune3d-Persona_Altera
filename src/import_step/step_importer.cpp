@@ -103,11 +103,9 @@ STEPImporter::STEPImporter(const std::filesystem::path &filename)
 
     m_app->NewDocument("MDTV-XCAF", m_doc);
     if (!readSTEP(path_to_string(filename).c_str())) {
-        std::cout << "error loading " << filename << std::endl;
         loaded = false;
         return;
     }
-    std::cout << "loaded" << std::endl;
     loaded = true;
 
     m_assy = XCAFDoc_DocumentTool::ShapeTool(m_doc->Main());
@@ -424,7 +422,6 @@ Result STEPImporter::get_faces_and_points()
 
     int nshapes = frshapes.Length();
     int id = 1;
-    std::cout << "shapes " << nshapes << std::endl;
     while (id <= nshapes) {
         TopoDS_Shape shape = m_assy->GetShape(frshapes.Value(id));
         if (!shape.IsNull() && processNode(shape)) {
@@ -474,7 +471,6 @@ std::vector<TopoDS_Shape> STEPImporter::get_shapes()
 
     int nshapes = frshapes.Length();
     int id = 1;
-    std::cout << "shapes " << nshapes << std::endl;
     while (id <= nshapes) {
         TopoDS_Shape shape = m_assy->GetShape(frshapes.Value(id));
         if (!shape.IsNull()) {

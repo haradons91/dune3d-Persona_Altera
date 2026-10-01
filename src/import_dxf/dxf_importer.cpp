@@ -140,7 +140,6 @@ bool DXFImporter::import(const std::filesystem::path &filename)
     DL_Dxf dxf;
     std::ifstream stream{filename};
     if (!dxf.in(stream, &adapter)) {
-        std::cout << "import error" << std::endl;
         return false;
     }
     return true;
