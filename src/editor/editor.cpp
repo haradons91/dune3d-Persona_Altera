@@ -1209,6 +1209,8 @@ void Editor::init_header_bar()
         actions->add_action("rectangular_pattern", [this] { trigger_action(ActionID::CREATE_GROUP_LINEAR_ARRAY); });
         actions->add_action("circular_pattern", [this] { trigger_action(ActionID::CREATE_GROUP_POLAR_ARRAY); });
         actions->add_action("mirror", [this] { trigger_action(ActionID::CREATE_GROUP_MIRROR_HORIZONTAL); });
+        actions->add_action("mirror_vertical", [this] { trigger_action(ActionID::CREATE_GROUP_MIRROR_VERTICAL); });
+        actions->add_action("clone", [this] { trigger_action(ActionID::CREATE_GROUP_CLONE); });
         actions->add_action("rib", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
         actions->add_action("web", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
         actions->add_action("hole", [this] { trigger_action(ActionID::CREATE_GROUP_EXTRUDE); });
@@ -1228,6 +1230,8 @@ void Editor::init_header_bar()
         menu->append("Rectangular Pattern", "ribbon_create_features.rectangular_pattern");
         menu->append("Circular Pattern", "ribbon_create_features.circular_pattern");
         menu->append("Mirror", "ribbon_create_features.mirror");
+        menu->append("Mirror Vertical", "ribbon_create_features.mirror_vertical");
+        menu->append("Clone", "ribbon_create_features.clone");
         auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
         m_win.get_ribbon_create_menu_button().set_popover(*popover);
     }
@@ -1332,6 +1336,7 @@ void Editor::init_header_bar()
         actions->add_action("insert_dxf", [this] { trigger_action(ToolID::IMPORT_DXF); });
         actions->add_action("insert_mesh", [this] { trigger_action(ToolID::IMPORT_STL); });
         actions->add_action("insert_component", [this] { trigger_action(ToolID::LINK_DOCUMENT); });
+        actions->add_action("insert_occurrence", [this] { trigger_action(ToolID::INSERT_OCCURRENCE); });
         auto insert_svg = actions->add_action("insert_svg", [] {});
         auto derive = actions->add_action("derive", [] {});
         insert_svg->set_enabled(false);
@@ -1350,6 +1355,7 @@ void Editor::init_header_bar()
         menu->append("Insert DXF", "ribbon_insert.insert_dxf");
         menu->append("Insert Mesh", "ribbon_insert.insert_mesh");
         menu->append("Insert Component", "ribbon_insert.insert_component");
+        menu->append("Insert Occurrence", "ribbon_insert.insert_occurrence");
         menu->append("Insert Derive", "ribbon_insert.derive");
         auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
         m_win.get_ribbon_insert_menu_button().set_popover(*popover);
@@ -1544,6 +1550,30 @@ void Editor::init_header_bar()
         top->append_item(Gio::MenuItem::create("Preferences", "app.preferences"));
         top->append_item(Gio::MenuItem::create("Logger", "app.logger"));
         top->append_item(Gio::MenuItem::create("About", "app.about"));
+
+        // One-shot document-level commands that have no other natural home
+        // (not ribbon-shaped, not selection-dependent enough for the
+        // right-click context menu) -- this menu button was otherwise
+        // nearly empty.
+        auto actions = Gio::SimpleActionGroup::create();
+        actions->add_action("export_all_step", [this] { trigger_action(ActionID::EXPORT_ALL_SOLID_MODELS_STEP); });
+        actions->add_action("export_projection", [this] { trigger_action(ActionID::EXPORT_PROJECTION); });
+        actions->add_action("export_projection_all", [this] { trigger_action(ActionID::EXPORT_PROJECTION_ALL); });
+        actions->add_action("export_paths", [this] { trigger_action(ActionID::EXPORT_PATHS); });
+        actions->add_action("export_paths_current_group",
+                            [this] { trigger_action(ActionID::EXPORT_PATHS_IN_CURRENT_GROUP); });
+        actions->add_action("export_dxf_current_group",
+                            [this] { trigger_action(ActionID::EXPORT_DXF_CURRENT_GROUP); });
+        m_win.insert_action_group("hamburger_extra", actions);
+
+        auto export_section = Gio::Menu::create();
+        export_section->append("Export STEP (all bodies)", "hamburger_extra.export_all_step");
+        export_section->append("Export Projection", "hamburger_extra.export_projection");
+        export_section->append("Export Projection (all groups)", "hamburger_extra.export_projection_all");
+        export_section->append("Export Paths", "hamburger_extra.export_paths");
+        export_section->append("Export Paths (current group)", "hamburger_extra.export_paths_current_group");
+        export_section->append("Export DXF (current group)", "hamburger_extra.export_dxf_current_group");
+        top->append_section("Export", export_section);
 
         m_win.get_hamburger_menu_button().set_menu_model(top);
     }

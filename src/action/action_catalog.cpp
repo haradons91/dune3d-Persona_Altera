@@ -249,7 +249,7 @@ const std::map<ActionToolID, ActionCatalogItem> action_catalog = {
         {ToolID::CONVERT_MESH_TO_BODY,
          {"Convert mesh to body", ActionGroup::UNKNOWN, ActionCatalogItem::FLAGS_DEFAULT}},
         {ActionID::EXPLODE_CLUSTER, {"Explode cluster", ActionGroup::UNKNOWN, ActionCatalogItem::FLAGS_SPECIFIC}},
-        {ActionID::UNEXPLODE_CLUSTER, {"Unexplode cluster", ActionGroup::UNKNOWN, ActionCatalogItem::FLAGS_DEFAULT}},
+        {ActionID::UNEXPLODE_CLUSTER, {"Unexplode cluster", ActionGroup::UNKNOWN, ActionCatalogItem::FLAGS_SPECIFIC}},
         {ActionID::TOGGLE_PREVIOUS_CONSTRUCTION_ENTITIES,
          {"Toggle previous construction entities", ActionGroup::VIEW, ActionCatalogItem::FLAGS_IN_TOOL}},
         {ToolID::DRAW_TEXT, {"Draw text", ActionGroup::DRAW, ActionCatalogItem::FLAGS_DEFAULT}},
