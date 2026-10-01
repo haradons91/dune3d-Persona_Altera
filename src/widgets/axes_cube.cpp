@@ -480,6 +480,12 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
     auto draw_roll_arrow = [&cr](double cx, double cy, bool left) {
         cr->save();
         cr->set_line_width(2.0);
+        // The corner-axes block above sets LineCap::ROUND with no save/
+        // restore of its own, so it's still active here -- a round cap on
+        // the arc's open end (right at the arrowhead tip) drew a small
+        // circular nub poking out past the chevron. Reset to a plain butt
+        // cap for this clean geometric shape.
+        cr->set_line_cap(Cairo::Context::LineCap::BUTT);
         cr->set_source_rgba(0.1, 0.1, 0.1, 0.85);
         // cr->arc() always sweeps from `start` to `end` with increasing
         // angle, which reads as clockwise on screen (y grows downward).
@@ -503,11 +509,18 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
         // direction, pointing at the circle's center, which drew a
         // malformed spike instead of a chevron following the curve).
         const double head_angle = head_position_angle + (left ? -1 : 1) * glm::half_pi<double>();
+        // A solid filled triangle reads as a clean arrowhead at any angle;
+        // two separately-stroked barb lines (the previous approach) look
+        // uneven whenever head_angle isn't near a 45-degree-ish diagonal,
+        // since one barb ends up close to horizontal and the other close
+        // to vertical even though both are mathematically the same length.
+        const double spread = 0.5;
+        const double len = 6.5;
         cr->move_to(tx, ty);
-        cr->line_to(tx - std::cos(head_angle - 0.55) * 5, ty - std::sin(head_angle - 0.55) * 5);
-        cr->move_to(tx, ty);
-        cr->line_to(tx - std::cos(head_angle + 0.55) * 5, ty - std::sin(head_angle + 0.55) * 5);
-        cr->stroke();
+        cr->line_to(tx - std::cos(head_angle - spread) * len, ty - std::sin(head_angle - spread) * len);
+        cr->line_to(tx - std::cos(head_angle + spread) * len, ty - std::sin(head_angle + spread) * len);
+        cr->close_path();
+        cr->fill();
         cr->restore();
     };
     draw_roll_arrow(-34, -34, true);
