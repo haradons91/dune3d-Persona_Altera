@@ -116,7 +116,6 @@ Known loose ends in this fork, not yet acted on:
  - Implement the Construction ribbon.
  - Implement Timeline functionality.
  - Implement Document Settings, Named Views, and Origin in the tree.
- - Fix the perspective cube's arrows.
  - Implement the Create menu's remaining items.
 
 ## Questions
