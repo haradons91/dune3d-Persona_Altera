@@ -510,12 +510,16 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
         // malformed spike instead of a chevron following the curve).
         const double head_angle = head_position_angle + (left ? -1 : 1) * glm::half_pi<double>();
         // A solid filled triangle reads as a clean arrowhead at any angle;
-        // two separately-stroked barb lines (the previous approach) look
+        // two separately-stroked barb lines (an earlier approach) look
         // uneven whenever head_angle isn't near a 45-degree-ish diagonal,
         // since one barb ends up close to horizontal and the other close
         // to vertical even though both are mathematically the same length.
-        const double spread = 0.5;
-        const double len = 6.5;
+        // Keep this noticeably smaller than the arc's own radius (8) --
+        // using a barb length close to the radius (as the old stroked-line
+        // version did, fine for two thin lines) produces an oversized,
+        // lopsided wedge once the same triangle is filled solid.
+        const double spread = 0.35;
+        const double len = 3.0;
         cr->move_to(tx, ty);
         cr->line_to(tx - std::cos(head_angle - spread) * len, ty - std::sin(head_angle - spread) * len);
         cr->line_to(tx - std::cos(head_angle + spread) * len, ty - std::sin(head_angle + spread) * len);
