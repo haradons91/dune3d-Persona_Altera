@@ -481,19 +481,28 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
         cr->save();
         cr->set_line_width(2.0);
         cr->set_source_rgba(0.1, 0.1, 0.1, 0.85);
+        // cr->arc() always sweeps from `start` to `end` with increasing
+        // angle, which reads as clockwise on screen (y grows downward).
+        // The right arrow's arrowhead sits at the sweep's end and points
+        // "forward" (the direction the sweep is heading); the left arrow
+        // is the same template rotated 270 degrees, with its arrowhead at
+        // the sweep's start instead, pointing "backward" (against the
+        // sweep) so the whole icon still reads as the mirrored,
+        // counterclockwise twin of the right arrow.
         const double rotation = left ? glm::half_pi<double>() + glm::pi<double>() : 0;
         const double start = (left ? -0.8 : 2.35) + rotation;
         const double end = (left ? 2.35 : 5.48) + rotation;
         cr->arc(cx, cy, 8, start, end);
         cr->stroke();
 
-        const double angle = left ? 2.35 : 5.48;
-        const double head_position_angle = (left ? -0.8 : angle) + rotation;
+        const double head_position_angle = left ? start : end;
         const double tx = cx + std::cos(head_position_angle) * 8;
         const double ty = cy + std::sin(head_position_angle) * 8;
-        const double head_angle = left ? head_position_angle + glm::half_pi<double>() + glm::pi<double>()
-                                       + glm::half_pi<double>()
-                                     : angle;
+        // The tangent to the circle at this angle is head_position_angle +-
+        // pi/2 -- NOT head_position_angle itself (that's the radial
+        // direction, pointing at the circle's center, which drew a
+        // malformed spike instead of a chevron following the curve).
+        const double head_angle = head_position_angle + (left ? -1 : 1) * glm::half_pi<double>();
         cr->move_to(tx, ty);
         cr->line_to(tx - std::cos(head_angle - 0.55) * 5, ty - std::sin(head_angle - 0.55) * 5);
         cr->move_to(tx, ty);
