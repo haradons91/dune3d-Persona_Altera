@@ -11,6 +11,13 @@ public:
     ToolResponse update(const ToolArgs &args) override;
     CanBegin can_begin() override;
 
+    // Now lives in the ribbon's Constrain dropdown -- keep it out of the
+    // right-click menu to avoid duplicating it there.
+    bool is_specific() override
+    {
+        return false;
+    }
+
     bool constraint_is_in_workplane() override
     {
         return true;

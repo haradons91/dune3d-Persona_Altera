@@ -11,6 +11,14 @@
 
 namespace dune3d {
 
+bool ToolConstrainDistanceAligned::is_specific()
+{
+    // Aligned Distance now lives in the ribbon's Constrain dropdown --
+    // keep it out of the right-click menu to avoid duplicating it there.
+    // Measure Distance (aligned), sharing this class, is unaffected.
+    return m_tool_id != ToolID::CONSTRAIN_DISTANCE_ALIGNED;
+}
+
 ToolBase::CanBegin ToolConstrainDistanceAligned::can_begin()
 {
     auto tp = two_points_from_selection(get_doc(), m_selection);

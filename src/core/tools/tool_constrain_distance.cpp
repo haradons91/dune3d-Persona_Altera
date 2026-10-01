@@ -181,6 +181,15 @@ std::optional<std::pair<EntityAndPoint, EntityAndPoint>> intersecting_rectangle_
 }
 } // namespace
 
+bool ToolConstrainDistance::is_specific()
+{
+    // Plain Distance and Horizontal Distance now have their own home in the
+    // ribbon's Constrain dropdown -- keep them out of the right-click menu
+    // to avoid duplicating them there. Vertical Distance and the Measure
+    // variants (which share this same tool class) are unaffected.
+    return m_tool_id != ToolID::CONSTRAIN_DISTANCE && m_tool_id != ToolID::CONSTRAIN_DISTANCE_HORIZONTAL;
+}
+
 ToolBase::CanBegin ToolConstrainDistance::can_begin()
 {
     sketch_dimension_debug_log(std::format("can_begin selection_count={} tool_id={} selection={}", m_selection.size(),

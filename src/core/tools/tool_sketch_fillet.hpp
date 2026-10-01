@@ -20,9 +20,11 @@ public:
         using I = InToolActionID;
         return {I::LMB, I::RMB, I::CANCEL};
     }
+    // Already has a ribbon button (sketch mode's MODIFY group) -- keep it
+    // out of the right-click menu to avoid duplicating it there.
     bool is_specific() override
     {
-        return true;
+        return false;
     }
     CanBegin can_begin() override;
 

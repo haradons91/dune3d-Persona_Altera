@@ -9,6 +9,7 @@ public:
 
     ToolResponse begin(const ToolArgs &args) override;
     ToolResponse update(const ToolArgs &args) override;
+    bool is_specific() override;
     CanBegin can_begin() override;
 
     ToolID get_force_unset_workplane_tool() override;
