@@ -348,6 +348,23 @@ int AxesCube::get_face_at_position(double x, double y) const
 
 void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
 {
+    // Debug aid: when set, dump this widget's own Cairo rendering straight
+    // to a PNG on every redraw -- a ground-truth capture of exactly what
+    // Cairo draws for this widget, independent of the window manager,
+    // compositor, or any external OS-level screenshot tool (which may not
+    // be in sync with the latest frame, particularly for GL-adjacent
+    // widgets). The reentrancy guard keeps this recursive render() call
+    // from triggering another snapshot of itself.
+    static bool in_snapshot = false;
+    if (!in_snapshot && getenv("DUNE3D_SNAPSHOT_AXES_CUBE")) {
+        in_snapshot = true;
+        auto surface = Cairo::ImageSurface::create(Cairo::Surface::Format::ARGB32, w, h);
+        auto debug_cr = Cairo::Context::create(surface);
+        render(debug_cr, w, h);
+        surface->write_to_png("/tmp/axes_cube_snapshot.png");
+        in_snapshot = false;
+    }
+
     m_width = w;
     m_height = h;
 
@@ -516,21 +533,23 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
         const double perp_angle = tangent_angle + glm::half_pi<double>();
         const double perpx = mirror * std::cos(perp_angle);
         const double perpy = std::sin(perp_angle);
-        // Arrowhead as tip + a base perpendicular to the tangent (height H
-        // back from the tip, half-width W to each side) -- at this icon's
-        // tiny true size (an 8px-radius arc, 2px-wide strokes), an
-        // angle-from-a-point construction either vanishes into the line
-        // width or degenerates into a lopsided blob depending on the spread
-        // chosen; H/W give direct, predictable control over the triangle's
-        // actual pixel footprint instead. Verified against isolated
-        // 1:1-scale Python/PIL renders before settling on these values.
+        // Arrowhead as a base perpendicular to the tangent, sitting right at
+        // the arc's endpoint, plus a tip that projects forward from there
+        // along the tangent (height H past the endpoint, half-width W to
+        // each side at the base). The tip must be the part that floats free
+        // in open space beyond the stroke -- putting it AT the endpoint
+        // instead (with the base projecting backward over the stroke, as an
+        // earlier version of this code did) buries the point inside the
+        // line and leaves only the forked base sticking out, which reads as
+        // a hook, not an arrowhead. Verified against isolated 1:1-scale
+        // Python/PIL renders before settling on these values.
         const double H = 6.0;
         const double W = 3.0;
-        const double base_cx = tx - tanx * H;
-        const double base_cy = ty - tany * H;
-        cr->move_to(tx, ty);
-        cr->line_to(base_cx + perpx * W, base_cy + perpy * W);
-        cr->line_to(base_cx - perpx * W, base_cy - perpy * W);
+        const double tip_x = tx + tanx * H;
+        const double tip_y = ty + tany * H;
+        cr->move_to(tip_x, tip_y);
+        cr->line_to(tx + perpx * W, ty + perpy * W);
+        cr->line_to(tx - perpx * W, ty - perpy * W);
         cr->close_path();
         cr->fill();
         cr->restore();
