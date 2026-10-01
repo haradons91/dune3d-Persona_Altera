@@ -542,8 +542,23 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
                 // foreshortening otherwise -- giving the label the same
                 // rotation, shear, and foreshortening as the face itself,
                 // like a decal, with no separate scale factor needed.
-                const glm::vec3 right_dir = glm::rotate(corrected_view_quat, face.text_right);
-                const glm::vec3 down_dir = glm::rotate(corrected_view_quat, face.text_down);
+                glm::vec3 right_dir = glm::rotate(corrected_view_quat, face.text_right);
+                glm::vec3 down_dir = glm::rotate(corrected_view_quat, face.text_down);
+                // face.text_right/text_down give each face one fixed in-plane
+                // orientation, chosen to look right in typical (e.g. the
+                // isometric default) views. A genuinely fixed decal is
+                // physically correct but means a big enough rotation --
+                // tipping past the point where the face's "up" edge swings
+                // below its "down" edge on screen -- can leave a label
+                // reading upside down, which is correct for a sticker on a
+                // physical cube but not what a UI label should ever do.
+                // Flipping both axes together (a full 180-degree turn, not a
+                // mirror) whenever that's about to happen keeps every label
+                // right-side up from any angle.
+                if (down_dir.y < 0) {
+                    right_dir = -right_dir;
+                    down_dir = -down_dir;
+                }
 
                 // The matrix above alone only reproduces the face's rotation
                 // and foreshortening; it doesn't know the label's own pixel
