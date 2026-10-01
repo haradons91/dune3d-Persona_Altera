@@ -509,20 +509,26 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
         // direction, pointing at the circle's center, which drew a
         // malformed spike instead of a chevron following the curve).
         const double head_angle = head_position_angle + (left ? -1 : 1) * glm::half_pi<double>();
-        // A solid filled triangle reads as a clean arrowhead at any angle;
-        // two separately-stroked barb lines (an earlier approach) look
-        // uneven whenever head_angle isn't near a 45-degree-ish diagonal,
-        // since one barb ends up close to horizontal and the other close
-        // to vertical even though both are mathematically the same length.
-        // Keep this noticeably smaller than the arc's own radius (8) --
-        // using a barb length close to the radius (as the old stroked-line
-        // version did, fine for two thin lines) produces an oversized,
-        // lopsided wedge once the same triangle is filled solid.
-        const double spread = 0.35;
-        const double len = 3.0;
+        // Build the arrowhead as tip + a base perpendicular to the tangent
+        // (height H back from the tip, half-width W to each side), not as
+        // two rays splayed by an angle from the tip -- at this icon's tiny
+        // true size (an 8px-radius arc, 2px-wide strokes), angle-from-a-point
+        // constructions either vanish into the line width (small spread) or
+        // degenerate into a one-sided blob (wide spread), verified with an
+        // isolated 1:1-scale Python/PIL render before settling on this. H/W
+        // give independent, predictable control over the triangle's actual
+        // pixel footprint instead.
+        const double tanx = std::cos(head_angle);
+        const double tany = std::sin(head_angle);
+        const double perpx = std::cos(head_angle + glm::half_pi<double>());
+        const double perpy = std::sin(head_angle + glm::half_pi<double>());
+        const double H = 6.0;
+        const double W = 3.0;
+        const double base_cx = tx - tanx * H;
+        const double base_cy = ty - tany * H;
         cr->move_to(tx, ty);
-        cr->line_to(tx - std::cos(head_angle - spread) * len, ty - std::sin(head_angle - spread) * len);
-        cr->line_to(tx - std::cos(head_angle + spread) * len, ty - std::sin(head_angle + spread) * len);
+        cr->line_to(base_cx + perpx * W, base_cy + perpy * W);
+        cr->line_to(base_cx - perpx * W, base_cy - perpy * W);
         cr->close_path();
         cr->fill();
         cr->restore();
