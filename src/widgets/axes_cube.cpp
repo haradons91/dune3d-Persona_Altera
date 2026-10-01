@@ -80,12 +80,51 @@ struct Face {
     Color color;
     std::string label;
     std::optional<glm::quat> target_quat;
+    // In-plane unit directions (model space) for drawing this face's label so
+    // it reads upright when the face is viewed dead-on, and otherwise
+    // rotates/shears with the face like a decal. Unused (zero) for faces
+    // with no label.
+    glm::vec3 text_right{0.0f};
+    glm::vec3 text_down{0.0f};
 };
 
 struct Model {
     std::vector<glm::vec3> vertices;
     std::vector<Face> faces;
 };
+
+// Determines text_right/text_down for a labeled quad face by checking which
+// way its own two edges from vertex 0 project when the cube is rotated to
+// look straight at this face (its own target_quat -- the one view where the
+// quad can't be degenerate). Exactly one of the two edges comes out mostly
+// horizontal there and the other mostly vertical, since they're perpendicular
+// edges of a square face parallel to the screen; each is then sign-corrected
+// to point screen-right / screen-down respectively. Doing this once here
+// means the label's orientation falls out of the actual geometry instead of
+// being hand-picked per face.
+void compute_text_axes(const std::vector<glm::vec3> &verts, const std::vector<int> &idx, const glm::quat &target_quat,
+                       glm::vec3 &text_right, glm::vec3 &text_down)
+{
+    const glm::quat view = glm::angleAxis(glm::pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::inverse(target_quat);
+    const glm::vec3 v0 = glm::rotate(view, verts[idx[0]]);
+    const glm::vec3 v1 = glm::rotate(view, verts[idx[1]]);
+    const glm::vec3 v3 = glm::rotate(view, verts[idx[3]]);
+    const float e1x = v1.x - v0.x, e1y = v1.y - v0.y;
+    const float e2x = v3.x - v0.x, e2y = v3.y - v0.y;
+
+    const glm::vec3 edge1_model = verts[idx[1]] - verts[idx[0]];
+    const glm::vec3 edge2_model = verts[idx[3]] - verts[idx[0]];
+    if (std::abs(e1x) >= std::abs(e1y)) {
+        text_right = (e1x >= 0) ? edge1_model : -edge1_model;
+        text_down = (e2y >= 0) ? edge2_model : -edge2_model;
+    }
+    else {
+        text_right = (e2x >= 0) ? edge2_model : -edge2_model;
+        text_down = (e1y >= 0) ? edge1_model : -edge1_model;
+    }
+    text_right = glm::normalize(text_right);
+    text_down = glm::normalize(text_down);
+}
 } // namespace
 
 static Model generate_model()
@@ -114,8 +153,12 @@ static Model generate_model()
 
     auto add_face = [&](std::vector<int> idxs, std::string name, Color c, std::string lbl = "",
                         glm::quat quat = glm::quat()) {
-        faces.push_back(
-                {std::move(idxs), id++, std::move(name), c, std::move(lbl), std::make_optional(std::move(quat))});
+        glm::vec3 text_right{0.0f}, text_down{0.0f};
+        if (!lbl.empty() && idxs.size() == 4) {
+            compute_text_axes(vertices, idxs, quat, text_right, text_down);
+        }
+        faces.push_back({std::move(idxs), id++, std::move(name), c, std::move(lbl),
+                         std::make_optional(std::move(quat)), text_right, text_down});
     };
 
     // faces
@@ -376,6 +419,12 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
 
     const auto &faces = get_cached_model().faces;
 
+    // Same correction quat used in update_transformed_vertices() to turn
+    // m_quat into vertex positions -- needed again here to rotate each
+    // face's label-direction vectors the identical way.
+    const glm::quat corrected_view_quat =
+            glm::angleAxis(glm::pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::inverse(m_quat);
+
     struct VisibleFace {
         const Face *face;
         float depth;
@@ -432,30 +481,26 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
             glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
             float dot_prod_view = -normal.z;
 
-            static const float LABEL_BASE_SCALE = 1.0f;
+            // Below this, the face is close enough to edge-on that its
+            // decal-mapped text would be squashed to an illegible sliver;
+            // fade it out rather than let it flicker/smear. Above the
+            // steady threshold, full opacity -- actual size/shear still
+            // comes from how foreshortened the face currently is, below.
             static const float LABEL_MIN_VISIBILITY_THRESHOLD = 0.1f;
-            static const float LABEL_MAX_SCALE_FACTOR = 1.5f;
             static const float LABEL_STEADY_DOT_PRODUCT_THRESHOLD = 0.5f;
 
-            float current_scale = 0.0f;
+            float alpha = 0.0f;
             if (dot_prod_view > LABEL_MIN_VISIBILITY_THRESHOLD) {
                 if (dot_prod_view >= LABEL_STEADY_DOT_PRODUCT_THRESHOLD) {
-                    current_scale = LABEL_BASE_SCALE;
+                    alpha = 1.0f;
                 }
                 else {
-                    float scale_range = LABEL_STEADY_DOT_PRODUCT_THRESHOLD - LABEL_MIN_VISIBILITY_THRESHOLD;
-                    if (scale_range > 0) {
-                        float normalized_dot = (dot_prod_view - LABEL_MIN_VISIBILITY_THRESHOLD) / scale_range;
-                        current_scale = LABEL_BASE_SCALE * normalized_dot;
-                    }
-                    else {
-                        current_scale = 0.0f;
-                    }
+                    alpha = (dot_prod_view - LABEL_MIN_VISIBILITY_THRESHOLD)
+                            / (LABEL_STEADY_DOT_PRODUCT_THRESHOLD - LABEL_MIN_VISIBILITY_THRESHOLD);
                 }
-                current_scale = std::min(current_scale, LABEL_MAX_SCALE_FACTOR);
             }
 
-            if (current_scale > 0.01f) {
+            if (alpha > 0.01f) {
                 float center_x = 0, center_y = 0;
                 for (int idx : face.vertices) {
                     center_x += m_transformed_vertices[idx].x;
@@ -464,11 +509,22 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
                 center_x /= face.vertices.size();
                 center_y /= face.vertices.size();
 
-                cr->save();
-                cr->translate(center_x, center_y);
-                cr->scale(current_scale, current_scale);
+                // Map the label's local pixel space onto the face's own
+                // in-plane axes, rotated the same way every vertex is. A
+                // unit-length in-plane direction keeps magnitude 1 (in 3D)
+                // under rotation, so its screen-space (x, y) after dropping z
+                // is exactly 1 at a dead-on view and shrinks with
+                // foreshortening otherwise -- giving the label the same
+                // rotation, shear, and foreshortening as the face itself,
+                // like a decal, with no separate scale factor needed.
+                const glm::vec3 right_dir = glm::rotate(corrected_view_quat, face.text_right);
+                const glm::vec3 down_dir = glm::rotate(corrected_view_quat, face.text_down);
 
-                cr->set_source_rgb(0, 0, 0);
+                cr->save();
+                Cairo::Matrix label_matrix(right_dir.x, right_dir.y, down_dir.x, down_dir.y, center_x, center_y);
+                cr->transform(label_matrix);
+
+                cr->set_source_rgba(0, 0, 0, alpha);
                 cr->move_to(-ext.get_width() / 2.0, -ext.get_height() / 2.0);
                 m_layout->show_in_cairo_context(cr);
                 cr->restore();
