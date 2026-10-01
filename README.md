@@ -89,10 +89,6 @@ Known loose ends in this fork, not yet acted on:
    Split Body, Silhouette Split, Move/Copy, Align, Remove, Simplify.
  - **Same pattern in the "Insert" dropdown**: items like "Insert SVG" and
    "Insert Derive" exist in the menu as disabled placeholders too.
- - **Multi-view workspace splitting is half-removed**: the "+" button that
-   was its only UI entry point was deleted as dead code, but the backend
-   (`create_workspace_view()`/`duplicate_workspace_view()`) is still
-   there. Either give it a UI again or finish removing the backend.
  - **CI still doesn't build against OCCT 8.0.1**: this project now
    targets OCCT 8.0.1 exclusively (see below), but every CI workflow
    under `.github/workflows/` still installs whatever OCCT version each
@@ -101,10 +97,6 @@ Known loose ends in this fork, not yet acted on:
    removed since there's no 8.0.1 equivalent available). None of them
    build OCCT 8.0.1 from source, so CI currently can't be trusted to
    reflect what actually gets built and tested locally.
- - **Leftover debug print sweep**: forgotten `std::cout` debug
-   instrumentation has been found and removed twice now, right before
-   pushing. Worth a deliberate one-time audit of the whole codebase
-   instead of relying on catching it at push time.
 
 ### Known incomplete features
 
