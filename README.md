@@ -122,15 +122,6 @@ Known loose ends in this fork, not yet acted on:
  - Implement Document Settings, Named Views, and Origin in the tree.
  - Fix the perspective cube's arrows.
  - Implement the Create menu's remaining items.
- - **Spacebar tools into the ribbon -- partially done.** Constrain (a new
-   ribbon dropdown, ~40 tools) and Measure (added to the existing Inspect
-   dropdown, 10 tools) now have real ribbon homes instead of being
-   spacebar/keyboard-only. Still spacebar-only, needing homes elsewhere
-   (hamburger menu, context menus, or judged fine to stay keyboard-only)
-   before the spacebar popover (`ToolPopover`) can actually be removed:
-   document export/save-all/close, view alignment/clipping-plane/group
-   navigation, group reordering, clipboard (copy/paste/cut), and a long
-   tail of workplane/selection/component/conversion tools.
 
 ## Questions
 
