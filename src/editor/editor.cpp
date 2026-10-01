@@ -610,6 +610,7 @@ void Editor::update_sketch_mode_ui()
     m_win.get_ribbon_modify_group().set_visible(!sketch_active);
     m_win.get_ribbon_sketch_group().set_visible(sketch_active);
     m_win.get_ribbon_sketch_modify_group().set_visible(sketch_active);
+    m_win.get_ribbon_constrain_group().set_visible(sketch_active);
     m_win.get_ribbon_body_inspect_group().set_visible(!sketch_active);
     m_win.get_ribbon_sketch_inspect_group().set_visible(sketch_active);
     m_win.get_finish_sketch_group().set_visible(sketch_active || extrusion_active);
@@ -1398,6 +1399,97 @@ void Editor::init_header_bar()
         menu->append("Simplify", "ribbon_modify.simplify");
         auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
         m_win.get_ribbon_modify_menu_button().set_popover(*popover);
+    }
+    {
+        // Constrain ribbon dropdown. Unlike Modify's placeholders above,
+        // every one of these is a real, already-working tool -- previously
+        // reachable only via the spacebar popover or a raw keyboard
+        // shortcut, never from the ribbon at all.
+        auto menu = Gio::Menu::create();
+        auto actions = Gio::SimpleActionGroup::create();
+        const std::vector<std::pair<std::string, ToolID>> items = {
+                {"Horizontal", ToolID::CONSTRAIN_HORIZONTAL},
+                {"Vertical", ToolID::CONSTRAIN_VERTICAL},
+                {"Horizontal (auto)", ToolID::CONSTRAIN_HORIZONTAL_AUTO},
+                {"Vertical (auto)", ToolID::CONSTRAIN_VERTICAL_AUTO},
+                {"Distance", ToolID::CONSTRAIN_DISTANCE},
+                {"Distance (aligned)", ToolID::CONSTRAIN_DISTANCE_ALIGNED},
+                {"Distance (horizontal)", ToolID::CONSTRAIN_DISTANCE_HORIZONTAL},
+                {"Distance (vertical)", ToolID::CONSTRAIN_DISTANCE_VERTICAL},
+                {"Same Orientation", ToolID::CONSTRAIN_SAME_ORIENTATION},
+                {"Parallel", ToolID::CONSTRAIN_PARALLEL},
+                {"Workplane Normal", ToolID::CONSTRAIN_WORKPLANE_NORMAL},
+                {"Midpoint", ToolID::CONSTRAIN_MIDPOINT},
+                {"Equal Length", ToolID::CONSTRAIN_EQUAL_LENGTH},
+                {"Length Ratio", ToolID::CONSTRAIN_LENGTH_RATIO},
+                {"Equal Radius", ToolID::CONSTRAIN_EQUAL_RADIUS},
+                {"Diameter", ToolID::CONSTRAIN_DIAMETER},
+                {"Radius", ToolID::CONSTRAIN_RADIUS},
+                {"Perpendicular", ToolID::CONSTRAIN_PERPENDICULAR},
+                {"Angle", ToolID::CONSTRAIN_ANGLE},
+                {"Point in Plane", ToolID::CONSTRAIN_POINT_IN_PLANE},
+                {"Lock Rotation", ToolID::CONSTRAIN_LOCK_ROTATION},
+                {"Point in Workplane", ToolID::CONSTRAIN_POINT_IN_WORKPLANE},
+                {"Symmetric Horizontal", ToolID::CONSTRAIN_SYMMETRIC_HORIZONTAL},
+                {"Symmetric Vertical", ToolID::CONSTRAIN_SYMMETRIC_VERTICAL},
+                {"Symmetric about Line", ToolID::CONSTRAIN_SYMMETRIC_LINE},
+                {"Bezier/Bezier Tangent Symmetric", ToolID::CONSTRAIN_BEZIER_BEZIER_TANGENT_SYMMETRIC},
+                {"Point on Point", ToolID::CONSTRAIN_POINT_ON_POINT},
+                {"Point on Line", ToolID::CONSTRAIN_POINT_ON_LINE},
+                {"Point on Circle", ToolID::CONSTRAIN_POINT_ON_CIRCLE},
+                {"Point on Bezier", ToolID::CONSTRAIN_POINT_ON_BEZIER},
+                {"Tangent Line on Bezier", ToolID::CONSTRAIN_LINE_TANGENT_ON_BEZIER},
+                {"Perpendicular Line on Bezier", ToolID::CONSTRAIN_LINE_PERPENDICULAR_ON_BEZIER},
+                {"Point/Line Distance", ToolID::CONSTRAIN_POINT_LINE_DISTANCE},
+                {"Point/Plane Distance", ToolID::CONSTRAIN_POINT_PLANE_DISTANCE},
+                {"Arc/Line Tangent", ToolID::CONSTRAIN_ARC_LINE_TANGENT},
+                {"Bezier/Line Tangent", ToolID::CONSTRAIN_BEZIER_LINE_TANGENT},
+                {"Curve/Curve Tangent", ToolID::CONSTRAIN_CURVE_CURVE_TANGENT},
+                {"Line/Points Perpendicular", ToolID::CONSTRAIN_LINE_POINTS_PERPENDICULAR},
+                {"Bezier/Bezier Same Curvature", ToolID::CONSTRAIN_BEZIER_BEZIER_SAME_CURVATURE},
+                {"Bezier/Arc Same Curvature", ToolID::CONSTRAIN_BEZIER_ARC_SAME_CURVATURE},
+        };
+        for (size_t i = 0; i < items.size(); i++) {
+            const auto action_name = "c" + std::to_string(i);
+            const auto tool_id = items[i].second;
+            actions->add_action(action_name, [this, tool_id] { trigger_action(tool_id); });
+            menu->append(items[i].first, "ribbon_constrain." + action_name);
+        }
+        m_win.insert_action_group("ribbon_constrain", actions);
+        auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_constrain_menu_button().set_popover(*popover);
+    }
+    {
+        // Measure ribbon dropdown, same treatment as Constrain above. Set as
+        // the popover on BOTH inspect buttons (normal-mode body and
+        // sketch-mode) -- one menu model/action group covers both, since the
+        // action group is inserted on m_win, a common ancestor of both
+        // popovers regardless of which button opened them.
+        auto menu = Gio::Menu::create();
+        auto actions = Gio::SimpleActionGroup::create();
+        const std::vector<std::pair<std::string, ToolID>> items = {
+                {"Distance", ToolID::MEASURE_DISTANCE},
+                {"Distance (aligned)", ToolID::MEASURE_DISTANCE_ALIGNED},
+                {"Distance (horizontal)", ToolID::MEASURE_DISTANCE_HORIZONTAL},
+                {"Distance (vertical)", ToolID::MEASURE_DISTANCE_VERTICAL},
+                {"Length Ratio", ToolID::MEASURE_LENGTH_RATIO},
+                {"Diameter", ToolID::MEASURE_DIAMETER},
+                {"Radius", ToolID::MEASURE_RADIUS},
+                {"Angle", ToolID::MEASURE_ANGLE},
+                {"Point/Line Distance", ToolID::MEASURE_POINT_LINE_DISTANCE},
+                {"Point/Plane Distance", ToolID::MEASURE_POINT_PLANE_DISTANCE},
+        };
+        for (size_t i = 0; i < items.size(); i++) {
+            const auto action_name = "m" + std::to_string(i);
+            const auto tool_id = items[i].second;
+            actions->add_action(action_name, [this, tool_id] { trigger_action(tool_id); });
+            menu->append(items[i].first, "ribbon_measure." + action_name);
+        }
+        m_win.insert_action_group("ribbon_measure", actions);
+        auto popover_body = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_body_inspect_menu_button().set_popover(*popover_body);
+        auto popover_sketch = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_sketch_inspect_menu_button().set_popover(*popover_sketch);
     }
 
     attach_action_button(m_win.get_open_button(), ActionID::OPEN_DOCUMENT);

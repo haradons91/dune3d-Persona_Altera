@@ -139,8 +139,13 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_ribbon_sketch_create_menu_button =
             refBuilder->get_widget<Gtk::MenuButton>("ribbon_sketch_create_menu_button");
     m_ribbon_sketch_modify_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_modify_group");
+    m_ribbon_constrain_group = refBuilder->get_widget<Gtk::Box>("ribbon_constrain_group");
+    m_ribbon_constrain_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_constrain_menu_button");
     m_ribbon_body_inspect_group = refBuilder->get_widget<Gtk::Box>("ribbon_body_inspect_group");
+    m_ribbon_body_inspect_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_body_inspect_menu_button");
     m_ribbon_sketch_inspect_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_inspect_group");
+    m_ribbon_sketch_inspect_menu_button =
+            refBuilder->get_widget<Gtk::MenuButton>("ribbon_sketch_inspect_menu_button");
     m_ribbon_workspace_separator = refBuilder->get_widget<Gtk::Separator>("ribbon_workspace_separator");
     m_fusion_ribbon_bar = refBuilder->get_widget<Gtk::Box>("fusion_ribbon_bar");
     m_finish_sketch_group = refBuilder->get_widget<Gtk::Box>("finish_sketch_group");

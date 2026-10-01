@@ -616,7 +616,7 @@ dim-label</property>
                 </child>
               </object>
             </child>
-            <!-- Group 4: CONSTRAIN -->
+            <!-- Group 4: MODIFY (sketch mode) -->
             <child>
               <object class="GtkBox" id="ribbon_sketch_modify_group">
                 <property name="css-classes">fusion-ribbon-group</property>
@@ -664,6 +664,30 @@ dim-label</property>
                 </child>
               </object>
             </child>
+            <!-- Group 5: CONSTRAIN (sketch mode) -->
+            <child>
+              <object class="GtkBox" id="ribbon_constrain_group">
+                <property name="css-classes">fusion-ribbon-group</property>
+                <property name="orientation">vertical</property>
+                <property name="visible">False</property>
+                <child>
+                  <object class="GtkMenuButton" id="ribbon_constrain_menu_button">
+                    <property name="css-classes">fusion-ribbon-group-label fusion-ribbon-create-menu</property>
+                    <property name="has-frame">False</property>
+                    <property name="tooltip-text">Constraints</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">horizontal</property>
+                        <property name="spacing">3</property>
+                        <property name="halign">center</property>
+                        <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-create-label</property><property name="label">CONSTRAIN</property></object></child>
+                        <child><object class="GtkImage"><property name="icon-name">pan-down-symbolic</property><property name="pixel-size">10</property></object></child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+              </object>
+            </child>
             <child>
               <object class="GtkBox" id="ribbon_body_inspect_group">
                 <property name="css-classes">fusion-ribbon-group</property>
@@ -682,7 +706,22 @@ dim-label</property>
                     </child>
                   </object>
                 </child>
-                <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-group-label</property><property name="label">INSPECT</property></object></child>
+                <child>
+                  <object class="GtkMenuButton" id="ribbon_body_inspect_menu_button">
+                    <property name="css-classes">fusion-ribbon-group-label fusion-ribbon-create-menu</property>
+                    <property name="has-frame">False</property>
+                    <property name="tooltip-text">More measurements</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">horizontal</property>
+                        <property name="spacing">3</property>
+                        <property name="halign">center</property>
+                        <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-create-label</property><property name="label">INSPECT</property></object></child>
+                        <child><object class="GtkImage"><property name="icon-name">pan-down-symbolic</property><property name="pixel-size">10</property></object></child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
               </object>
             </child>
             <child>
@@ -704,7 +743,22 @@ dim-label</property>
                     </child>
                   </object>
                 </child>
-                <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-group-label</property><property name="label">INSPECT</property></object></child>
+                <child>
+                  <object class="GtkMenuButton" id="ribbon_sketch_inspect_menu_button">
+                    <property name="css-classes">fusion-ribbon-group-label fusion-ribbon-create-menu</property>
+                    <property name="has-frame">False</property>
+                    <property name="tooltip-text">More measurements</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">horizontal</property>
+                        <property name="spacing">3</property>
+                        <property name="halign">center</property>
+                        <child><object class="GtkLabel"><property name="css-classes">fusion-ribbon-create-label</property><property name="label">INSPECT</property></object></child>
+                        <child><object class="GtkImage"><property name="icon-name">pan-down-symbolic</property><property name="pixel-size">10</property></object></child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
               </object>
             </child>
             <child>

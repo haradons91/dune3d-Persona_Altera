@@ -162,8 +162,12 @@ public:
     Gtk::Box &get_ribbon_sketch_group() { return *m_ribbon_sketch_group; }
     Gtk::MenuButton &get_ribbon_sketch_create_menu_button() { return *m_ribbon_sketch_create_menu_button; }
     Gtk::Box &get_ribbon_sketch_modify_group() { return *m_ribbon_sketch_modify_group; }
+    Gtk::Box &get_ribbon_constrain_group() { return *m_ribbon_constrain_group; }
+    Gtk::MenuButton &get_ribbon_constrain_menu_button() { return *m_ribbon_constrain_menu_button; }
     Gtk::Box &get_ribbon_body_inspect_group() { return *m_ribbon_body_inspect_group; }
+    Gtk::MenuButton &get_ribbon_body_inspect_menu_button() { return *m_ribbon_body_inspect_menu_button; }
     Gtk::Box &get_ribbon_sketch_inspect_group() { return *m_ribbon_sketch_inspect_group; }
+    Gtk::MenuButton &get_ribbon_sketch_inspect_menu_button() { return *m_ribbon_sketch_inspect_menu_button; }
     Gtk::Separator &get_ribbon_workspace_separator() { return *m_ribbon_workspace_separator; }
     Gtk::Box &get_fusion_ribbon_bar() { return *m_fusion_ribbon_bar; }
     Gtk::Box &get_finish_sketch_group() { return *m_finish_sketch_group; }
@@ -308,8 +312,12 @@ private:
     Gtk::Box *m_ribbon_sketch_group = nullptr;
     Gtk::MenuButton *m_ribbon_sketch_create_menu_button = nullptr;
     Gtk::Box *m_ribbon_sketch_modify_group = nullptr;
+    Gtk::Box *m_ribbon_constrain_group = nullptr;
+    Gtk::MenuButton *m_ribbon_constrain_menu_button = nullptr;
     Gtk::Box *m_ribbon_body_inspect_group = nullptr;
+    Gtk::MenuButton *m_ribbon_body_inspect_menu_button = nullptr;
     Gtk::Box *m_ribbon_sketch_inspect_group = nullptr;
+    Gtk::MenuButton *m_ribbon_sketch_inspect_menu_button = nullptr;
     Gtk::Separator *m_ribbon_workspace_separator = nullptr;
     Gtk::Box *m_fusion_ribbon_bar = nullptr;
     Gtk::Box *m_finish_sketch_group = nullptr;
