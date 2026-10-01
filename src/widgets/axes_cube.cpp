@@ -93,44 +93,53 @@ struct Model {
     std::vector<Face> faces;
 };
 
-// Determines text_right/text_down for a labeled quad face by checking which
-// way its own two edges from vertex 0 project when the cube is rotated to
-// look straight at this face (its own target_quat -- the one view where the
-// quad can't be degenerate). Exactly one of the two edges comes out mostly
-// horizontal there and the other mostly vertical, since they're perpendicular
-// edges of a square face parallel to the screen; each is then sign-corrected
-// to point screen-right / screen-down respectively. Doing this once here
-// means the label's orientation falls out of the actual geometry instead of
-// being hand-picked per face.
+// Half-width of each of the six main faces in model space (see the vertex
+// generation below); render() needs this too, to size labels against the
+// face's actual on-screen footprint.
+static constexpr double FACE_HALF_WIDTH = 0.60;
+
+// Determines text_right/text_down for a labeled quad face from a single,
+// consistent "world up" reference (the same convention already used for the
+// corner-click views below: +Z, except on the Top/Bottom faces themselves,
+// where the face normal IS +-Z and +Y is used instead). Using one shared
+// reference for every face -- rather than each face's own locally-"upright"
+// edge, which is only unambiguous up to a 90-degree choice -- is what makes
+// Left/Right/Front/Back/Top/Bottom's labels all agree with each other in a
+// typical rotated (not dead-on) view, like the isometric default: they were
+// derived from a per-face-only test before, and while each individually
+// looked upright head-on, Left/Right came out rotated 90 degrees from
+// Top/Front/Back/Bottom in every other view. The face's own target_quat is
+// still used, but only to sign-correct (not choose) each axis, by checking
+// it points screen-right / screen-down at that dead-on view.
 void compute_text_axes(const std::vector<glm::vec3> &verts, const std::vector<int> &idx, const glm::quat &target_quat,
                        glm::vec3 &text_right, glm::vec3 &text_down)
 {
-    const glm::quat view = glm::angleAxis(glm::pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::inverse(target_quat);
-    const glm::vec3 v0 = glm::rotate(view, verts[idx[0]]);
-    const glm::vec3 v1 = glm::rotate(view, verts[idx[1]]);
-    const glm::vec3 v3 = glm::rotate(view, verts[idx[3]]);
-    const float e1x = v1.x - v0.x, e1y = v1.y - v0.y;
-    const float e2x = v3.x - v0.x, e2y = v3.y - v0.y;
+    glm::vec3 normal =
+            glm::cross(verts[idx[1]] - verts[idx[0]], verts[idx[2]] - verts[idx[0]]);
+    glm::vec3 center{0.0f};
+    for (int i : idx)
+        center += verts[i];
+    center /= static_cast<float>(idx.size());
+    if (glm::dot(normal, center) < 0)
+        normal = -normal;
+    normal = glm::normalize(normal);
 
-    const glm::vec3 edge1_model = verts[idx[1]] - verts[idx[0]];
-    const glm::vec3 edge2_model = verts[idx[3]] - verts[idx[0]];
-    if (std::abs(e1x) >= std::abs(e1y)) {
-        text_right = (e1x >= 0) ? edge1_model : -edge1_model;
-        text_down = (e2y >= 0) ? edge2_model : -edge2_model;
-    }
-    else {
-        text_right = (e2x >= 0) ? edge2_model : -edge2_model;
-        text_down = (e1y >= 0) ? edge1_model : -edge1_model;
-    }
-    text_right = glm::normalize(text_right);
-    text_down = glm::normalize(text_down);
+    const glm::vec3 world_up = (std::abs(normal.z) > 0.9f) ? glm::vec3(0, 1, 0) : glm::vec3(0, 0, 1);
+    text_right = glm::normalize(glm::cross(world_up, normal));
+    text_down = glm::normalize(glm::cross(normal, text_right));
+
+    const glm::quat view = glm::angleAxis(glm::pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::inverse(target_quat);
+    if (glm::rotate(view, text_right).x < 0)
+        text_right = -text_right;
+    if (glm::rotate(view, text_down).y < 0)
+        text_down = -text_down;
 }
 } // namespace
 
 static Model generate_model()
 {
     constexpr double S = 0.9;
-    constexpr double B = 0.60;
+    constexpr double B = FACE_HALF_WIDTH;
 
     std::vector<glm::vec3> vertices;
     vertices.reserve(24);
@@ -401,10 +410,23 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
     static bool in_snapshot = false;
     if (!in_snapshot && getenv("DUNE3D_SNAPSHOT_AXES_CUBE")) {
         in_snapshot = true;
+        // Temporary test-only override to snapshot an arbitrary view without
+        // live UI interaction, e.g. "1 0 0 0" for Top's identity quat.
+        if (const char *fq = getenv("DUNE3D_FORCE_QUAT")) {
+            float qw, qx, qy, qz;
+            if (sscanf(fq, "%f %f %f %f", &qw, &qx, &qy, &qz) == 4) {
+                m_quat = glm::quat(qw, qx, qy, qz);
+            }
+        }
         auto surface = Cairo::ImageSurface::create(Cairo::Surface::Format::ARGB32, w, h);
         auto debug_cr = Cairo::Context::create(surface);
         render(debug_cr, w, h);
         surface->write_to_png("/tmp/axes_cube_snapshot.png");
+        FILE *f = fopen("/tmp/axes_cube_quat.txt", "w");
+        if (f) {
+            fprintf(f, "%f %f %f %f\n", m_quat.w, m_quat.x, m_quat.y, m_quat.z);
+            fclose(f);
+        }
         in_snapshot = false;
     }
 
@@ -424,6 +446,9 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
     // face's label-direction vectors the identical way.
     const glm::quat corrected_view_quat =
             glm::angleAxis(glm::pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::inverse(m_quat);
+    // Same vertex scale factor used in update_transformed_vertices(); needed
+    // again here to size labels against the face's actual pixel footprint.
+    const float sc = (std::min(m_width, m_height) / 2.0f) - m_size;
 
     struct VisibleFace {
         const Face *face;
@@ -520,8 +545,29 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
                 const glm::vec3 right_dir = glm::rotate(corrected_view_quat, face.text_right);
                 const glm::vec3 down_dir = glm::rotate(corrected_view_quat, face.text_down);
 
+                // The matrix above alone only reproduces the face's rotation
+                // and foreshortening; it doesn't know the label's own pixel
+                // size versus the face's actual on-screen footprint, so a
+                // long word (e.g. "Bottom") at this widget's tiny true scale
+                // can still overflow past the face's edges even though the
+                // orientation is correct. Shrink uniformly (never enlarge) so
+                // the label's rendered width/height each fit within a margin
+                // of the face's current screen-space extent along that axis.
+                const double face_width_px =
+                        2.0 * FACE_HALF_WIDTH * std::hypot(right_dir.x, right_dir.y) * sc;
+                const double face_height_px =
+                        2.0 * FACE_HALF_WIDTH * std::hypot(down_dir.x, down_dir.y) * sc;
+                constexpr double LABEL_FIT_MARGIN = 0.8;
+                double fit_scale = 1.0;
+                if (ext.get_width() > 0)
+                    fit_scale = std::min(fit_scale, face_width_px * LABEL_FIT_MARGIN / ext.get_width());
+                if (ext.get_height() > 0)
+                    fit_scale = std::min(fit_scale, face_height_px * LABEL_FIT_MARGIN / ext.get_height());
+                fit_scale = std::max(fit_scale, 0.0);
+
                 cr->save();
-                Cairo::Matrix label_matrix(right_dir.x, right_dir.y, down_dir.x, down_dir.y, center_x, center_y);
+                Cairo::Matrix label_matrix(right_dir.x * fit_scale, right_dir.y * fit_scale, down_dir.x * fit_scale,
+                                           down_dir.y * fit_scale, center_x, center_y);
                 cr->transform(label_matrix);
 
                 cr->set_source_rgba(0, 0, 0, alpha);
