@@ -825,7 +825,7 @@ dim-label</property>
         </child>
         <child>
           <object class="GtkPaned" id="paned">
-            <property name="position">300</property>
+            <property name="position">225</property>
             <property name="position-set">True</property>
             <property name="resize-end-child">False</property>
             <property name="shrink-start-child">False</property>
@@ -1212,7 +1212,7 @@ blah</property>
         </child>
         <child>
           <object class="GtkBox" id="timeline_panel">
-            <property name="height-request">92</property>
+            <property name="height-request">46</property>
             <property name="orientation">vertical</property>
             <property name="spacing">2</property>
             <child>
