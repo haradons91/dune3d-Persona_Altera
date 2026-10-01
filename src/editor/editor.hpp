@@ -414,6 +414,22 @@ private:
     // override) -- this is a rendering hint, not real state.
     mutable std::optional<glm::dvec3> m_snap_indicator_pos;
 
+    // Dashed inference-line guides (up to two: one for the axis being
+    // ridden away from a line's midpoint, one more if a second, crossing
+    // axis from another line's midpoint is also currently snapped to). Set
+    // by get_cursor_pos_for_workplane(), drawn by render_document() the same
+    // deferred way as m_snap_indicator_pos above.
+    mutable std::vector<std::pair<glm::dvec3, glm::dvec3>> m_snap_guide_segments;
+    // Which line's midpoint is currently being "ridden" perpendicular to
+    // (workplane-local UV), and that perpendicular direction (unit vector,
+    // also UV) -- both unset when not currently riding one. Real state (not
+    // just a rendering hint): once armed, it must persist across frames so
+    // moving the mouse away keeps tracking the same axis instead of
+    // re-evaluating from scratch every call. Reset whenever the cursor
+    // strays far enough from the axis, or sketch editing stops.
+    mutable std::optional<glm::dvec2> m_midpoint_ride_anchor;
+    mutable std::optional<glm::dvec2> m_midpoint_ride_dir;
+
     std::unique_ptr<SelectionFilterWindow> m_selection_filter_window;
 
     SelectionMenuCreator m_selection_menu_creator;

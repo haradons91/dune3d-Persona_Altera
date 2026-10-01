@@ -100,6 +100,10 @@ public:
     ItemKind m_kind = ItemKind::USER;
     UUID m_generated_from;
     bool m_selection_invisible = false;
+    // Runtime-only rendering hint (not serialized, like m_selection_invisible
+    // above): draws this entity's lines dashed. Used for a tool's transient
+    // snap-inference guide lines, never set on persisted sketch geometry.
+    bool m_dashed_hint = false;
 
     bool m_visible = true;
 

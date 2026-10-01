@@ -10,8 +10,17 @@ flat in vec3 color_to_frag;
 flat in float alpha_to_frag;
 flat in float depth_shift_to_frag;
 flat in float select_alpha_to_frag;
+in float dist_to_frag;
+
+##ubo
 
 void main() {
+  if (FLAG_IS_SET(flags_to_frag, VERTEX_FLAG_DASHED)) {
+    const float dash_period = 10.0;
+    const float dash_on = 5.0;
+    if (mod(dist_to_frag, dash_period) > dash_on)
+      discard;
+  }
   outputColor = vec4(color_to_frag, alpha_to_frag);
   select = outputColor*select_alpha_to_frag;
   if (hover_only_to_frag != 0u

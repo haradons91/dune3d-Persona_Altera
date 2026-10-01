@@ -17,6 +17,11 @@ flat out vec3 color_to_frag;
 flat out float alpha_to_frag;
 flat out float depth_shift_to_frag;
 flat out float select_alpha_to_frag;
+// Not flat: needs to interpolate smoothly along the emitted quad so the
+// fragment shader can derive a per-fragment position along the segment for
+// the dash pattern (VERTEX_FLAG_DASHED). 0 at the p0 corners, the segment's
+// (pre-cap-extension) pixel length at the p1 corners.
+out float dist_to_frag;
 
 ##ubo
 
@@ -94,22 +99,27 @@ void main() {
 	vec2 o2_px = normalize(vec2(-v_px.y, v_px.x)) * (line_width * width_scale / 2.0);
 
 	vec4 o = vec4((screen*vec3(o2_px,0)).xy, 0, 0);
-	
+	float seg_len_px = length(v_px);
+
 	pick_to_frag = pick_to_geom[0];
 	flags_to_frag = flags_to_geom[0];
 	hover_only_to_frag = FLAG_IS_SET(flags_to_geom[0], VERTEX_FLAG_HOVER_ONLY) ? 1u : 0u;
+	dist_to_frag = 0.0;
 	gl_Position = p0x-o;
 	EmitVertex();
-	
+
 	pick_to_frag = pick_to_geom[0];
+	dist_to_frag = 0.0;
 	gl_Position = p0x+o;
 	EmitVertex();
 
 	pick_to_frag = pick_to_geom[0];
+	dist_to_frag = seg_len_px;
 	gl_Position = p1x-o;
 	EmitVertex();
-	
+
 	pick_to_frag = pick_to_geom[0];
+	dist_to_frag = seg_len_px;
 	gl_Position = p1x+o;
 	EmitVertex();
 	

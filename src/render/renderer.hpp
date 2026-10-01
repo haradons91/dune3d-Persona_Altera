@@ -75,6 +75,7 @@ public:
 
     void add_constraint_icons(glm::vec3 p, glm::vec3 v, const std::vector<ConstraintType> &constraints);
     void add_snap_indicator(const std::optional<glm::dvec3> &pos);
+    void add_snap_guide_segments(std::vector<std::pair<glm::dvec3, glm::dvec3>> segments);
     static unsigned int get_chunk_from_group(const Group &group);
 
 private:
@@ -179,6 +180,7 @@ private:
     void draw_constraints();
 
     std::optional<glm::dvec3> m_snap_indicator_pos;
+    std::vector<std::pair<glm::dvec3, glm::dvec3>> m_snap_guide_segments;
 
     void draw_distance_line(const glm::vec3 &from, const glm::vec3 &to, const glm::vec3 &text_p,
                             const std::string &label, const UUID &uu,

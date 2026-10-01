@@ -959,6 +959,12 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
         draw_constraints();
         if (m_snap_indicator_pos)
             m_ca.draw_point(*m_snap_indicator_pos, IconID::POINT_PLUS);
+        if (m_snap_guide_segments.size()) {
+            m_ca.set_line_style(ICanvas::LineStyle::DASHED);
+            for (const auto &[a, b] : m_snap_guide_segments)
+                m_ca.draw_line(a, b);
+            m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
+        }
     }
 
     m_ca.update_bbox();
@@ -1064,7 +1070,7 @@ void Renderer::visit(const EntityLine3D &line)
     }
     // See EntityLine2D's visit(): must not inherit a leftover thin/thinner
     // style from the grid/dimension-helper pass rendered earlier.
-    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
+    m_ca.set_line_style(line.m_dashed_hint ? ICanvas::LineStyle::DASHED : ICanvas::LineStyle::DEFAULT);
     m_ca.add_selectable(m_ca.draw_line(line.m_p1, line.m_p2),
                         SelectableRef{SelectableRef::Type::ENTITY, line.m_uuid, 0});
     if (line.m_no_points)
@@ -1078,7 +1084,7 @@ void Renderer::visit(const EntityLine2D &line)
 {
     // Sketch geometry, including chamfers, must not inherit the thin/thinner
     // style used by grid and dimension helpers rendered earlier in the pass.
-    m_ca.set_line_style(ICanvas::LineStyle::DEFAULT);
+    m_ca.set_line_style(line.m_dashed_hint ? ICanvas::LineStyle::DASHED : ICanvas::LineStyle::DEFAULT);
     auto &wrkpl = dynamic_cast<const EntityWorkplane &>(*m_doc->m_entities.at(line.m_wrkpl));
     const auto offset = get_sketch_geometry_offset();
     const auto p1 = wrkpl.transform(line.m_p1) + offset;
@@ -2638,6 +2644,12 @@ void Renderer::add_snap_indicator(const std::optional<glm::dvec3> &pos)
     // behind at an old position alongside the current, correctly-tracking
     // one.
     m_snap_indicator_pos = pos;
+}
+
+void Renderer::add_snap_guide_segments(std::vector<std::pair<glm::dvec3, glm::dvec3>> segments)
+{
+    // Deferred the same way add_snap_indicator() is, and for the same reason.
+    m_snap_guide_segments = std::move(segments);
 }
 
 

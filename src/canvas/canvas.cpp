@@ -1739,6 +1739,8 @@ void Canvas::apply_line_flags(VertexFlags &flags)
         flags |= VertexFlags::LINE_THIN;
     else if (m_state.line_style == LineStyle::THINNER)
         flags |= VertexFlags::LINE_THINNER;
+    else if (m_state.line_style == LineStyle::DASHED)
+        flags |= VertexFlags::DASHED;
 }
 
 static const float char_space = 1;

@@ -16,6 +16,8 @@
 #include "group_editor/group_editor.hpp"
 #include "render/renderer.hpp"
 #include "document/entity/entity_workplane.hpp"
+#include "document/entity/entity_line2d.hpp"
+#include "document/entity/entity_line3d.hpp"
 #include "document/entity/entity_step.hpp"
 #include "document/entity/entity_stl.hpp"
 #include "document/entity/entity_threemf.hpp"
@@ -48,6 +50,41 @@ namespace {
 void sketch_dimension_debug_log(const std::string &message)
 {
     debug_log(DebugCategory::UI, message);
+}
+
+struct CandidateLineUV {
+    glm::dvec2 p1;
+    glm::dvec2 p2;
+};
+
+// Every non-construction straight edge that lies on `workplane`, in
+// workplane-local UV -- source material for midpoint-snap and the
+// perpendicular-axis inference it can lead into. EntityLine2D is already
+// workplane-local; EntityLine3D is stored in full 3D (drawn on-plane by the
+// Line tool but not confined to one by its own type), so each endpoint is
+// kept only if projecting it onto the plane and back reproduces the
+// original point, i.e. it actually lies on the plane.
+std::vector<CandidateLineUV> get_candidate_lines_on_workplane(const Document &doc, const EntityWorkplane &workplane)
+{
+    std::vector<CandidateLineUV> lines;
+    for (const auto &[uu, entity] : doc.m_entities) {
+        if (const auto *l2 = dynamic_cast<const EntityLine2D *>(entity.get())) {
+            if (l2->m_construction || l2->m_wrkpl != workplane.m_uuid)
+                continue;
+            lines.push_back({l2->m_p1, l2->m_p2});
+        }
+        else if (const auto *l3 = dynamic_cast<const EntityLine3D *>(entity.get())) {
+            if (l3->m_construction)
+                continue;
+            const auto p1_uv = workplane.project(l3->m_p1);
+            const auto p2_uv = workplane.project(l3->m_p2);
+            if (glm::length(workplane.transform(p1_uv) - l3->m_p1) > 1e-6
+                || glm::length(workplane.transform(p2_uv) - l3->m_p2) > 1e-6)
+                continue;
+            lines.push_back({p1_uv, p2_uv});
+        }
+    }
+    return lines;
 }
 } // namespace
 
@@ -2033,6 +2070,7 @@ void Editor::render_document(const IDocumentInfo &doc)
     if (doc.get_uuid() == m_core.get_current_idocument_info().get_uuid()) {
         renderer.add_constraint_icons(m_constraint_tip_pos, m_constraint_tip_vec, m_constraint_tip_icons);
         renderer.add_snap_indicator(m_snap_indicator_pos);
+        renderer.add_snap_guide_segments(m_snap_guide_segments);
     }
 
     try {
@@ -2136,6 +2174,9 @@ glm::dvec3 Editor::get_cursor_pos_for_workplane(const EntityWorkplane &workplane
     const auto cursor = get_canvas().get_cursor_pos_for_plane(workplane.m_origin, workplane.get_normal_vector());
     if (!m_sketch_editing) {
         m_snap_indicator_pos.reset();
+        m_snap_guide_segments.clear();
+        m_midpoint_ride_anchor.reset();
+        m_midpoint_ride_dir.reset();
         return cursor;
     }
 
@@ -2216,11 +2257,91 @@ glm::dvec3 Editor::get_cursor_pos_for_workplane(const EntityWorkplane &workplane
         }
     }
 
+    // Midpoint snap + Fusion-style perpendicular inference lines: snapping
+    // exactly onto an existing line's midpoint "arms" it; moving away then
+    // rides the axis perpendicular to that line (one coordinate locked, the
+    // other free), with a dashed guide back to the midpoint. While riding,
+    // a second line perpendicular to the first (i.e. parallel to the axis
+    // being ridden) whose own midpoint lines up with the current position
+    // along that axis snaps the position there too and adds a second guide
+    // -- the combined "L-shaped" inference snap.
+    m_snap_guide_segments.clear();
+    std::optional<glm::dvec3> midpoint_result;
+    if (m_core.has_documents()) {
+        const auto &doc = m_core.get_current_last_document();
+        const auto lines = get_candidate_lines_on_workplane(doc, workplane);
+
+        const auto pixel_distance = [&](const glm::dvec2 &a, const glm::dvec2 &b) {
+            return glm::length(get_canvas().project_to_window(workplane.transform(a))
+                               - get_canvas().project_to_window(workplane.transform(b)));
+        };
+
+        if (m_midpoint_ride_anchor && m_midpoint_ride_dir) {
+            const auto &anchor = *m_midpoint_ride_anchor;
+            const auto &dir = *m_midpoint_ride_dir;
+            const double t = glm::dot(point - anchor, dir);
+            const glm::dvec2 ride_point = anchor + dir * t;
+            if (pixel_distance(point, ride_point) <= snap_radius) {
+                glm::dvec2 final_point = ride_point;
+                m_snap_guide_segments.emplace_back(workplane.transform(anchor), workplane.transform(final_point));
+
+                for (const auto &line : lines) {
+                    const glm::dvec2 line_dir = line.p2 - line.p1;
+                    const double line_len = glm::length(line_dir);
+                    if (line_len < 1e-9)
+                        continue;
+                    const glm::dvec2 line_dir_n = line_dir / line_len;
+                    // (Anti)parallel to the ride axis == perpendicular to the
+                    // line that axis came from, within ~a few degrees.
+                    if (std::abs(std::abs(glm::dot(line_dir_n, dir)) - 1.0) > 0.01)
+                        continue;
+                    const glm::dvec2 m2 = (line.p1 + line.p2) * 0.5;
+                    const double t2 = glm::dot(m2 - anchor, dir);
+                    const glm::dvec2 candidate_point = anchor + dir * t2;
+                    if (pixel_distance(ride_point, candidate_point) <= snap_radius) {
+                        final_point = candidate_point;
+                        m_snap_guide_segments.emplace_back(workplane.transform(m2), workplane.transform(final_point));
+                        break;
+                    }
+                }
+                midpoint_result = workplane.transform(final_point);
+            }
+            else {
+                m_midpoint_ride_anchor.reset();
+                m_midpoint_ride_dir.reset();
+            }
+        }
+
+        if (!midpoint_result) {
+            double best_midpoint_distance = snap_radius;
+            std::optional<glm::dvec2> best_midpoint;
+            std::optional<glm::dvec2> best_perp_dir;
+            for (const auto &line : lines) {
+                const glm::dvec2 line_dir = line.p2 - line.p1;
+                const double line_len = glm::length(line_dir);
+                if (line_len < 1e-9)
+                    continue;
+                const glm::dvec2 m = (line.p1 + line.p2) * 0.5;
+                const double d = pixel_distance(point, m);
+                if (d <= best_midpoint_distance) {
+                    best_midpoint_distance = d;
+                    best_midpoint = m;
+                    best_perp_dir = glm::normalize(glm::dvec2(-line_dir.y, line_dir.x));
+                }
+            }
+            if (best_midpoint) {
+                m_midpoint_ride_anchor = best_midpoint;
+                m_midpoint_ride_dir = best_perp_dir;
+                midpoint_result = workplane.transform(*best_midpoint);
+            }
+        }
+    }
+
     // Remember this for render_document() to draw a marker at -- always the
     // actual point a click would place right now (snapped if one's in
     // range, the raw cursor otherwise), so the indicator acts like a
     // persistent crosshair rather than only appearing once a snap engages.
-    const auto result = best_snap.value_or(cursor);
+    const auto result = midpoint_result.value_or(best_snap.value_or(cursor));
     m_snap_indicator_pos = result;
     return result;
 }

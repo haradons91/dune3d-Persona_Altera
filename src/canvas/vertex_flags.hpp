@@ -27,6 +27,11 @@ enum class CanvasVertexFlags : uint32_t {
     // extrude handle arrow when dragging the extrusion into existing solid
     // material) instead of disappearing behind it like every other icon.
     ICON_ALWAYS_VISIBLE = (1 << 11),
+    // Line-only: discard fragments outside a fixed pixel-space on/off pattern
+    // in the fragment shader, driven by the smooth per-fragment distance
+    // varying the geometry shader computes for this purpose. See
+    // line-geometry.glsl/line-fragment.glsl.
+    DASHED = (1 << 12),
     COLOR_MASK = SELECTED | HOVER | INACTIVE | CONSTRAINT | CONSTRUCTION | HIGHLIGHT,
 };
 }

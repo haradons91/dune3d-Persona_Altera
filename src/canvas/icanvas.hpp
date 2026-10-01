@@ -32,6 +32,7 @@ public:
         DEFAULT = 0,
         THIN = (1 << 0),
         THINNER = (1 << 1),
+        DASHED = (1 << 2),
     };
 
     enum class Axis {
