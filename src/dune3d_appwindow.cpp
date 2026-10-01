@@ -141,6 +141,8 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
     m_ribbon_sketch_modify_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_modify_group");
     m_ribbon_constrain_group = refBuilder->get_widget<Gtk::Box>("ribbon_constrain_group");
     m_ribbon_constrain_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_constrain_menu_button");
+    m_ribbon_construction_group = refBuilder->get_widget<Gtk::Box>("ribbon_construction_group");
+    m_ribbon_construction_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_construction_menu_button");
     m_ribbon_body_inspect_group = refBuilder->get_widget<Gtk::Box>("ribbon_body_inspect_group");
     m_ribbon_body_inspect_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_body_inspect_menu_button");
     m_ribbon_sketch_inspect_group = refBuilder->get_widget<Gtk::Box>("ribbon_sketch_inspect_group");

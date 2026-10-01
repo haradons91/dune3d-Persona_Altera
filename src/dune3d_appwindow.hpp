@@ -164,6 +164,8 @@ public:
     Gtk::Box &get_ribbon_sketch_modify_group() { return *m_ribbon_sketch_modify_group; }
     Gtk::Box &get_ribbon_constrain_group() { return *m_ribbon_constrain_group; }
     Gtk::MenuButton &get_ribbon_constrain_menu_button() { return *m_ribbon_constrain_menu_button; }
+    Gtk::Box &get_ribbon_construction_group() { return *m_ribbon_construction_group; }
+    Gtk::MenuButton &get_ribbon_construction_menu_button() { return *m_ribbon_construction_menu_button; }
     Gtk::Box &get_ribbon_body_inspect_group() { return *m_ribbon_body_inspect_group; }
     Gtk::MenuButton &get_ribbon_body_inspect_menu_button() { return *m_ribbon_body_inspect_menu_button; }
     Gtk::Box &get_ribbon_sketch_inspect_group() { return *m_ribbon_sketch_inspect_group; }
@@ -300,6 +302,8 @@ private:
     Gtk::Box *m_ribbon_sketch_modify_group = nullptr;
     Gtk::Box *m_ribbon_constrain_group = nullptr;
     Gtk::MenuButton *m_ribbon_constrain_menu_button = nullptr;
+    Gtk::Box *m_ribbon_construction_group = nullptr;
+    Gtk::MenuButton *m_ribbon_construction_menu_button = nullptr;
     Gtk::Box *m_ribbon_body_inspect_group = nullptr;
     Gtk::MenuButton *m_ribbon_body_inspect_menu_button = nullptr;
     Gtk::Box *m_ribbon_sketch_inspect_group = nullptr;

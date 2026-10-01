@@ -646,6 +646,7 @@ void Editor::update_sketch_mode_ui()
     m_win.get_ribbon_sketch_group().set_visible(sketch_active);
     m_win.get_ribbon_sketch_modify_group().set_visible(sketch_active);
     m_win.get_ribbon_constrain_group().set_visible(sketch_active);
+    m_win.get_ribbon_construction_group().set_visible(sketch_active);
     m_win.get_ribbon_body_inspect_group().set_visible(!sketch_active);
     m_win.get_ribbon_sketch_inspect_group().set_visible(sketch_active);
     m_win.get_finish_sketch_group().set_visible(sketch_active || extrusion_active);
@@ -1499,6 +1500,31 @@ void Editor::init_header_bar()
         m_win.insert_action_group("ribbon_constrain", actions);
         auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
         m_win.get_ribbon_constrain_menu_button().set_popover(*popover);
+    }
+    {
+        // Construction ribbon dropdown: converts the current selection
+        // to/from construction geometry. ToolToggleConstruction already
+        // implements all three variants fully (it only operates on
+        // m_selection and commits immediately, no drawing/dragging
+        // involved) -- previously reachable only via the right-click
+        // context menu or the TOGGLE_CONSTRUCTION in-tool key while
+        // actively drawing, never a one-click ribbon action outside a tool.
+        auto menu = Gio::Menu::create();
+        auto actions = Gio::SimpleActionGroup::create();
+        const std::vector<std::pair<std::string, ToolID>> items = {
+                {"Toggle Construction", ToolID::TOGGLE_CONSTRUCTION},
+                {"Set Construction", ToolID::SET_CONSTRUCTION},
+                {"Unset Construction", ToolID::UNSET_CONSTRUCTION},
+        };
+        for (size_t i = 0; i < items.size(); i++) {
+            const auto action_name = "c" + std::to_string(i);
+            const auto tool_id = items[i].second;
+            actions->add_action(action_name, [this, tool_id] { trigger_action(tool_id); });
+            menu->append(items[i].first, "ribbon_construction." + action_name);
+        }
+        m_win.insert_action_group("ribbon_construction", actions);
+        auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_construction_menu_button().set_popover(*popover);
     }
     {
         // Measure ribbon dropdown, same treatment as Constrain above. Set as
