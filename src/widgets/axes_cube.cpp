@@ -487,41 +487,43 @@ void AxesCube::render(const Cairo::RefPtr<Cairo::Context> &cr, int w, int h)
         // cap for this clean geometric shape.
         cr->set_line_cap(Cairo::Context::LineCap::BUTT);
         cr->set_source_rgba(0.1, 0.1, 0.1, 0.85);
-        // cr->arc() always sweeps from `start` to `end` with increasing
-        // angle, which reads as clockwise on screen (y grows downward).
-        // The right arrow's arrowhead sits at the sweep's end and points
-        // "forward" (the direction the sweep is heading); the left arrow
-        // is the same template rotated 270 degrees, with its arrowhead at
-        // the sweep's start instead, pointing "backward" (against the
-        // sweep) so the whole icon still reads as the mirrored,
-        // counterclockwise twin of the right arrow.
-        const double rotation = left ? glm::half_pi<double>() + glm::pi<double>() : 0;
-        const double start = (left ? -0.8 : 2.35) + rotation;
-        const double end = (left ? 2.35 : 5.48) + rotation;
-        cr->arc(cx, cy, 8, start, end);
+        // Build the whole shape in one canonical (clockwise/"right")
+        // orientation, then mirror the x-axis for "left" by negating every
+        // x-component (position AND direction vectors) after computing it
+        // in that canonical frame. Re-deriving a separate set of angles/
+        // signs for "left" by hand (the previous approach here) was a
+        // repeated source of subtly-wrong arrowhead directions -- mirroring
+        // a verified-correct shape is correct by construction instead.
+        const double mirror = left ? -1.0 : 1.0;
+        const double start = 2.35;
+        const double end = 5.48;
+        const double r = 8.0;
+        const int n = 48;
+        cr->move_to(cx + mirror * std::cos(start) * r, cy + std::sin(start) * r);
+        for (int i = 1; i <= n; i++) {
+            const double a = start + (end - start) * i / n;
+            cr->line_to(cx + mirror * std::cos(a) * r, cy + std::sin(a) * r);
+        }
         cr->stroke();
 
-        const double head_position_angle = left ? start : end;
-        const double tx = cx + std::cos(head_position_angle) * 8;
-        const double ty = cy + std::sin(head_position_angle) * 8;
-        // The tangent to the circle at this angle is head_position_angle +-
-        // pi/2 -- NOT head_position_angle itself (that's the radial
-        // direction, pointing at the circle's center, which drew a
-        // malformed spike instead of a chevron following the curve).
-        const double head_angle = head_position_angle + (left ? -1 : 1) * glm::half_pi<double>();
-        // Build the arrowhead as tip + a base perpendicular to the tangent
-        // (height H back from the tip, half-width W to each side), not as
-        // two rays splayed by an angle from the tip -- at this icon's tiny
-        // true size (an 8px-radius arc, 2px-wide strokes), angle-from-a-point
-        // constructions either vanish into the line width (small spread) or
-        // degenerate into a one-sided blob (wide spread), verified with an
-        // isolated 1:1-scale Python/PIL render before settling on this. H/W
-        // give independent, predictable control over the triangle's actual
-        // pixel footprint instead.
-        const double tanx = std::cos(head_angle);
-        const double tany = std::sin(head_angle);
-        const double perpx = std::cos(head_angle + glm::half_pi<double>());
-        const double perpy = std::sin(head_angle + glm::half_pi<double>());
+        const double tx = cx + mirror * std::cos(end) * r;
+        const double ty = cy + std::sin(end) * r;
+        // Forward tangent at the arc's end, in the canonical (unmirrored)
+        // frame, then mirrored like everything else.
+        const double tangent_angle = end + glm::half_pi<double>();
+        const double tanx = mirror * std::cos(tangent_angle);
+        const double tany = std::sin(tangent_angle);
+        const double perp_angle = tangent_angle + glm::half_pi<double>();
+        const double perpx = mirror * std::cos(perp_angle);
+        const double perpy = std::sin(perp_angle);
+        // Arrowhead as tip + a base perpendicular to the tangent (height H
+        // back from the tip, half-width W to each side) -- at this icon's
+        // tiny true size (an 8px-radius arc, 2px-wide strokes), an
+        // angle-from-a-point construction either vanishes into the line
+        // width or degenerates into a lopsided blob depending on the spread
+        // chosen; H/W give direct, predictable control over the triangle's
+        // actual pixel footprint instead. Verified against isolated
+        // 1:1-scale Python/PIL renders before settling on these values.
         const double H = 6.0;
         const double W = 3.0;
         const double base_cx = tx - tanx * H;
