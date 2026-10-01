@@ -21,22 +21,10 @@ UUID Editor::create_workspace_view()
     return uu;
 }
 
-UUID Editor::duplicate_workspace_view(const UUID &wv_uu)
-{
-    auto uu = UUID::random();
-    auto &wv = m_workspace_views.emplace(uu, m_workspace_views.at(wv_uu)).first->second;
-    if (wv.m_name.size())
-        wv.m_name += " (Copy)";
-    append_workspace_view_page(wv.m_name, uu);
-    return uu;
-}
-
 void Editor::append_workspace_view_page(const std::string &name, const UUID &uu)
 {
     auto &la = m_win.append_workspace_view_page(name, uu);
     la.signal_close().connect([this, uu] { close_workspace_view(uu); });
-    la.signal_rename().connect([this, uu] { rename_workspace_view(uu); });
-    la.signal_duplicate().connect([this, uu] { set_current_workspace_view(duplicate_workspace_view(uu)); });
     update_can_close_workspace_view_pages();
     update_workspace_view_names();
 }
@@ -91,23 +79,6 @@ void Editor::update_can_close_workspace_view_pages()
         dynamic_cast<Dune3DAppWindow::WorkspaceTabLabel &>(*m_win.get_workspace_notebook().get_tab_label(it))
                 .set_can_close(can_close);
     }
-}
-
-void Editor::rename_workspace_view(const UUID &uu)
-{
-    if (!m_workspace_views.contains(uu))
-        return;
-
-    auto win = new RenameWindow("Rename workspace view");
-    win->set_text(m_workspace_views.at(uu).m_name);
-    win->set_transient_for(m_win);
-    win->set_modal(true);
-    win->present();
-    win->signal_changed().connect([this, win, uu] {
-        auto txt = win->get_text();
-        m_workspace_views.at(uu).m_name = txt;
-        update_workspace_view_names();
-    });
 }
 
 void Editor::auto_close_workspace_views()
@@ -166,9 +137,6 @@ void Editor::update_workspace_view_names()
         auto &new_label = *Gtk::make_managed<Dune3DAppWindow::WorkspaceTabLabel>(name);
         const auto page_uuid = it.m_uuid;
         new_label.signal_close().connect([this, page_uuid] { close_workspace_view(page_uuid); });
-        new_label.signal_rename().connect([this, page_uuid] { rename_workspace_view(page_uuid); });
-        new_label.signal_duplicate().connect(
-                [this, page_uuid] { set_current_workspace_view(duplicate_workspace_view(page_uuid)); });
         m_win.get_workspace_notebook().set_tab_label(it, new_label);
     }
     update_can_close_workspace_view_pages();
