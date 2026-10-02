@@ -31,6 +31,7 @@
 #include "tools/tool_convert_mesh_to_body.hpp"
 #include "tools/tool_constrain_diameter_radius.hpp"
 #include "tools/tool_select_edges.hpp"
+#include "tools/tool_select_faces.hpp"
 #include "tools/tool_constrain_perpendicular.hpp"
 #include "tools/tool_set_workplane.hpp"
 #include "tools/tool_rotate.hpp"
@@ -208,6 +209,9 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
 
     case ToolID::SELECT_EDGES:
         return std::make_unique<ToolSelectEdges>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SELECT_FACES:
+        return std::make_unique<ToolSelectFaces>(tool_id, *this, m_intf, flags);
 
     case ToolID::CONSTRAIN_PERPENDICULAR:
     case ToolID::CONSTRAIN_PERPENDICULAR_3D:

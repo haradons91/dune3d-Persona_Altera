@@ -55,7 +55,8 @@ namespace dune3d {
 
 class Triangulator {
 public:
-    Triangulator(const TopoDS_Shape &shape, const Color &color, face::Faces &faces);
+    Triangulator(const TopoDS_Shape &shape, const Color &color, face::Faces &faces,
+                std::vector<TopoDS_Face> *face_shapes = nullptr);
 
 
 private:
@@ -67,9 +68,12 @@ private:
 
     face::Faces &m_faces;
     face::Color m_color;
+    std::vector<TopoDS_Face> *m_face_shapes;
 };
 
-Triangulator::Triangulator(const TopoDS_Shape &shape, const Color &color, face::Faces &faces) : m_faces(faces)
+Triangulator::Triangulator(const TopoDS_Shape &shape, const Color &color, face::Faces &faces,
+                          std::vector<TopoDS_Face> *face_shapes)
+    : m_faces(faces), m_face_shapes(face_shapes)
 {
     m_color.r = color.r;
     m_color.b = color.b;
@@ -125,6 +129,8 @@ bool Triangulator::processFace(const TopoDS_Face &face, const glm::dmat4 &mat_in
 
     m_faces.emplace_back();
     auto &face_out = m_faces.back();
+    if (m_face_shapes)
+        m_face_shapes->push_back(face);
     face_out.color = m_color;
     face_out.vertices.reserve(triangulation->NbNodes());
 
@@ -282,7 +288,8 @@ bool Triangulator::processNode(const TopoDS_Shape &shape)
 void SolidModelOcc::triangulate()
 {
     m_faces.clear();
-    Triangulator tri{m_shape_acc, m_color, m_faces};
+    m_face_shapes.clear();
+    Triangulator tri{m_shape_acc, m_color, m_faces, &m_face_shapes};
 }
 
 void SolidModelOcc::triangulate_shape(const TopoDS_Shape &shape, const Color &color, face::Faces &faces)

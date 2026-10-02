@@ -58,6 +58,7 @@ enum class GroupType {
     CONVERT_MESH,
     SIMPLIFY,
     SCALE,
+    REMOVE,
 };
 
 class Group {

@@ -15,6 +15,7 @@
 #include "group_editor_exploded_cluster.hpp"
 #include "group_editor_convert_mesh.hpp"
 #include "group_editor_scale.hpp"
+#include "group_editor_remove.hpp"
 #include "core/core.hpp"
 
 namespace dune3d {
@@ -74,6 +75,8 @@ GroupEditor *GroupEditor::create(Core &core, const UUID &group_uu)
         return Gtk::make_managed<GroupEditorConvertMesh>(core, group_uu);
     case Group::Type::SCALE:
         return Gtk::make_managed<GroupEditorScale>(core, group_uu);
+    case Group::Type::REMOVE:
+        return Gtk::make_managed<GroupEditorRemove>(core, group_uu);
     default:
         return Gtk::make_managed<GroupEditor>(core, group_uu);
     }

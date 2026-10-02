@@ -26,4 +26,6 @@ class GroupOccurrence;
 class GroupConvertMesh;
 class GroupSimplify;
 class GroupScale;
+class GroupFaceOperation;
+class GroupRemove;
 } // namespace dune3d

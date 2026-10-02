@@ -22,3 +22,5 @@
 #include "group_convert_mesh.hpp"
 #include "group_simplify.hpp"
 #include "group_scale.hpp"
+#include "group_face_operation.hpp"
+#include "group_remove.hpp"

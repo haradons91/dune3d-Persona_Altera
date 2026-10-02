@@ -23,6 +23,7 @@ enum class InToolActionID {
     TOGGLE_BEZIER,
 
     CLEAR_EDGES,
+    CLEAR_FACES,
 
     CLEAR_SPINE_ENTITIES,
 
