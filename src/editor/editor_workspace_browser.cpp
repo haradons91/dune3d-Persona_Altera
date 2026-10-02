@@ -23,6 +23,7 @@
 #include "document/group/igroup_solid_model.hpp"
 #include "widgets/select_groups_dialog.hpp"
 #include "group_editor/group_editor_reference.hpp"
+#include <algorithm>
 #include "core/tool_data_create_circular_sweep_group.hpp"
 #include "core/tool_data_convert_mesh_to_body.hpp"
 #include "util/glm_util.hpp"
@@ -150,6 +151,8 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
             sigc::mem_fun(*this, &Editor::on_workspace_browser_new_component));
     m_workspace_browser->signal_document_settings_activated().connect(
             sigc::mem_fun(*this, &Editor::on_document_settings_activated));
+    m_workspace_browser->signal_named_views_activated().connect(
+            sigc::mem_fun(*this, &Editor::on_named_views_activated));
     m_workspace_browser->signal_new_component_from_body().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_new_component_from_body));
     m_workspace_browser->signal_new_instance().connect(
@@ -1149,6 +1152,125 @@ void Editor::on_document_settings_activated(const UUID &uu_doc)
     editor->set_row_spacing(5);
     editor->set_column_spacing(10);
     win->set_child(*editor);
+    win->signal_hide().connect([win] { delete win; });
+    win->present();
+}
+
+void Editor::on_named_views_activated(const UUID &uu_doc)
+{
+    if (m_core.tool_is_active())
+        return;
+    // Same current-document-only switch as on_document_settings_activated()
+    // above, for the same reason -- Named Views lives on the reference
+    // group too (GroupReference::m_named_views), which must never become
+    // the current *group*.
+    m_core.set_current_document(uu_doc);
+
+    auto win = new Gtk::Window();
+    win->set_title("Named Views");
+    win->set_transient_for(m_win);
+    win->set_modal(true);
+    win->set_hide_on_close(true);
+    win->set_default_size(280, 320);
+
+    auto vbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 5);
+    vbox->set_margin(10);
+
+    auto scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
+    scrolled->set_vexpand(true);
+    auto listbox = Gtk::make_managed<Gtk::ListBox>();
+    listbox->set_selection_mode(Gtk::SelectionMode::NONE);
+    scrolled->set_child(*listbox);
+    vbox->append(*scrolled);
+
+    auto empty_label = Gtk::make_managed<Gtk::Label>("No named views yet");
+    empty_label->add_css_class("dim-label");
+    empty_label->set_margin(10);
+    vbox->append(*empty_label);
+
+    auto save_button = Gtk::make_managed<Gtk::Button>("Save Current View…");
+    vbox->append(*save_button);
+    win->set_child(*vbox);
+
+    // Rebuilding the whole list on every change (rather than patching it in
+    // place) matches update_workspace_view_names()'s own reasoning for its
+    // tab labels: this is a rarely-changed, short list, not a hot path, and
+    // it keeps add/delete trivially correct instead of needing careful
+    // incremental sync with GroupReference::m_named_views.
+    auto refresh = std::make_shared<std::function<void()>>();
+    *refresh = [this, uu_doc, listbox, empty_label, refresh] {
+        while (auto child = listbox->get_first_child())
+            listbox->remove(*child);
+        auto &doc = m_core.get_idocument_info(uu_doc).get_document();
+        const auto &views = doc.get_reference_group().m_named_views;
+        empty_label->set_visible(views.empty());
+        for (const auto &view : views) {
+            auto row_box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 5);
+            row_box->set_margin(3);
+            auto label = Gtk::make_managed<Gtk::Label>(view.name);
+            label->set_hexpand(true);
+            label->set_xalign(0.0f);
+            row_box->append(*label);
+
+            const auto view_uuid = view.uuid;
+            auto go_button = Gtk::make_managed<Gtk::Button>("Go");
+            go_button->signal_clicked().connect([this, uu_doc, view_uuid] {
+                m_core.set_current_document(uu_doc);
+                const auto &views2 = m_core.get_current_document().get_reference_group().m_named_views;
+                auto it = std::find_if(views2.begin(), views2.end(),
+                                       [view_uuid](const auto &v) { return v.uuid == view_uuid; });
+                if (it == views2.end())
+                    return;
+                auto &ca = get_canvas();
+                ca.set_cam_distance(it->cam_distance, Canvas::ZoomCenter::CURSOR);
+                ca.set_cam_quat(it->cam_quat);
+                ca.set_center(it->center);
+                set_perspective_projection(it->projection == CanvasProjection::PERSP);
+            });
+            row_box->append(*go_button);
+
+            auto delete_button = Gtk::make_managed<Gtk::Button>();
+            delete_button->set_image_from_icon_name("edit-delete-symbolic");
+            delete_button->set_has_frame(false);
+            delete_button->signal_clicked().connect([this, uu_doc, view_uuid, refresh] {
+                auto &doc2 = m_core.get_idocument_info(uu_doc).get_document();
+                auto &views2 = doc2.get_reference_group().m_named_views;
+                std::erase_if(views2, [view_uuid](const auto &v) { return v.uuid == view_uuid; });
+                m_core.set_needs_save();
+                (*refresh)();
+            });
+            row_box->append(*delete_button);
+
+            listbox->append(*row_box);
+        }
+    };
+    (*refresh)();
+
+    save_button->signal_clicked().connect([this, uu_doc, win, refresh] {
+        auto name_win = new RenameWindow("Name this view");
+        name_win->set_transient_for(*win);
+        name_win->set_modal(true);
+        name_win->signal_changed().connect([this, uu_doc, name_win, refresh] {
+            auto text = name_win->get_text();
+            if (!text.empty()) {
+                m_core.set_current_document(uu_doc);
+                auto &ca = get_canvas();
+                NamedView view;
+                view.uuid = UUID::random();
+                view.name = text;
+                view.center = ca.get_center();
+                view.cam_distance = ca.get_cam_distance();
+                view.cam_quat = ca.get_cam_quat();
+                view.projection = ca.get_projection();
+                m_core.get_current_document().get_reference_group().m_named_views.push_back(view);
+                m_core.set_needs_save();
+                (*refresh)();
+            }
+            name_win->close();
+        });
+        name_win->present();
+    });
+
     win->signal_hide().connect([win] { delete win; });
     win->present();
 }

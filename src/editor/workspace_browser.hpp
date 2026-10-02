@@ -79,6 +79,14 @@ public:
         return m_signal_document_settings_activated;
     }
 
+    // "Named Views" tree row clicked -- same synthetic-folder situation as
+    // Document Settings above, and the same reason it carries just the
+    // document UUID.
+    type_signal_new_component signal_named_views_activated()
+    {
+        return m_signal_named_views_activated;
+    }
+
     // Right-click on a plain (non-occurrence) body row: extract it into a
     // new Component, same as ToolCreateComponent.
     type_signal_group_selected signal_new_component_from_body()
@@ -261,6 +269,7 @@ private:
     type_signal_group_selected m_signal_export_body_step;
     type_signal_new_component m_signal_new_component;
     type_signal_new_component m_signal_document_settings_activated;
+    type_signal_new_component m_signal_named_views_activated;
     type_signal_group_selected m_signal_new_component_from_body;
     type_signal_group_selected m_signal_new_instance;
     type_signal_convert_mesh_to_body m_signal_convert_mesh_to_body;

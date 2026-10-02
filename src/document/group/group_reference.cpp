@@ -2,9 +2,35 @@
 #include "nlohmann/json.hpp"
 #include "util/util.hpp"
 #include "util/glm_util.hpp"
+#include "util/json_util.hpp"
 #include "document/document.hpp"
 
 namespace dune3d {
+
+NLOHMANN_JSON_SERIALIZE_ENUM(CanvasProjection, {
+                                                       {CanvasProjection::ORTHO, "ortho"},
+                                                       {CanvasProjection::PERSP, "persp"},
+                                               })
+
+json NamedView::serialize() const
+{
+    json j;
+    j["uuid"] = uuid;
+    j["name"] = name;
+    j["center"] = center;
+    j["cam_distance"] = cam_distance;
+    j["projection"] = projection;
+    j["cam_quat"] = cam_quat;
+    return j;
+}
+
+NamedView::NamedView(const json &j)
+    : uuid(j.at("uuid").get<UUID>()), name(j.at("name").get<std::string>()),
+      center(j.at("center").get<glm::dvec3>()), cam_distance(j.at("cam_distance").get<float>()),
+      projection(j.at("projection").get<CanvasProjection>()), cam_quat(j.at("cam_quat").get<glm::dquat>())
+{
+}
+
 GroupReference::GroupReference(const UUID &uu) : Group(uu)
 {
 }
@@ -16,6 +42,10 @@ GroupReference::GroupReference(const UUID &uu, const json &j)
       m_yz_size(j.value("yz_size", glm::dvec2(EntityWorkplane::s_default_size, EntityWorkplane::s_default_size))),
       m_zx_size(j.value("zx_size", glm::dvec2(EntityWorkplane::s_default_size, EntityWorkplane::s_default_size)))
 {
+    if (j.contains("named_views")) {
+        for (const auto &jv : j.at("named_views"))
+            m_named_views.emplace_back(jv);
+    }
 }
 
 json GroupReference::serialize(const Document &doc) const
@@ -29,6 +59,11 @@ json GroupReference::serialize(const Document &doc) const
     j["xy_size"] = doc.get_entity<EntityWorkplane>(get_workplane_xy_uuid()).m_size;
     j["yz_size"] = doc.get_entity<EntityWorkplane>(get_workplane_yz_uuid()).m_size;
     j["zx_size"] = doc.get_entity<EntityWorkplane>(get_workplane_zx_uuid()).m_size;
+
+    json jviews = json::array();
+    for (const auto &v : m_named_views)
+        jviews.push_back(v.serialize());
+    j["named_views"] = jviews;
     return j;
 }
 
