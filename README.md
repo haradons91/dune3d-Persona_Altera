@@ -101,6 +101,9 @@ Known loose ends in this fork, not yet acted on:
 ### Known incomplete features
 
  - Fix the sketch Mirror implementation.
+ - Fix the default Create menu's Mirror implementation (the plain
+   "Mirror" item, i.e. CREATE_GROUP_MIRROR_HORIZONTAL -- distinct from the
+   sketch Mirror item above).
  - Implement Timeline functionality: the timeline strip exists and lets
    you click a feature to jump to it, but has none of the other things a
    CAD timeline implies (no rollback bar, reordering, or double-click to
