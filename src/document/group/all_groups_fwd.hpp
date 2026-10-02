@@ -24,4 +24,6 @@ class GroupClone;
 class GroupPipe;
 class GroupOccurrence;
 class GroupConvertMesh;
+class GroupSimplify;
+class GroupScale;
 } // namespace dune3d

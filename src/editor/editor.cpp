@@ -1416,9 +1416,10 @@ void Editor::init_header_bar()
         actions->add_action("combine", [this] { trigger_action(ActionID::CREATE_GROUP_SOLID_MODEL_OPERATION); });
         actions->add_action("pattern", [this] { trigger_action(ActionID::CREATE_GROUP_LINEAR_ARRAY); });
         actions->add_action("delete", [this] { trigger_action(ToolID::DELETE); });
-        for (const char *name : {"press_pull", "shell", "draft", "scale", "offset_face", "replace_face",
-                                 "split_face", "split_body", "silhouette_split", "move_copy", "align", "remove",
-                                 "simplify"})
+        actions->add_action("scale", [this] { trigger_action(ActionID::CREATE_GROUP_SCALE); });
+        actions->add_action("simplify", [this] { trigger_action(ActionID::CREATE_GROUP_SIMPLIFY); });
+        for (const char *name : {"press_pull", "shell", "draft", "offset_face", "replace_face", "split_face",
+                                 "split_body", "silhouette_split", "move_copy", "align", "remove"})
             actions->add_action(name, [] {})->set_enabled(false);
         m_win.insert_action_group("ribbon_modify", actions);
         menu->append("Press/Pull", "ribbon_modify.press_pull");

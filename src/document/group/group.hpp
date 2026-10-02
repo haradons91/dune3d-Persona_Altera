@@ -56,6 +56,8 @@ enum class GroupType {
     PIPE,
     OCCURRENCE,
     CONVERT_MESH,
+    SIMPLIFY,
+    SCALE,
 };
 
 class Group {

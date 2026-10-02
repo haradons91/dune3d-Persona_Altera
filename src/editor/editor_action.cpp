@@ -44,6 +44,8 @@ static const std::map<ActionID, Group::Type> create_group_action_map = {
         {ActionID::CREATE_GROUP_SOLID_MODEL_OPERATION, Group::Type::SOLID_MODEL_OPERATION},
         {ActionID::CREATE_GROUP_CLONE, Group::Type::CLONE},
         {ActionID::CREATE_GROUP_PIPE, Group::Type::PIPE},
+        {ActionID::CREATE_GROUP_SIMPLIFY, Group::Type::SIMPLIFY},
+        {ActionID::CREATE_GROUP_SCALE, Group::Type::SCALE},
 };
 
 static const std::map<ActionID, Document::MoveGroup> move_group_action_map = {

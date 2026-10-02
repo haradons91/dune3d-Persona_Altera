@@ -20,3 +20,5 @@
 #include "group_pipe.hpp"
 #include "group_occurrence.hpp"
 #include "group_convert_mesh.hpp"
+#include "group_simplify.hpp"
+#include "group_scale.hpp"
