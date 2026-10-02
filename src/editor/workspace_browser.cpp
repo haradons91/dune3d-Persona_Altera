@@ -135,6 +135,16 @@ public:
     // m_group_store when set, same convention as m_occurrence_children.
     Glib::RefPtr<Gio::ListModel> m_mesh_children;
 
+    // Set only on the "Document Settings" folder row (a plain
+    // m_is_document_folder row otherwise, like Named Views/Origin): its
+    // fixed "Units"/"Part Design" children, each in turn a plain
+    // m_is_document_folder leaf row (clean bold label, no checkbox/body
+    // chrome -- see WorkspaceRow::bind()) -- same
+    // returned-from-create_model()-instead-of-m_group_store convention as
+    // m_mesh_children/m_occurrence_children above.
+    bool m_is_settings_folder = false;
+    Glib::RefPtr<Gio::ListModel> m_settings_children;
+
     // No idea why the ObjectBase::get_type won't work for us but
     // reintroducing the method and using the name used by gtkmm seems
     // to work.
@@ -496,6 +506,18 @@ void WorkspaceBrowser::update_documents(const std::map<UUID, DocumentView> &doc_
                 folder->m_is_origin_folder = true;
                 folder->m_check_active = doci->get_document().get_reference_group().m_show_origin;
                 folder->m_check_sensitive = true;
+            }
+            else if (std::string_view(name) == "Document Settings") {
+                folder->m_is_settings_folder = true;
+                auto settings_children = Gio::ListStore<BodyItem>::create();
+                for (const auto *child_name : {"Units", "Part Design"}) {
+                    auto child = BodyItem::create();
+                    child->m_doc = mi->m_uuid;
+                    child->m_name = child_name;
+                    child->m_is_document_folder = true;
+                    settings_children->append(child);
+                }
+                folder->m_settings_children = settings_children;
             }
             mi->m_body_store->append(folder);
         }
@@ -1478,12 +1500,8 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
                 m_signal_group_selected.emit(gr->m_doc, gr->m_uuid);
         }
         else if (auto body = std::dynamic_pointer_cast<WorkspaceBrowser::BodyItem>(tr->get_item())) {
-            if (body->m_is_document_folder && !body->m_is_origin_folder) {
-                if (body->m_name == "Document Settings")
-                    m_signal_document_settings_activated.emit(body->m_doc);
-                else if (body->m_name == "Named Views")
-                    m_signal_named_views_activated.emit(body->m_doc);
-            }
+            if (body->m_is_document_folder && body->m_name == "Named Views")
+                m_signal_named_views_activated.emit(body->m_doc);
         }
     });
     m_view->add_css_class("navigation-sidebar");
@@ -1652,6 +1670,8 @@ Glib::RefPtr<Gio::ListModel> WorkspaceBrowser::create_model(const Glib::RefPtr<G
             return col->m_occurrence_children;
         if (col->m_is_mesh_folder)
             return col->m_mesh_children;
+        if (col->m_is_settings_folder)
+            return col->m_settings_children;
         // A mesh row has no "Body1"/feature children (see
         // populate_body_store()) -- an empty-but-non-null ListStore still
         // makes GTK show a (permanently unusable) disclosure arrow, so

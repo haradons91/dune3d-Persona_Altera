@@ -22,7 +22,6 @@
 #include "document/solid_model/solid_model.hpp"
 #include "document/group/igroup_solid_model.hpp"
 #include "widgets/select_groups_dialog.hpp"
-#include "group_editor/group_editor_reference.hpp"
 #include <algorithm>
 #include "core/tool_data_create_circular_sweep_group.hpp"
 #include "core/tool_data_convert_mesh_to_body.hpp"
@@ -149,8 +148,6 @@ void Editor::connect_workspace_browser(WorkspaceBrowser &browser)
             sigc::mem_fun(*this, &Editor::on_workspace_browser_export_body_step));
     m_workspace_browser->signal_new_component().connect(
             sigc::mem_fun(*this, &Editor::on_workspace_browser_new_component));
-    m_workspace_browser->signal_document_settings_activated().connect(
-            sigc::mem_fun(*this, &Editor::on_document_settings_activated));
     m_workspace_browser->signal_named_views_activated().connect(
             sigc::mem_fun(*this, &Editor::on_named_views_activated));
     m_workspace_browser->signal_new_component_from_body().connect(
@@ -1128,42 +1125,14 @@ void Editor::on_workspace_browser_new_component(const UUID &uu_doc)
     trigger_action(ToolID::NEW_COMPONENT);
 }
 
-void Editor::on_document_settings_activated(const UUID &uu_doc)
-{
-    if (m_core.tool_is_active())
-        return;
-    // GroupEditorReference reads/writes through m_core.get_current_document(),
-    // not a document passed in directly, so make uu_doc current first --
-    // same as every other workspace-browser row activation does. Unlike
-    // those, this deliberately never touches the current *group*: the
-    // reference group can't safely become one (see the comment on
-    // signal_document_settings_activated()).
-    m_core.set_current_document(uu_doc);
-    auto &doc = m_core.get_current_document();
-    const auto ref_uu = doc.get_reference_group().m_uuid;
-
-    auto win = new Gtk::Window();
-    win->set_title("Document Settings");
-    win->set_transient_for(m_win);
-    win->set_modal(true);
-    win->set_hide_on_close(true);
-    auto editor = Gtk::make_managed<GroupEditorReference>(m_core, ref_uu);
-    editor->set_margin(10);
-    editor->set_row_spacing(5);
-    editor->set_column_spacing(10);
-    win->set_child(*editor);
-    win->signal_hide().connect([win] { delete win; });
-    win->present();
-}
-
 void Editor::on_named_views_activated(const UUID &uu_doc)
 {
     if (m_core.tool_is_active())
         return;
-    // Same current-document-only switch as on_document_settings_activated()
-    // above, for the same reason -- Named Views lives on the reference
-    // group too (GroupReference::m_named_views), which must never become
-    // the current *group*.
+    // GroupReference::m_named_views lives on the document's reference
+    // group, which must never become the current *group* (see
+    // signal_named_views_activated()), so only the current *document* is
+    // switched here.
     m_core.set_current_document(uu_doc);
 
     auto win = new Gtk::Window();
