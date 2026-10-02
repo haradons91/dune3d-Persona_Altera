@@ -101,14 +101,16 @@ Known loose ends in this fork, not yet acted on:
 ### Known incomplete features
 
  - Fix the sketch Mirror implementation.
- - Implement sketch Text.
- - Implement sketch Pattern.
- - Implement sketch Project/Include.
- - Implement Offset extrude.
- - Implement the Construction ribbon.
- - Implement Timeline functionality.
- - Implement Document Settings, Named Views, and Origin in the tree.
- - Implement the Create menu's remaining items.
+ - Implement Timeline functionality: the timeline strip exists and lets
+   you click a feature to jump to it, but has none of the other things a
+   CAD timeline implies (no rollback bar, reordering, or double-click to
+   edit a feature).
+ - Implement Named Views in the tree (Document Settings and Origin are
+   done -- Document Settings now opens the document's reference-plane
+   visibility switches, and Origin's checkbox already worked).
+ - Implement the Create menu's remaining items: Rib, Web, Hole, Thread,
+   and Emboss are all still placeholders that just re-trigger a plain
+   Extrude instead of doing anything distinct.
 
 ## Questions
 
