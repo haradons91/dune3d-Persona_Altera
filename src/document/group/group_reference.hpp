@@ -2,29 +2,11 @@
 #include "group.hpp"
 #include "igroup_generate.hpp"
 #include "document/entity/entity_workplane.hpp"
-#include "canvas/projection.hpp"
 #include <glm/gtx/quaternion.hpp>
 
 namespace dune3d {
 
 class EntityWorkplane;
-
-// A saved camera position/orientation, named by the user and persisted with
-// the document -- same fields as WorkspaceView's own (unnamed, per-tab,
-// not-saved-standalone) camera state, so restoring one is exactly the same
-// handful of Canvas setters set_current_workspace_view() already uses.
-struct NamedView {
-    UUID uuid;
-    std::string name;
-    glm::dvec3 center = {0, 0, 0};
-    float cam_distance = 100;
-    CanvasProjection projection = CanvasProjection::ORTHO;
-    glm::dquat cam_quat;
-
-    json serialize() const;
-    explicit NamedView(const json &j);
-    NamedView() = default;
-};
 
 class GroupReference : public Group, public IGroupGenerate {
 public:
@@ -48,8 +30,6 @@ public:
     glm::dvec2 m_xy_size = {EntityWorkplane::s_default_size, EntityWorkplane::s_default_size};
     glm::dvec2 m_yz_size = {EntityWorkplane::s_default_size, EntityWorkplane::s_default_size};
     glm::dvec2 m_zx_size = {EntityWorkplane::s_default_size, EntityWorkplane::s_default_size};
-
-    std::vector<NamedView> m_named_views;
 
     UUID get_workplane_xy_uuid() const;
     UUID get_workplane_yz_uuid() const;

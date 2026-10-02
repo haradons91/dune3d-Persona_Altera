@@ -68,20 +68,6 @@ public:
         return m_signal_new_component;
     }
 
-    // "Named Views" tree row clicked -- a synthetic folder, not a real
-    // group (see update_documents()). Carries just the document's UUID;
-    // unlike signal_group_selected() this deliberately never touches the
-    // current *group* (GroupReference -- where m_named_views lives -- can't
-    // safely become the current group: Group::find_body() throws for it,
-    // since nothing earlier in the group order owns a body). "Document
-    // Settings", the other synthetic folder, has no click behavior of its
-    // own -- it's purely a parent for the "Units"/"Part Design" rows under
-    // it (see BodyItem::m_is_settings_folder in workspace_browser.cpp).
-    type_signal_new_component signal_named_views_activated()
-    {
-        return m_signal_named_views_activated;
-    }
-
     // Right-click on a plain (non-occurrence) body row: extract it into a
     // new Component, same as ToolCreateComponent.
     type_signal_group_selected signal_new_component_from_body()
@@ -263,7 +249,6 @@ private:
     type_signal_group_selected m_signal_export_body_stl;
     type_signal_group_selected m_signal_export_body_step;
     type_signal_new_component m_signal_new_component;
-    type_signal_new_component m_signal_named_views_activated;
     type_signal_group_selected m_signal_new_component_from_body;
     type_signal_group_selected m_signal_new_instance;
     type_signal_convert_mesh_to_body m_signal_convert_mesh_to_body;

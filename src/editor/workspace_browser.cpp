@@ -145,6 +145,12 @@ public:
     bool m_is_settings_folder = false;
     Glib::RefPtr<Gio::ListModel> m_settings_children;
 
+    // Set only on the "Named Views" folder row: same idea as
+    // m_is_settings_folder/m_settings_children just above, but for its own
+    // fixed "Top"/"Front"/"Right"/"Home" children.
+    bool m_is_named_views_folder = false;
+    Glib::RefPtr<Gio::ListModel> m_named_views_children;
+
     // No idea why the ObjectBase::get_type won't work for us but
     // reintroducing the method and using the name used by gtkmm seems
     // to work.
@@ -518,6 +524,18 @@ void WorkspaceBrowser::update_documents(const std::map<UUID, DocumentView> &doc_
                     settings_children->append(child);
                 }
                 folder->m_settings_children = settings_children;
+            }
+            else if (std::string_view(name) == "Named Views") {
+                folder->m_is_named_views_folder = true;
+                auto views_children = Gio::ListStore<BodyItem>::create();
+                for (const auto *child_name : {"Top", "Front", "Right", "Home"}) {
+                    auto child = BodyItem::create();
+                    child->m_doc = mi->m_uuid;
+                    child->m_name = child_name;
+                    child->m_is_document_folder = true;
+                    views_children->append(child);
+                }
+                folder->m_named_views_children = views_children;
             }
             mi->m_body_store->append(folder);
         }
@@ -1222,19 +1240,19 @@ public:
             m_bindings.push_back(Glib::Binding::bind_property_value(
                     it.m_name.get_proxy(), m_label->property_label(), Glib::Binding::Flags::SYNC_CREATE));
             // Sketches/Meshes/Origin always force-expanded, same as before --
-            // but "Document Settings" (the only other folder with real
-            // children now, see m_is_settings_folder) should start collapsed
-            // like a normal body/component row, not forced open every bind.
-            // The tree's TreeListModel was created with autoexpand=true,
-            // which auto-expands any row with children regardless of what
-            // bind() does here, so it has to be actively collapsed back --
-            // but calling set_expanded() synchronously from inside bind()
-            // right as autoexpand is populating this row's new children
-            // crashes GTK's list item manager ("code should not be
-            // reached"), confirmed by hitting it directly. Deferring the
-            // collapse to the next idle cycle, after that pass has settled,
-            // avoids it.
-            if (it.m_is_settings_folder) {
+            // but Document Settings/Named Views (the only other folders with
+            // real children now, see m_is_settings_folder/
+            // m_is_named_views_folder) should start collapsed like a normal
+            // body/component row, not forced open every bind. The tree's
+            // TreeListModel was created with autoexpand=true, which
+            // auto-expands any row with children regardless of what bind()
+            // does here, so it has to be actively collapsed back -- but
+            // calling set_expanded() synchronously from inside bind() right
+            // as autoexpand is populating this row's new children crashes
+            // GTK's list item manager ("code should not be reached"),
+            // confirmed by hitting it directly. Deferring the collapse to
+            // the next idle cycle, after that pass has settled, avoids it.
+            if (it.m_is_settings_folder || it.m_is_named_views_folder) {
                 auto row = get_list_row();
                 if (row->get_expanded())
                     Glib::signal_idle().connect_once([row] { row->set_expanded(false); });
@@ -1519,10 +1537,6 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
             if (gr->m_occurrence_path.empty())
                 m_signal_group_selected.emit(gr->m_doc, gr->m_uuid);
         }
-        else if (auto body = std::dynamic_pointer_cast<WorkspaceBrowser::BodyItem>(tr->get_item())) {
-            if (body->m_is_document_folder && body->m_name == "Named Views")
-                m_signal_named_views_activated.emit(body->m_doc);
-        }
     });
     m_view->add_css_class("navigation-sidebar");
     {
@@ -1692,6 +1706,8 @@ Glib::RefPtr<Gio::ListModel> WorkspaceBrowser::create_model(const Glib::RefPtr<G
             return col->m_mesh_children;
         if (col->m_is_settings_folder)
             return col->m_settings_children;
+        if (col->m_is_named_views_folder)
+            return col->m_named_views_children;
         // A mesh row has no "Body1"/feature children (see
         // populate_body_store()) -- an empty-but-non-null ListStore still
         // makes GTK show a (permanently unusable) disclosure arrow, so

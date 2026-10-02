@@ -140,7 +140,6 @@ private:
     void on_workspace_browser_export_body_stl(const UUID &uu_doc, const UUID &uu_group);
     void on_workspace_browser_export_body_step(const UUID &uu_doc, const UUID &uu_group);
     void on_workspace_browser_new_component(const UUID &uu_doc);
-    void on_named_views_activated(const UUID &uu_doc);
     void on_workspace_browser_new_component_from_body(const UUID &uu_doc, const UUID &uu_body);
     void on_workspace_browser_convert_mesh_to_body(const UUID &uu_doc, const UUID &uu_mesh_group,
                                                    int algorithm);
