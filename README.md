@@ -108,6 +108,13 @@ Known loose ends in this fork, not yet acted on:
  - Implement the Create menu's remaining items: Rib, Web, Hole, Thread,
    and Emboss are all still placeholders that just re-trigger a plain
    Extrude instead of doing anything distinct.
+ - Wire up logic behind the tree's Document Settings/Named Views/Origin
+   children: the rows exist (Document Settings -> Units, Part Design;
+   Named Views -> Top, Front, Right, Home; Origin -> 0, x, y, z, xy, xz,
+   yz) but none of them do anything yet. At minimum, Named Views' Top/
+   Front/Right/Home presumably want the same camera change as clicking
+   those faces/the Home icon on the nav cube, and Origin's seven children
+   presumably want their own visibility toggles.
 
 ## Questions
 
