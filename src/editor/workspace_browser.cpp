@@ -1221,7 +1221,27 @@ public:
             }
             m_bindings.push_back(Glib::Binding::bind_property_value(
                     it.m_name.get_proxy(), m_label->property_label(), Glib::Binding::Flags::SYNC_CREATE));
-            get_list_row()->set_expanded(true);
+            // Sketches/Meshes/Origin always force-expanded, same as before --
+            // but "Document Settings" (the only other folder with real
+            // children now, see m_is_settings_folder) should start collapsed
+            // like a normal body/component row, not forced open every bind.
+            // The tree's TreeListModel was created with autoexpand=true,
+            // which auto-expands any row with children regardless of what
+            // bind() does here, so it has to be actively collapsed back --
+            // but calling set_expanded() synchronously from inside bind()
+            // right as autoexpand is populating this row's new children
+            // crashes GTK's list item manager ("code should not be
+            // reached"), confirmed by hitting it directly. Deferring the
+            // collapse to the next idle cycle, after that pass has settled,
+            // avoids it.
+            if (it.m_is_settings_folder) {
+                auto row = get_list_row();
+                if (row->get_expanded())
+                    Glib::signal_idle().connect_once([row] { row->set_expanded(false); });
+            }
+            else {
+                get_list_row()->set_expanded(true);
+            }
             m_browser.unblock_signals();
             return;
         }
