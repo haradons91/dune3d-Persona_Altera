@@ -1477,6 +1477,10 @@ WorkspaceBrowser::WorkspaceBrowser(Core &core, std::optional<UUID> document_uuid
             if (gr->m_occurrence_path.empty())
                 m_signal_group_selected.emit(gr->m_doc, gr->m_uuid);
         }
+        else if (auto body = std::dynamic_pointer_cast<WorkspaceBrowser::BodyItem>(tr->get_item())) {
+            if (body->m_is_document_folder && !body->m_is_origin_folder && body->m_name == "Document Settings")
+                m_signal_document_settings_activated.emit(body->m_doc);
+        }
     });
     m_view->add_css_class("navigation-sidebar");
     {
