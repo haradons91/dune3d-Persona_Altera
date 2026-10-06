@@ -26,3 +26,4 @@
 #include "group_remove.hpp"
 #include "group_shell.hpp"
 #include "group_offset_face.hpp"
+#include "group_draft.hpp"
