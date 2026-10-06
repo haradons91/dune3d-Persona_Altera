@@ -33,3 +33,4 @@
 #include "group_split_body.hpp"
 #include "group_split_body_result.hpp"
 #include "group_split_face.hpp"
+#include "group_replace_face.hpp"

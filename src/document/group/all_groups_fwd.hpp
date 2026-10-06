@@ -37,4 +37,5 @@ class GroupAlign;
 class GroupSplitBody;
 class GroupSplitBodyResult;
 class GroupSplitFace;
+class GroupReplaceFace;
 } // namespace dune3d

@@ -96,6 +96,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Group::Type, {
                                                   {Group::Type::SPLIT_BODY, "split_body"},
                                                   {Group::Type::SPLIT_BODY_RESULT, "split_body_result"},
                                                   {Group::Type::SPLIT_FACE, "split_face"},
+                                                  {Group::Type::REPLACE_FACE, "replace_face"},
                                           })
 
 json Group::serialize() const
@@ -178,6 +179,8 @@ std::string Group::get_type_name(Type type)
         return "Split Body Result";
     case Type::SPLIT_FACE:
         return "Split Face";
+    case Type::REPLACE_FACE:
+        return "Replace Face";
     default:
         return "Group";
     }
@@ -258,6 +261,8 @@ std::unique_ptr<Group> Group::new_from_json(const UUID &uu, const json &j)
         return std::make_unique<GroupSplitBodyResult>(uu, j);
     case Type::SPLIT_FACE:
         return std::make_unique<GroupSplitFace>(uu, j);
+    case Type::REPLACE_FACE:
+        return std::make_unique<GroupReplaceFace>(uu, j);
     case Type::INVALID:
         throw std::runtime_error("unknown group type " + j.at("type").get<std::string>());
     }

@@ -25,6 +25,7 @@
 #include "group_editor_split_body.hpp"
 #include "group_editor_split_body_result.hpp"
 #include "group_editor_split_face.hpp"
+#include "group_editor_replace_face.hpp"
 #include "core/core.hpp"
 
 namespace dune3d {
@@ -104,6 +105,8 @@ GroupEditor *GroupEditor::create(Core &core, const UUID &group_uu)
         return Gtk::make_managed<GroupEditorSplitBodyResult>(core, group_uu);
     case Group::Type::SPLIT_FACE:
         return Gtk::make_managed<GroupEditorSplitFace>(core, group_uu);
+    case Group::Type::REPLACE_FACE:
+        return Gtk::make_managed<GroupEditorReplaceFace>(core, group_uu);
     default:
         return Gtk::make_managed<GroupEditor>(core, group_uu);
     }

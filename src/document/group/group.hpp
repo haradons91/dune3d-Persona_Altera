@@ -68,6 +68,7 @@ enum class GroupType {
     SPLIT_BODY,
     SPLIT_BODY_RESULT,
     SPLIT_FACE,
+    REPLACE_FACE,
 };
 
 class Group {

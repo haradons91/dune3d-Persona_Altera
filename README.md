@@ -85,14 +85,15 @@ Known loose ends in this fork, not yet acted on:
  - **Unimplemented items in the ribbon's "Modify" dropdown**: these are
    present in the menu (so it shows its intended full shape) but wired up
    as permanently disabled placeholders, not real features yet:
-   Replace Face, Silhouette Split. (Scale, Simplify, Remove,
+   Silhouette Split. (Scale, Simplify, Remove,
    Shell, Offset Face, Draft, Move/Copy, Press/Pull, Align, Split Face,
-   and Split Body are implemented --
-   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace/GroupDraft/GroupMoveCopy/GroupPressPull/GroupAlign/GroupSplitFace/GroupSplitBody
-   -- though Move/Copy's "Copy" checkbox isn't wired up yet: it reports an
-   explicit error instead of silently just moving, since duplicating a
-   body into a separate new body needs document/body-management work
-   this pass didn't touch. Press/Pull is mechanically identical to
+   Split Body, and Replace Face are implemented --
+   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace/GroupDraft/GroupMoveCopy/GroupPressPull/GroupAlign/GroupSplitFace/GroupSplitBody/GroupReplaceFace
+   -- though Move/Copy's "Copy" checkbox still isn't wired up: it reports
+   an explicit error instead of silently just moving. The document/body-
+   management plumbing it would need now exists (see Split Body below),
+   but nothing's hooked it up to Move/Copy's checkbox yet. Press/Pull is
+   mechanically identical to
    Offset Face -- same BRepOffset_MakeOffset/SetOffsetOnFace operation,
    exposed under both ribbon entry points. Align aligns a single
    selected planar face to a fixed global XY target plane rather than
@@ -108,7 +109,14 @@ Known loose ends in this fork, not yet acted on:
    src/document/group/group_split_body.hpp for how `Group::m_body` makes
    this work with no changes needed to body derivation, the workspace
    tree, or the renderer, all of which already treated multiple bodies
-   per document as a first-class case before this.)
+   per document as a first-class case before this. Replace Face picks
+   its reference plane by clicking an existing EntityWorkplane in the
+   3D view (ToolSetReplaceFacePlane, mirroring ToolSetWorkplane) rather
+   than a fixed numeric plane or a picked group -- and only supports
+   trimming material away, not adding it past the selected face's
+   current position, since that would need a bounded extrusion+fuse
+   instead of a half-space boolean; it reports an explicit error for the
+   unsupported "grow" direction rather than silently no-opping.)
  - **Same pattern in the "Insert" dropdown**: items like "Insert SVG" and
    "Insert Derive" exist in the menu as disabled placeholders too.
  - **CI still doesn't build against OCCT 8.0.1**: this project now

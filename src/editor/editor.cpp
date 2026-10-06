@@ -1427,7 +1427,8 @@ void Editor::init_header_bar()
         actions->add_action("align", [this] { trigger_action(ActionID::CREATE_GROUP_ALIGN); });
         actions->add_action("split_face", [this] { trigger_action(ActionID::CREATE_GROUP_SPLIT_FACE); });
         actions->add_action("split_body", [this] { trigger_action(ActionID::CREATE_GROUP_SPLIT_BODY); });
-        for (const char *name : {"replace_face", "silhouette_split"})
+        actions->add_action("replace_face", [this] { trigger_action(ActionID::CREATE_GROUP_REPLACE_FACE); });
+        for (const char *name : {"silhouette_split"})
             actions->add_action(name, [] {})->set_enabled(false);
         m_win.insert_action_group("ribbon_modify", actions);
         menu->append("Press/Pull", "ribbon_modify.press_pull");
