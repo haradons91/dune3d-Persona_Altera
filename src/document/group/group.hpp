@@ -63,6 +63,7 @@ enum class GroupType {
     OFFSET_FACE,
     DRAFT,
     MOVE_COPY,
+    PRESS_PULL,
 };
 
 class Group {
