@@ -87,6 +87,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Group::Type, {
                                                   {Group::Type::SIMPLIFY, "simplify"},
                                                   {Group::Type::SCALE, "scale"},
                                                   {Group::Type::REMOVE, "remove"},
+                                                  {Group::Type::SHELL, "shell"},
                                           })
 
 json Group::serialize() const
@@ -151,6 +152,8 @@ std::string Group::get_type_name(Type type)
         return "Scale";
     case Type::REMOVE:
         return "Remove";
+    case Type::SHELL:
+        return "Shell";
     default:
         return "Group";
     }
@@ -213,6 +216,8 @@ std::unique_ptr<Group> Group::new_from_json(const UUID &uu, const json &j)
         return std::make_unique<GroupScale>(uu, j);
     case Type::REMOVE:
         return std::make_unique<GroupRemove>(uu, j);
+    case Type::SHELL:
+        return std::make_unique<GroupShell>(uu, j);
     case Type::INVALID:
         throw std::runtime_error("unknown group type " + j.at("type").get<std::string>());
     }

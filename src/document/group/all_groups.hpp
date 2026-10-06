@@ -24,3 +24,4 @@
 #include "group_scale.hpp"
 #include "group_face_operation.hpp"
 #include "group_remove.hpp"
+#include "group_shell.hpp"

@@ -59,6 +59,7 @@ enum class GroupType {
     SIMPLIFY,
     SCALE,
     REMOVE,
+    SHELL,
 };
 
 class Group {
