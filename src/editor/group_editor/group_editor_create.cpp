@@ -22,6 +22,9 @@
 #include "group_editor_move_copy.hpp"
 #include "group_editor_press_pull.hpp"
 #include "group_editor_align.hpp"
+#include "group_editor_split_body.hpp"
+#include "group_editor_split_body_result.hpp"
+#include "group_editor_split_face.hpp"
 #include "core/core.hpp"
 
 namespace dune3d {
@@ -95,6 +98,12 @@ GroupEditor *GroupEditor::create(Core &core, const UUID &group_uu)
         return Gtk::make_managed<GroupEditorPressPull>(core, group_uu);
     case Group::Type::ALIGN:
         return Gtk::make_managed<GroupEditorAlign>(core, group_uu);
+    case Group::Type::SPLIT_BODY:
+        return Gtk::make_managed<GroupEditorSplitBody>(core, group_uu);
+    case Group::Type::SPLIT_BODY_RESULT:
+        return Gtk::make_managed<GroupEditorSplitBodyResult>(core, group_uu);
+    case Group::Type::SPLIT_FACE:
+        return Gtk::make_managed<GroupEditorSplitFace>(core, group_uu);
     default:
         return Gtk::make_managed<GroupEditor>(core, group_uu);
     }

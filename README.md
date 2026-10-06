@@ -85,11 +85,10 @@ Known loose ends in this fork, not yet acted on:
  - **Unimplemented items in the ribbon's "Modify" dropdown**: these are
    present in the menu (so it shows its intended full shape) but wired up
    as permanently disabled placeholders, not real features yet:
-   Replace Face, Split Face,
-   Split Body, Silhouette Split. (Scale, Simplify, Remove,
-   Shell, Offset Face, Draft, Move/Copy, Press/Pull, and Align are
-   implemented --
-   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace/GroupDraft/GroupMoveCopy/GroupPressPull/GroupAlign
+   Replace Face, Silhouette Split. (Scale, Simplify, Remove,
+   Shell, Offset Face, Draft, Move/Copy, Press/Pull, Align, Split Face,
+   and Split Body are implemented --
+   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace/GroupDraft/GroupMoveCopy/GroupPressPull/GroupAlign/GroupSplitFace/GroupSplitBody
    -- though Move/Copy's "Copy" checkbox isn't wired up yet: it reports an
    explicit error instead of silently just moving, since duplicating a
    body into a separate new body needs document/body-management work
@@ -98,7 +97,18 @@ Known loose ends in this fork, not yet acted on:
    exposed under both ribbon entry points. Align aligns a single
    selected planar face to a fixed global XY target plane rather than
    to a second user-picked body/face, matching the fixed-origin
-   convention Scale/Draft already use.)
+   convention Scale/Draft already use. Split Face/Split Body both cut
+   along a user-edited plane (point + normal) rather than a picked
+   reference entity -- same fixed-parameter convention, see
+   GroupSolidModelOperation's GroupButton/SelectGroupDialog pattern for
+   how a future pass could let the cutting tool be picked instead.
+   **Split Body is this fork's first group type that creates a second,
+   genuinely separate body** (GroupSplitBodyResult, paired with
+   GroupSplitBody and always created together) -- see
+   src/document/group/group_split_body.hpp for how `Group::m_body` makes
+   this work with no changes needed to body derivation, the workspace
+   tree, or the renderer, all of which already treated multiple bodies
+   per document as a first-class case before this.)
  - **Same pattern in the "Insert" dropdown**: items like "Insert SVG" and
    "Insert Derive" exist in the menu as disabled placeholders too.
  - **CI still doesn't build against OCCT 8.0.1**: this project now

@@ -53,6 +53,8 @@ static const std::map<ActionID, Group::Type> create_group_action_map = {
         {ActionID::CREATE_GROUP_MOVE_COPY, Group::Type::MOVE_COPY},
         {ActionID::CREATE_GROUP_PRESS_PULL, Group::Type::PRESS_PULL},
         {ActionID::CREATE_GROUP_ALIGN, Group::Type::ALIGN},
+        {ActionID::CREATE_GROUP_SPLIT_BODY, Group::Type::SPLIT_BODY},
+        {ActionID::CREATE_GROUP_SPLIT_FACE, Group::Type::SPLIT_FACE},
 };
 
 static const std::map<ActionID, Document::MoveGroup> move_group_action_map = {

@@ -510,13 +510,13 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
     }
     else if (any_of(group_type, Group::Type::SIMPLIFY, Group::Type::SCALE, Group::Type::REMOVE, Group::Type::SHELL,
                      Group::Type::OFFSET_FACE, Group::Type::DRAFT, Group::Type::MOVE_COPY, Group::Type::PRESS_PULL,
-                     Group::Type::ALIGN)) {
+                     Group::Type::ALIGN, Group::Type::SPLIT_FACE)) {
         // Same precondition as Fillet/Chamfer above: these only ever modify
         // whatever solid model already exists on this body. Simplify/Scale/
         // Move-Copy have no selection of their own to populate;
-        // Remove/Shell/Offset Face/Draft/Press-Pull/Align are created empty
-        // just like Fillet/Chamfer, with faces picked afterward via their
-        // own group editor's "Select faces..." button.
+        // Remove/Shell/Offset Face/Draft/Press-Pull/Align/Split-Face are
+        // created empty just like Fillet/Chamfer, with faces picked
+        // afterward via their own group editor's "Select faces..." button.
         auto solid_model = SolidModel::get_last_solid_model(doc, current_group, SolidModel::IncludeGroup::YES);
         if (!solid_model) {
             m_workspace_browser->show_toast(toast_prefix + "Body has no solid model");
@@ -554,10 +554,36 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
             auto &group = doc.insert_group<GroupPressPull>(UUID::random(), current_group.m_uuid);
             new_group = &group;
         }
-        else {
+        else if (group_type == Group::Type::ALIGN) {
             auto &group = doc.insert_group<GroupAlign>(UUID::random(), current_group.m_uuid);
             new_group = &group;
         }
+        else {
+            auto &group = doc.insert_group<GroupSplitFace>(UUID::random(), current_group.m_uuid);
+            new_group = &group;
+        }
+    }
+    else if (group_type == Group::Type::SPLIT_BODY) {
+        // Split Body is a pair: the primary GroupSplitBody continues the
+        // current body (keeping the +normal side), and a GroupSplitBodyResult
+        // inserted immediately after it owns a brand-new body (keeping the
+        // other side) -- see src/document/group/group_split_body.hpp. No
+        // other group type creates a second body like this; see the
+        // "Split Body" plan for why the pairing happens here rather than
+        // inside either group's own update_solid_model().
+        auto solid_model = SolidModel::get_last_solid_model(doc, current_group, SolidModel::IncludeGroup::YES);
+        if (!solid_model) {
+            m_workspace_browser->show_toast(toast_prefix + "Body has no solid model");
+            return;
+        }
+        auto &split_group = doc.insert_group<GroupSplitBody>(UUID::random(), current_group.m_uuid);
+        auto &result_group = doc.insert_group<GroupSplitBodyResult>(UUID::random(), split_group.m_uuid);
+        result_group.m_body.emplace();
+        result_group.m_body->m_name = "Split Result";
+        result_group.m_source_group = split_group.m_uuid;
+        split_group.m_result_group = result_group.m_uuid;
+        result_group.m_name = doc.find_next_group_name(Group::Type::SPLIT_BODY_RESULT);
+        new_group = &split_group;
     }
     if (new_group && group_type == Group::Type::EXTRUDE) {
         m_extrude_editing = true;

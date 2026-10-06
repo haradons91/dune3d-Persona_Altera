@@ -34,4 +34,7 @@ class GroupDraft;
 class GroupMoveCopy;
 class GroupPressPull;
 class GroupAlign;
+class GroupSplitBody;
+class GroupSplitBodyResult;
+class GroupSplitFace;
 } // namespace dune3d
