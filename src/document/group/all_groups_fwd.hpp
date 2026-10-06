@@ -31,4 +31,5 @@ class GroupRemove;
 class GroupShell;
 class GroupOffsetFace;
 class GroupDraft;
+class GroupMoveCopy;
 } // namespace dune3d

@@ -1422,8 +1422,9 @@ void Editor::init_header_bar()
         actions->add_action("shell", [this] { trigger_action(ActionID::CREATE_GROUP_SHELL); });
         actions->add_action("offset_face", [this] { trigger_action(ActionID::CREATE_GROUP_OFFSET_FACE); });
         actions->add_action("draft", [this] { trigger_action(ActionID::CREATE_GROUP_DRAFT); });
-        for (const char *name : {"press_pull", "replace_face", "split_face", "split_body",
-                                 "silhouette_split", "move_copy", "align"})
+        actions->add_action("move_copy", [this] { trigger_action(ActionID::CREATE_GROUP_MOVE_COPY); });
+        for (const char *name : {"press_pull", "replace_face", "split_face", "split_body", "silhouette_split",
+                                 "align"})
             actions->add_action(name, [] {})->set_enabled(false);
         m_win.insert_action_group("ribbon_modify", actions);
         menu->append("Press/Pull", "ribbon_modify.press_pull");

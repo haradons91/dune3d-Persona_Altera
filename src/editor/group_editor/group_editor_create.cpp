@@ -19,6 +19,7 @@
 #include "group_editor_shell.hpp"
 #include "group_editor_offset_face.hpp"
 #include "group_editor_draft.hpp"
+#include "group_editor_move_copy.hpp"
 #include "core/core.hpp"
 
 namespace dune3d {
@@ -86,6 +87,8 @@ GroupEditor *GroupEditor::create(Core &core, const UUID &group_uu)
         return Gtk::make_managed<GroupEditorOffsetFace>(core, group_uu);
     case Group::Type::DRAFT:
         return Gtk::make_managed<GroupEditorDraft>(core, group_uu);
+    case Group::Type::MOVE_COPY:
+        return Gtk::make_managed<GroupEditorMoveCopy>(core, group_uu);
     default:
         return Gtk::make_managed<GroupEditor>(core, group_uu);
     }

@@ -50,6 +50,7 @@ static const std::map<ActionID, Group::Type> create_group_action_map = {
         {ActionID::CREATE_GROUP_SHELL, Group::Type::SHELL},
         {ActionID::CREATE_GROUP_OFFSET_FACE, Group::Type::OFFSET_FACE},
         {ActionID::CREATE_GROUP_DRAFT, Group::Type::DRAFT},
+        {ActionID::CREATE_GROUP_MOVE_COPY, Group::Type::MOVE_COPY},
 };
 
 static const std::map<ActionID, Document::MoveGroup> move_group_action_map = {

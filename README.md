@@ -86,9 +86,13 @@ Known loose ends in this fork, not yet acted on:
    present in the menu (so it shows its intended full shape) but wired up
    as permanently disabled placeholders, not real features yet:
    Press/Pull, Replace Face, Split Face,
-   Split Body, Silhouette Split, Move/Copy, Align. (Scale, Simplify,
-   Remove, Shell, Offset Face, and Draft are implemented --
-   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace/GroupDraft.)
+   Split Body, Silhouette Split, Align. (Scale, Simplify, Remove,
+   Shell, Offset Face, Draft, and Move/Copy are implemented --
+   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace/GroupDraft/GroupMoveCopy
+   -- though Move/Copy's "Copy" checkbox isn't wired up yet: it reports an
+   explicit error instead of silently just moving, since duplicating a
+   body into a separate new body needs document/body-management work
+   this pass didn't touch.)
  - **Same pattern in the "Insert" dropdown**: items like "Insert SVG" and
    "Insert Derive" exist in the menu as disabled placeholders too.
  - **CI still doesn't build against OCCT 8.0.1**: this project now

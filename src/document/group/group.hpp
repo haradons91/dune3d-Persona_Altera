@@ -62,6 +62,7 @@ enum class GroupType {
     SHELL,
     OFFSET_FACE,
     DRAFT,
+    MOVE_COPY,
 };
 
 class Group {

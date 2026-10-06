@@ -27,3 +27,4 @@
 #include "group_shell.hpp"
 #include "group_offset_face.hpp"
 #include "group_draft.hpp"
+#include "group_move_copy.hpp"
