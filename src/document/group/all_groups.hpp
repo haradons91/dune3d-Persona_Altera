@@ -29,3 +29,4 @@
 #include "group_draft.hpp"
 #include "group_move_copy.hpp"
 #include "group_press_pull.hpp"
+#include "group_align.hpp"

@@ -92,6 +92,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Group::Type, {
                                                   {Group::Type::DRAFT, "draft"},
                                                   {Group::Type::MOVE_COPY, "move_copy"},
                                                   {Group::Type::PRESS_PULL, "press_pull"},
+                                                  {Group::Type::ALIGN, "align"},
                                           })
 
 json Group::serialize() const
@@ -166,6 +167,8 @@ std::string Group::get_type_name(Type type)
         return "Move/Copy";
     case Type::PRESS_PULL:
         return "Press/Pull";
+    case Type::ALIGN:
+        return "Align";
     default:
         return "Group";
     }
@@ -238,6 +241,8 @@ std::unique_ptr<Group> Group::new_from_json(const UUID &uu, const json &j)
         return std::make_unique<GroupMoveCopy>(uu, j);
     case Type::PRESS_PULL:
         return std::make_unique<GroupPressPull>(uu, j);
+    case Type::ALIGN:
+        return std::make_unique<GroupAlign>(uu, j);
     case Type::INVALID:
         throw std::runtime_error("unknown group type " + j.at("type").get<std::string>());
     }

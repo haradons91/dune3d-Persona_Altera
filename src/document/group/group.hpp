@@ -64,6 +64,7 @@ enum class GroupType {
     DRAFT,
     MOVE_COPY,
     PRESS_PULL,
+    ALIGN,
 };
 
 class Group {
