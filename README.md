@@ -160,6 +160,12 @@ Known loose ends in this fork, not yet acted on:
    Front/Right/Home presumably want the same camera change as clicking
    those faces/the Home icon on the nav cube, and Origin's seven children
    presumably want their own visibility toggles.
+ - Build out a proper Sketch ribbon "Modify" menu: today the sketch
+   ribbon's modify group only has standalone Fillet/Chamfer buttons
+   (SKETCH_FILLET/SKETCH_CHAMFER). It needs to become a real dropdown
+   menu, matching the solid-modeling "Modify" dropdown's shape, with:
+   Fillet, Chamfer (with its own submenu), Blend Curve, Offset, Trim,
+   Extend, Break, Sketch Scale, and Move/Copy.
 
 ## Questions
 
