@@ -60,7 +60,7 @@ if target_machine.system() == 'darwin'
   endif
   # Library names as of OCCT 8.0.1 (TKDESTEP/TKDESTL replaced the older
   # TKSTEP/TKXDESTEP/TKSTL split used before 7.8).
-  opencascade_link_args += ['-lTKDESTEP', '-lTKernel', '-lTKXCAF', '-lTKXSBase', '-lTKBRep', '-lTKCDF', '-lTKLCAF', '-lTKMath', '-lTKMesh', '-lTKTopAlgo', '-lTKPrim', '-lTKBO', '-lTKShHealing', '-lTKG3d', '-lTKGeomBase', '-lTKHLR', '-lTKDESTL', '-lTKFillet', '-lTKOffset']
+  opencascade_link_args += ['-lTKDESTEP', '-lTKernel', '-lTKXCAF', '-lTKXSBase', '-lTKBRep', '-lTKCDF', '-lTKLCAF', '-lTKMath', '-lTKMesh', '-lTKTopAlgo', '-lTKPrim', '-lTKBO', '-lTKShHealing', '-lTKG3d', '-lTKGeomBase', '-lTKHLR', '-lTKDESTL', '-lTKFillet', '-lTKOffset', '-lTKBool']
 
   opencascade = declare_dependency(dependencies: opencascade.partial_dependency(compile_args: true, includes:true), link_args: opencascade_link_args)
 endif
@@ -157,6 +157,7 @@ src_common = files(
   'src/document/solid_model/solid_model_split_body_result.cpp',
   'src/document/solid_model/solid_model_split_face.cpp',
   'src/document/solid_model/solid_model_replace_face.cpp',
+  'src/document/solid_model/solid_model_silhouette_split.cpp',
   'src/document/solid_model/bounded_execute.cpp',
   'src/document/solid_model/mesh_edge_collapse.cpp',
   'src/document/solid_model/mesh_decimate.cpp',
@@ -182,6 +183,7 @@ src_common = files(
   'src/document/group/group_split_body_result.cpp',
   'src/document/group/group_split_face.cpp',
   'src/document/group/group_replace_face.cpp',
+  'src/document/group/group_silhouette_split.cpp',
   'src/document/group/group_reference.cpp',
   'src/document/group/group_extrude.cpp',
   'src/document/group/group_local_operation.cpp',
@@ -381,6 +383,7 @@ src_gui = files(
   'src/editor/group_editor/group_editor_split_body_result.cpp',
   'src/editor/group_editor/group_editor_split_face.cpp',
   'src/editor/group_editor/group_editor_replace_face.cpp',
+  'src/editor/group_editor/group_editor_silhouette_split.cpp',
   'src/editor/group_editor/group_editor_loft.cpp',
   'src/editor/group_editor/group_editor_mirror.cpp',
   'src/editor/group_editor/group_editor_pipe.cpp',

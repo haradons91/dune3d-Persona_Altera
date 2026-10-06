@@ -38,4 +38,5 @@ class GroupSplitBody;
 class GroupSplitBodyResult;
 class GroupSplitFace;
 class GroupReplaceFace;
+class GroupSilhouetteSplit;
 } // namespace dune3d

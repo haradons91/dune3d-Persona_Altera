@@ -82,41 +82,53 @@ Known loose ends in this fork, not yet acted on:
    Dune 3D's pre-fork release history. Everything since forking only
    exists in this repo's own `git log`, with no user-facing changelog of
    its own yet.
- - **Unimplemented items in the ribbon's "Modify" dropdown**: these are
-   present in the menu (so it shows its intended full shape) but wired up
-   as permanently disabled placeholders, not real features yet:
-   Silhouette Split. (Scale, Simplify, Remove,
-   Shell, Offset Face, Draft, Move/Copy, Press/Pull, Align, Split Face,
-   Split Body, and Replace Face are implemented --
-   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace/GroupDraft/GroupMoveCopy/GroupPressPull/GroupAlign/GroupSplitFace/GroupSplitBody/GroupReplaceFace
-   -- though Move/Copy's "Copy" checkbox still isn't wired up: it reports
-   an explicit error instead of silently just moving. The document/body-
-   management plumbing it would need now exists (see Split Body below),
-   but nothing's hooked it up to Move/Copy's checkbox yet. Press/Pull is
-   mechanically identical to
-   Offset Face -- same BRepOffset_MakeOffset/SetOffsetOnFace operation,
-   exposed under both ribbon entry points. Align aligns a single
-   selected planar face to a fixed global XY target plane rather than
-   to a second user-picked body/face, matching the fixed-origin
-   convention Scale/Draft already use. Split Face/Split Body both cut
-   along a user-edited plane (point + normal) rather than a picked
-   reference entity -- same fixed-parameter convention, see
-   GroupSolidModelOperation's GroupButton/SelectGroupDialog pattern for
-   how a future pass could let the cutting tool be picked instead.
-   **Split Body is this fork's first group type that creates a second,
-   genuinely separate body** (GroupSplitBodyResult, paired with
-   GroupSplitBody and always created together) -- see
-   src/document/group/group_split_body.hpp for how `Group::m_body` makes
-   this work with no changes needed to body derivation, the workspace
-   tree, or the renderer, all of which already treated multiple bodies
-   per document as a first-class case before this. Replace Face picks
-   its reference plane by clicking an existing EntityWorkplane in the
-   3D view (ToolSetReplaceFacePlane, mirroring ToolSetWorkplane) rather
-   than a fixed numeric plane or a picked group -- and only supports
-   trimming material away, not adding it past the selected face's
-   current position, since that would need a bounded extrusion+fuse
-   instead of a half-space boolean; it reports an explicit error for the
-   unsupported "grow" direction rather than silently no-opping.)
+ - **All 13 of the ribbon's "Modify" dropdown items are now implemented**
+   (Scale, Simplify, Remove, Shell, Offset Face, Draft, Move/Copy,
+   Press/Pull, Align, Split Face, Split Body, Replace Face, and
+   Silhouette Split --
+   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace/GroupDraft/GroupMoveCopy/GroupPressPull/GroupAlign/GroupSplitFace/GroupSplitBody/GroupReplaceFace/GroupSilhouetteSplit).
+   These started out as permanently disabled ribbon placeholders (present
+   in the menu so it showed its intended full shape, but not real
+   features); a few scope notes from implementing them:
+   - Move/Copy's "Copy" checkbox still isn't wired up: it reports an
+     explicit error instead of silently just moving. The document/body-
+     management plumbing it would need now exists (see Split Body
+     below), but nothing's hooked it up to Move/Copy's checkbox yet.
+   - Press/Pull is mechanically identical to Offset Face -- same
+     BRepOffset_MakeOffset/SetOffsetOnFace operation, exposed under both
+     ribbon entry points.
+   - Align aligns a single selected planar face to a fixed global XY
+     target plane rather than to a second user-picked body/face,
+     matching the fixed-origin convention Scale/Draft already use.
+   - Split Face/Split Body both cut along a user-edited plane (point +
+     normal) rather than a picked reference entity -- same
+     fixed-parameter convention, see GroupSolidModelOperation's
+     GroupButton/SelectGroupDialog pattern for how a future pass could
+     let the cutting tool be picked instead.
+   - **Split Body is this fork's first group type that creates a
+     second, genuinely separate body** (GroupSplitBodyResult, paired
+     with GroupSplitBody and always created together) -- see
+     src/document/group/group_split_body.hpp for how `Group::m_body`
+     makes this work with no changes needed to body derivation, the
+     workspace tree, or the renderer, all of which already treated
+     multiple bodies per document as a first-class case before this.
+   - Replace Face picks its reference plane by clicking an existing
+     EntityWorkplane in the 3D view (ToolSetReplaceFacePlane, mirroring
+     ToolSetWorkplane) rather than a fixed numeric plane or a picked
+     group -- and only supports trimming material away, not adding it
+     past the selected face's current position, since that would need a
+     bounded extrusion+fuse instead of a half-space boolean; it reports
+     an explicit error for the unsupported "grow" direction rather than
+     silently no-opping.
+   - Silhouette Split projects the previous body's own outline, as seen
+     along a user-edited direction (HLRBRep_Algo for the outline,
+     BRepProj_Projection to project it onto the target face,
+     BRepFeat_SplitShape to add it), so e.g. a cylindrical boss standing
+     on a flat face casts a circular split line when viewed down its
+     own axis. It always uses the current body as its own silhouette
+     source rather than letting a second body/sketch be picked as the
+     silhouette source -- the same fixed-single-body-input scope as
+     Scale/Simplify/Shell/etc.)
  - **Same pattern in the "Insert" dropdown**: items like "Insert SVG" and
    "Insert Derive" exist in the menu as disabled placeholders too.
  - **CI still doesn't build against OCCT 8.0.1**: this project now
