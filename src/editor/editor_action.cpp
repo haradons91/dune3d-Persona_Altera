@@ -48,6 +48,7 @@ static const std::map<ActionID, Group::Type> create_group_action_map = {
         {ActionID::CREATE_GROUP_SCALE, Group::Type::SCALE},
         {ActionID::CREATE_GROUP_REMOVE, Group::Type::REMOVE},
         {ActionID::CREATE_GROUP_SHELL, Group::Type::SHELL},
+        {ActionID::CREATE_GROUP_OFFSET_FACE, Group::Type::OFFSET_FACE},
 };
 
 static const std::map<ActionID, Document::MoveGroup> move_group_action_map = {

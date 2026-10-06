@@ -85,10 +85,10 @@ Known loose ends in this fork, not yet acted on:
  - **Unimplemented items in the ribbon's "Modify" dropdown**: these are
    present in the menu (so it shows its intended full shape) but wired up
    as permanently disabled placeholders, not real features yet:
-   Press/Pull, Draft, Offset Face, Replace Face, Split Face,
+   Press/Pull, Draft, Replace Face, Split Face,
    Split Body, Silhouette Split, Move/Copy, Align. (Scale, Simplify,
-   Remove, and Shell are implemented --
-   GroupScale/GroupSimplify/GroupRemove/GroupShell.)
+   Remove, Shell, and Offset Face are implemented --
+   GroupScale/GroupSimplify/GroupRemove/GroupShell/GroupOffsetFace.)
  - **Same pattern in the "Insert" dropdown**: items like "Insert SVG" and
    "Insert Derive" exist in the menu as disabled placeholders too.
  - **CI still doesn't build against OCCT 8.0.1**: this project now

@@ -1420,7 +1420,8 @@ void Editor::init_header_bar()
         actions->add_action("simplify", [this] { trigger_action(ActionID::CREATE_GROUP_SIMPLIFY); });
         actions->add_action("remove", [this] { trigger_action(ActionID::CREATE_GROUP_REMOVE); });
         actions->add_action("shell", [this] { trigger_action(ActionID::CREATE_GROUP_SHELL); });
-        for (const char *name : {"press_pull", "draft", "offset_face", "replace_face", "split_face",
+        actions->add_action("offset_face", [this] { trigger_action(ActionID::CREATE_GROUP_OFFSET_FACE); });
+        for (const char *name : {"press_pull", "draft", "replace_face", "split_face",
                                  "split_body", "silhouette_split", "move_copy", "align"})
             actions->add_action(name, [] {})->set_enabled(false);
         m_win.insert_action_group("ribbon_modify", actions);

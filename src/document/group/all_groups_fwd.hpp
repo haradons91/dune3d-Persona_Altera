@@ -29,4 +29,5 @@ class GroupScale;
 class GroupFaceOperation;
 class GroupRemove;
 class GroupShell;
+class GroupOffsetFace;
 } // namespace dune3d

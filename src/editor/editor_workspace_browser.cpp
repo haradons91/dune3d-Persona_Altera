@@ -508,13 +508,14 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
         group.m_wrkpl = current_group.m_active_wrkpl;
         group.m_source_group = current_group.m_uuid;
     }
-    else if (any_of(group_type, Group::Type::SIMPLIFY, Group::Type::SCALE, Group::Type::REMOVE,
-                     Group::Type::SHELL)) {
+    else if (any_of(group_type, Group::Type::SIMPLIFY, Group::Type::SCALE, Group::Type::REMOVE, Group::Type::SHELL,
+                     Group::Type::OFFSET_FACE)) {
         // Same precondition as Fillet/Chamfer above: these only ever modify
         // whatever solid model already exists on this body. Simplify/Scale
-        // have no selection of their own to populate; Remove/Shell are
-        // created empty just like Fillet/Chamfer, with faces picked
-        // afterward via their own group editor's "Select faces..." button.
+        // have no selection of their own to populate; Remove/Shell/Offset
+        // Face are created empty just like Fillet/Chamfer, with faces
+        // picked afterward via their own group editor's "Select faces..."
+        // button.
         auto solid_model = SolidModel::get_last_solid_model(doc, current_group, SolidModel::IncludeGroup::YES);
         if (!solid_model) {
             m_workspace_browser->show_toast(toast_prefix + "Body has no solid model");
@@ -532,8 +533,12 @@ void Editor::on_add_group(Group::Type group_type, WorkspaceBrowserAddGroupMode a
             auto &group = doc.insert_group<GroupRemove>(UUID::random(), current_group.m_uuid);
             new_group = &group;
         }
-        else {
+        else if (group_type == Group::Type::SHELL) {
             auto &group = doc.insert_group<GroupShell>(UUID::random(), current_group.m_uuid);
+            new_group = &group;
+        }
+        else {
+            auto &group = doc.insert_group<GroupOffsetFace>(UUID::random(), current_group.m_uuid);
             new_group = &group;
         }
     }

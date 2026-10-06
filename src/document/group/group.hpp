@@ -60,6 +60,7 @@ enum class GroupType {
     SCALE,
     REMOVE,
     SHELL,
+    OFFSET_FACE,
 };
 
 class Group {
