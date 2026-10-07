@@ -5,6 +5,7 @@ in uint icon_x;
 in uint icon_y;
 in uint flags;
 in vec3 vec;
+in float scale;
 
 out vec4 origin_to_geom;
 out vec2 shift_to_geom;
@@ -45,5 +46,6 @@ void main() {
     }
     shift_to_geom = shift;
     icon_to_geom = ivec2(icon_x, icon_y);
+    scale_to_geom = scale;
 }
 

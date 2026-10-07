@@ -19,6 +19,7 @@ GLuint IconRenderer::create_vao(GLuint program, GLuint &vbo_out)
     GLuint vec_index = glGetAttribLocation(program, "vec");
     GLuint icon_x_index = glGetAttribLocation(program, "icon_x");
     GLuint icon_y_index = glGetAttribLocation(program, "icon_y");
+    GLuint scale_index = glGetAttribLocation(program, "scale");
     GLuint flags_index = glGetAttribLocation(program, "flags");
     GLuint vao, buffer;
 
@@ -52,6 +53,11 @@ GLuint IconRenderer::create_vao(GLuint program, GLuint &vbo_out)
     glEnableVertexAttribArray(icon_y_index);
     glVertexAttribIPointer(icon_y_index, 1, GL_UNSIGNED_SHORT, sizeof(CanvasChunk::IconVertex),
                            (void *)offsetof(CanvasChunk::IconVertex, icon_y));
+    GL_CHECK_ERROR
+
+    glEnableVertexAttribArray(scale_index);
+    glVertexAttribPointer(scale_index, 1, GL_FLOAT, GL_FALSE, sizeof(CanvasChunk::IconVertex),
+                          (void *)offsetof(CanvasChunk::IconVertex, scale));
     GL_CHECK_ERROR
 
     glEnableVertexAttribArray(flags_index);

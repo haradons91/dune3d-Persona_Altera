@@ -935,6 +935,50 @@
          y="7.8083328" />
     </g>
     <g
+       id="POINT_PLUS_OPEN">
+      <rect
+         style="color:#000000;overflow:visible;fill:#ffffff;stroke:none;stroke-width:0.0649999;stroke-linejoin:round;paint-order:markers fill stroke"
+         id="rect_plus_open_bg"
+         width="4.2333331"
+         height="4.2333331"
+         x="19.049999"
+         y="7.4083328" />
+      <!-- Fusion 360 style crosshair: four short dashes with a gap in the
+           middle so the hovered point itself isn't obscured by the icon,
+           unlike POINT_PLUS's solid filled plus (still used by the
+           Create/draw tools). Each pair reaches the same distance from
+           center that POINT_PLUS's bars span (radius 1.7165 from the
+           21.167,9.525 center), just split around a 1.2 wide gap. -->
+      <rect
+         style="color:#000000;overflow:visible;fill:#000000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers"
+         id="rect_plus_open_h_left"
+         width="1.1165"
+         height="0.5"
+         x="19.4505"
+         y="9.275" />
+      <rect
+         style="color:#000000;overflow:visible;fill:#000000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers"
+         id="rect_plus_open_h_right"
+         width="1.1165"
+         height="0.5"
+         x="21.767"
+         y="9.275" />
+      <rect
+         style="color:#000000;overflow:visible;fill:#000000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers"
+         id="rect_plus_open_v_top"
+         width="0.5"
+         height="1.1165"
+         x="20.917"
+         y="7.8085" />
+      <rect
+         style="color:#000000;overflow:visible;fill:#000000;fill-opacity:1;stroke:none;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers"
+         id="rect_plus_open_v_bottom"
+         width="0.5"
+         height="1.1165"
+         x="20.917"
+         y="10.125" />
+    </g>
+    <g
        id="ARROW_RIGHT">
       <rect
          style="color:#000000;overflow:visible;fill:#ffffff;stroke:none;stroke-width:0.0649999;stroke-linejoin:round;paint-order:markers fill stroke"

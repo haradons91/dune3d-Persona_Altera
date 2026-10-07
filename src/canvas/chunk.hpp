@@ -136,6 +136,13 @@ public:
         uint16_t icon_x;
         uint16_t icon_y;
 
+        // Per-icon size multiplier on top of the shared scale_factor uniform
+        // every icon is already drawn at -- completes a scale_to_geom output
+        // the vertex shader already declared but never fed, for cases (e.g.
+        // a tool-specific hover crosshair) that want to stand out from the
+        // rest of a fixed-size icon set without resizing every icon.
+        float scale = 1;
+
         VertexFlags flags = VertexFlags::DEFAULT;
     };
 

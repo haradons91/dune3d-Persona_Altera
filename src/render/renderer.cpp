@@ -958,7 +958,7 @@ void Renderer::render(const Document &doc, const UUID &current_group, const IDoc
         }
         draw_constraints();
         if (m_snap_indicator_pos)
-            m_ca.draw_point(*m_snap_indicator_pos, IconID::POINT_PLUS);
+            m_ca.draw_point(*m_snap_indicator_pos, m_snap_indicator_icon, m_snap_indicator_icon_scale);
         if (m_snap_guide_segments.size()) {
             m_ca.set_line_style(ICanvas::LineStyle::DASHED);
             for (const auto &[a, b] : m_snap_guide_segments)
@@ -2633,7 +2633,8 @@ void Renderer::add_constraint_icons(glm::vec3 p, glm::vec3 v, const std::vector<
     }
 }
 
-void Renderer::add_snap_indicator(const std::optional<glm::dvec3> &pos)
+void Renderer::add_snap_indicator(const std::optional<glm::dvec3> &pos, IconTexture::IconTextureID icon,
+                                  float icon_scale)
 {
     // Just remember it here -- render() draws it later at a point where
     // set_chunk_from_group() has already set up this frame's chunk state.
@@ -2644,6 +2645,8 @@ void Renderer::add_snap_indicator(const std::optional<glm::dvec3> &pos)
     // behind at an old position alongside the current, correctly-tracking
     // one.
     m_snap_indicator_pos = pos;
+    m_snap_indicator_icon = icon;
+    m_snap_indicator_icon_scale = icon_scale;
 }
 
 void Renderer::add_snap_guide_segments(std::vector<std::pair<glm::dvec3, glm::dvec3>> segments)

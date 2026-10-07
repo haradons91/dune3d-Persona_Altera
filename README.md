@@ -210,10 +210,24 @@ Known loose ends in this fork, not yet acted on:
      tangent-continuous cubic Bezier, "bulge" entered via the same
      dialog mechanism; only straight lines are supported.
  - **Fix Sketch Modify**: Chamfer's Distance-Distance and Distance-Angle
-   submenu variants, Blend Curve, Offset, Trim, Extend, and Break are
-   confirmed broken in actual use (the "not verified live" caveat above
-   turned out to matter) -- needs real debugging against the live tool/
-   canvas interaction, not just re-checking the geometry math.
+   submenu variants, Blend Curve, Offset, and Break are confirmed broken
+   in actual use (the "not verified live" caveat above turned out to
+   matter) -- needs real debugging against the live tool/canvas
+   interaction, not just re-checking the geometry math. (Trim was
+   rebuilt as a real hover-driven tool and confirmed working for the
+   basic two-crossing-lines case -- see the rectangle item below for
+   what's still unverified there. Extend still uses the old, likely
+   still-broken one-shot two-pre-selected-lines code path and hasn't
+   been rebuilt yet.)
+ - **Test Trim on a rectangle (and other closed/connected shapes)**:
+   confirmed working for two independent crossing lines. On a plain
+   rectangle by itself (no other line crossing any of its sides) Trim
+   correctly does nothing now -- there's nothing to cut back to, since
+   adjacent sides only meet at their shared corner, not a genuine
+   interior crossing. Not yet tested: a rectangle (or other closed
+   shape) with an actual extra line crossing through one or more of its
+   sides, which is the case that should produce a real trim and hasn't
+   been exercised live yet.
  - **Replace Sketch Modify's popup-dialog interactions with on-canvas
    arrows**: Move's two sequential X/Y popup dialogs should become
    Left/Right and Up/Down arrows instead; Copy's popup dialogs should

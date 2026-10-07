@@ -10,6 +10,7 @@ uniform float scale_factor;
 
 in vec4 origin_to_geom[1];
 in vec2 shift_to_geom[1];
+in float scale_to_geom[1];
 in vec2 vec_to_geom[1];
 flat in uint flags_to_geom[1];
 flat in ivec2 icon_to_geom[1];
@@ -27,7 +28,7 @@ vec2 rot(vec2 v, vec2 sh) {
 	return vec2(sh.x * v.x - sh.y * v.y, sh.x * v.y + sh.y * v.x);
 }
 
-float icon_scale = scale_factor;
+float icon_scale = scale_factor * scale_to_geom[0];
 
 
 vec2 scale_size(vec2 v)

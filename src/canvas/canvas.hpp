@@ -108,8 +108,9 @@ public:
     VertexRef add_face_group(const face::Faces &faces, glm::vec3 origin, glm::quat normal,
                              FaceColor face_color) override;
 
-    VertexRef draw_icon(IconTexture::IconTextureID id, glm::vec3 origin, glm::vec2 shift, glm::vec3 v) override;
-    VertexRef draw_point(glm::vec3 point, IconTexture::IconTextureID id) override;
+    VertexRef draw_icon(IconTexture::IconTextureID id, glm::vec3 origin, glm::vec2 shift, glm::vec3 v,
+                        float scale) override;
+    VertexRef draw_point(glm::vec3 point, IconTexture::IconTextureID id, float scale) override;
     VertexRef draw_picture(const std::array<glm::vec3, 4> &corners, std::shared_ptr<const PictureData> data) override;
 
     glm::dvec3 get_cursor_pos() const;

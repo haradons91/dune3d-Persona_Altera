@@ -1676,7 +1676,7 @@ ICanvas::VertexRef Canvas::draw_point(glm::vec3 p)
     // Default point boxes are visual editing handles. Keep them out of the
     // scene entirely; explicit point icons (origins, centers, handles, etc.)
     // still use the overload below and remain available where needed.
-    return draw_point(p, IconTexture::IconTextureID::POINT_BOX);
+    return draw_point(p, IconTexture::IconTextureID::POINT_BOX, 1);
 }
 
 ICanvas::VertexRef Canvas::draw_line(glm::dvec3 a, glm::dvec3 b)
@@ -1877,13 +1877,14 @@ std::vector<ICanvas::VertexRef> Canvas::draw_bitmap_text_3d(glm::vec3 p, const g
     return vrefs;
 }
 
-ICanvas::VertexRef Canvas::draw_icon(IconTexture::IconTextureID id, glm::vec3 origin, glm::vec2 shift, glm::vec3 v)
+ICanvas::VertexRef Canvas::draw_icon(IconTexture::IconTextureID id, glm::vec3 origin, glm::vec2 shift, glm::vec3 v,
+                                     float scale)
 {
     origin = transform_point(origin);
     auto &icons = m_state.selection_invisible ? m_current_chunk->m_icons_selection_invisible : m_current_chunk->m_icons;
     auto icon_pos = IconTexture::icon_texture_map.at(id);
-    auto &icon =
-            icons.emplace_back(origin.x, origin.y, origin.z, shift.x, shift.y, v.x, v.y, v.z, icon_pos.x, icon_pos.y);
+    auto &icon = icons.emplace_back(origin.x, origin.y, origin.z, shift.x, shift.y, v.x, v.y, v.z, icon_pos.x,
+                                    icon_pos.y, scale);
     apply_flags(icon.flags);
     if (m_state.selection_invisible)
         return {VertexType::SELECTION_INVISIBLE, 0};
@@ -1891,12 +1892,12 @@ ICanvas::VertexRef Canvas::draw_icon(IconTexture::IconTextureID id, glm::vec3 or
 }
 
 
-ICanvas::VertexRef Canvas::draw_point(glm::vec3 p, IconTexture::IconTextureID id)
+ICanvas::VertexRef Canvas::draw_point(glm::vec3 p, IconTexture::IconTextureID id, float scale)
 {
     if (m_state.no_points)
         return {VertexType::SELECTION_INVISIBLE, 0};
 
-    return draw_icon(id, p, {0, 0}, {NAN, NAN, NAN});
+    return draw_icon(id, p, {0, 0}, {NAN, NAN, NAN}, scale);
 }
 
 ICanvas::VertexRef Canvas::draw_picture(const std::array<glm::vec3, 4> &corners,

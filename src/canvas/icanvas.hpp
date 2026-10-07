@@ -82,8 +82,8 @@ public:
     virtual VertexRef add_face_group(const face::Faces &faces, glm::vec3 origin, glm::quat normal,
                                      FaceColor face_color) = 0;
     virtual VertexRef draw_icon(IconTexture::IconTextureID id, glm::vec3 origin, glm::vec2 shift,
-                                glm::vec3 v = {NAN, NAN, NAN}) = 0;
-    virtual VertexRef draw_point(glm::vec3 origin, IconTexture::IconTextureID id) = 0;
+                                glm::vec3 v = {NAN, NAN, NAN}, float scale = 1) = 0;
+    virtual VertexRef draw_point(glm::vec3 origin, IconTexture::IconTextureID id, float scale = 1) = 0;
     virtual VertexRef draw_picture(const std::array<glm::vec3, 4> &corners,
                                    std::shared_ptr<const PictureData> data) = 0;
 

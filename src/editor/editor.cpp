@@ -15,6 +15,7 @@
 #include "util/selection_util.hpp"
 #include "group_editor/group_editor.hpp"
 #include "render/renderer.hpp"
+#include "icon_texture_id.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "document/entity/entity_line2d.hpp"
 #include "document/entity/entity_line3d.hpp"
@@ -2145,7 +2146,18 @@ void Editor::render_document(const IDocumentInfo &doc)
 
     if (doc.get_uuid() == m_core.get_current_idocument_info().get_uuid()) {
         renderer.add_constraint_icons(m_constraint_tip_pos, m_constraint_tip_vec, m_constraint_tip_icons);
-        renderer.add_snap_indicator(m_snap_indicator_pos);
+        // Modify-style tools (that hover/click on existing geometry rather
+        // than placing new points) get the open, Fusion-360-style
+        // crosshair -- a gap in the middle so the icon doesn't obscure
+        // exactly the point/line being hovered. Create/draw tools keep the
+        // original solid POINT_PLUS.
+        auto snap_icon = IconTexture::IconTextureID::POINT_PLUS;
+        float snap_icon_scale = 1;
+        if (m_core.tool_is_active() && m_core.get_tool_id() == ToolID::SKETCH_TRIM) {
+            snap_icon = IconTexture::IconTextureID::POINT_PLUS_OPEN;
+            snap_icon_scale = 1.8f;
+        }
+        renderer.add_snap_indicator(m_snap_indicator_pos, snap_icon, snap_icon_scale);
         renderer.add_snap_guide_segments(m_snap_guide_segments);
     }
 
@@ -2250,6 +2262,18 @@ glm::dvec3 Editor::get_cursor_pos_for_workplane(const EntityWorkplane &workplane
     const auto cursor = get_canvas().get_cursor_pos_for_plane(workplane.m_origin, workplane.get_normal_vector());
     if (!m_sketch_editing) {
         m_snap_indicator_pos.reset();
+        m_snap_guide_segments.clear();
+        m_midpoint_ride_anchor.reset();
+        m_midpoint_ride_dir.reset();
+        return cursor;
+    }
+    // Trim finds its own snap point (the nearest line intersection, see
+    // ToolSketchTrimExtend::update_preview()) -- grid/vertex/midpoint
+    // snapping here would fight that by pulling the raw cursor position
+    // towards a nearby grid point first. The crosshair still tracks the
+    // raw cursor (just unsnapped), it isn't hidden.
+    if (m_core.tool_is_active() && m_core.get_tool_id() == ToolID::SKETCH_TRIM) {
+        m_snap_indicator_pos = cursor;
         m_snap_guide_segments.clear();
         m_midpoint_ride_anchor.reset();
         m_midpoint_ride_dir.reset();
