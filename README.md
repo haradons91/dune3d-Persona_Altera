@@ -78,6 +78,8 @@ Known loose ends in this fork, not yet acted on:
    folder, and the `dune3d` binary/icon names internally -- only
    user-visible text was renamed so far (see the "Rename the app's display
    name" commit for why the rest was deliberately left alone).
+ - **Change the titlebar design**.
+ - **Change the UI color scheme**.
  - **This fork's own changelog**: `CHANGELOG.md` only covers upstream
    Dune 3D's pre-fork release history. Everything since forking only
    exists in this repo's own `git log`, with no user-facing changelog of
