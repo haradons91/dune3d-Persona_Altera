@@ -207,6 +207,31 @@ Known loose ends in this fork, not yet acted on:
      (which may be far apart, unlike Fillet's shared corner) with a
      tangent-continuous cubic Bezier, "bulge" entered via the same
      dialog mechanism; only straight lines are supported.
+ - **Fix Sketch Modify**: Chamfer's Distance-Distance and Distance-Angle
+   submenu variants, Blend Curve, Offset, Trim, Extend, and Break are
+   confirmed broken in actual use (the "not verified live" caveat above
+   turned out to matter) -- needs real debugging against the live tool/
+   canvas interaction, not just re-checking the geometry math.
+ - **Replace Sketch Modify's popup-dialog interactions with on-canvas
+   arrows**: Move's two sequential X/Y popup dialogs should become
+   Left/Right and Up/Down arrows instead; Copy's popup dialogs should
+   become the same Left/Right and Up/Down arrows; Scale's popup dialog
+   should become scale arrows. (Likely also affects Offset's distance
+   popup and Blend Curve's bulge popup, same underlying pattern -- worth
+   checking once Move/Copy/Scale's arrows exist.)
+ - **Rename the Chamfer submenu items**: "Equal Distance" -> "Equal
+   Distance Chamfer", "Distance-Distance" -> "Two Distance Chamfer",
+   "Distance-Angle" -> "Distance and Angle Chamfer".
+ - **Add a distance textbox for Equal Distance Chamfer**: today it's
+   cursor-drag-only (like Fillet's radius); add a numeric entry field
+   like the one the other Chamfer variants already use.
+ - **Add a live distance indicator to Equal Distance Chamfer**: from the
+   corner point, show the distance out to the chamfer edge (matching
+   the textbox number above) as a dimension-line-style indicator -- a
+   line with arrows in between, same idea as a normal CAD dimension
+   line. Needs two separate arrow sets, one per chamfered edge
+   (left/right for one line, up/down for the other), since a chamfer
+   has a distance along each of the two lines meeting at the corner.
 
 ## Questions
 
