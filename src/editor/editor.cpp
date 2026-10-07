@@ -16,6 +16,7 @@
 #include "group_editor/group_editor.hpp"
 #include "render/renderer.hpp"
 #include "icon_texture_id.hpp"
+#include "util/template_util.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "document/entity/entity_line2d.hpp"
 #include "document/entity/entity_line3d.hpp"
@@ -2153,7 +2154,7 @@ void Editor::render_document(const IDocumentInfo &doc)
         // original solid POINT_PLUS.
         auto snap_icon = IconTexture::IconTextureID::POINT_PLUS;
         float snap_icon_scale = 1;
-        if (m_core.tool_is_active() && m_core.get_tool_id() == ToolID::SKETCH_TRIM) {
+        if (m_core.tool_is_active() && any_of(m_core.get_tool_id(), ToolID::SKETCH_TRIM, ToolID::SKETCH_EXTEND)) {
             snap_icon = IconTexture::IconTextureID::POINT_PLUS_OPEN;
             snap_icon_scale = 1.8f;
         }
@@ -2267,12 +2268,13 @@ glm::dvec3 Editor::get_cursor_pos_for_workplane(const EntityWorkplane &workplane
         m_midpoint_ride_dir.reset();
         return cursor;
     }
-    // Trim finds its own snap point (the nearest line intersection, see
-    // ToolSketchTrimExtend::update_preview()) -- grid/vertex/midpoint
-    // snapping here would fight that by pulling the raw cursor position
-    // towards a nearby grid point first. The crosshair still tracks the
-    // raw cursor (just unsnapped), it isn't hidden.
-    if (m_core.tool_is_active() && m_core.get_tool_id() == ToolID::SKETCH_TRIM) {
+    // Trim/Extend find their own snap point (the nearest line
+    // intersection, see ToolSketchTrimExtend::update_preview()) --
+    // grid/vertex/midpoint snapping here would fight that by pulling the
+    // raw cursor position towards a nearby grid point first. The
+    // crosshair still tracks the raw cursor (just unsnapped), it isn't
+    // hidden.
+    if (m_core.tool_is_active() && any_of(m_core.get_tool_id(), ToolID::SKETCH_TRIM, ToolID::SKETCH_EXTEND)) {
         m_snap_indicator_pos = cursor;
         m_snap_guide_segments.clear();
         m_midpoint_ride_anchor.reset();
