@@ -213,12 +213,11 @@ Known loose ends in this fork, not yet acted on:
    submenu variants, Blend Curve, Offset, and Break are confirmed broken
    in actual use (the "not verified live" caveat above turned out to
    matter) -- needs real debugging against the live tool/canvas
-   interaction, not just re-checking the geometry math. (Trim was
-   rebuilt as a real hover-driven tool and confirmed working for the
-   basic two-crossing-lines case -- see the rectangle item below for
-   what's still unverified there. Extend still uses the old, likely
-   still-broken one-shot two-pre-selected-lines code path and hasn't
-   been rebuilt yet.)
+   interaction, not just re-checking the geometry math. (Trim and Extend
+   have both been rebuilt as real hover-driven tools, sharing an
+   architecture closer to `ToolSketchFillet` than the original one-shot
+   two-pre-selected-lines design, and confirmed working live -- see the
+   two items below for what's been tested there and what's still open.)
  - **Test Trim on a rectangle (and other closed/connected shapes)**:
    confirmed working for two independent crossing lines. On a plain
    rectangle by itself (no other line crossing any of its sides) Trim
@@ -228,6 +227,16 @@ Known loose ends in this fork, not yet acted on:
    shape) with an actual extra line crossing through one or more of its
    sides, which is the case that should produce a real trim and hasn't
    been exercised live yet.
+ - **Extend confirmed working, including two harder cases**: a plain
+   line extending to meet another line it crosses when extended; an
+   "open corner" (two lines both falling short of the same point) where
+   hovering either one previews BOTH extending to meet at the corner;
+   and extending toward a second line that's collinear (same axis, not
+   just crossing) with the hovered one. Extending a connected shape's
+   own edge (e.g. one side of a rectangle) correctly detaches that
+   corner from the rest of the shape instead of dragging an adjacent
+   side along. Not yet tested: arcs/circles (currently `EntityLine2D`-
+   only, same limitation as Trim).
  - **Replace Sketch Modify's popup-dialog interactions with on-canvas
    arrows**: Move's two sequential X/Y popup dialogs should become
    Left/Right and Up/Down arrows instead; Copy's popup dialogs should
