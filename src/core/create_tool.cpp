@@ -42,6 +42,13 @@
 #include "tools/tool_flip_arc.hpp"
 #include "tools/tool_sketch_fillet.hpp"
 #include "tools/tool_sketch_chamfer.hpp"
+#include "tools/tool_sketch_trim_extend.hpp"
+#include "tools/tool_sketch_scale.hpp"
+#include "tools/tool_sketch_move_copy.hpp"
+#include "tools/tool_sketch_offset.hpp"
+#include "tools/tool_sketch_break.hpp"
+#include "tools/tool_sketch_blend_curve.hpp"
+#include "tools/tool_sketch_chamfer_advanced.hpp"
 #include "tools/tool_constrain_point_in_workplane.hpp"
 #include "tools/tool_constrain_symmetric_hv.hpp"
 #include "tools/tool_constrain_symmetric_line.hpp"
@@ -134,6 +141,30 @@ std::unique_ptr<ToolBase> Core::create_tool(ToolID tool_id, ToolBase::Flags flag
 
     case ToolID::SKETCH_CHAMFER:
         return std::make_unique<ToolSketchChamfer>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_CHAMFER_DISTANCE_DISTANCE:
+    case ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE:
+        return std::make_unique<ToolSketchChamferAdvanced>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_TRIM:
+    case ToolID::SKETCH_EXTEND:
+        return std::make_unique<ToolSketchTrimExtend>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_SCALE:
+        return std::make_unique<ToolSketchScale>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_MOVE:
+    case ToolID::SKETCH_COPY:
+        return std::make_unique<ToolSketchMoveCopy>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_OFFSET:
+        return std::make_unique<ToolSketchOffset>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_BREAK:
+        return std::make_unique<ToolSketchBreak>(tool_id, *this, m_intf, flags);
+
+    case ToolID::SKETCH_BLEND_CURVE:
+        return std::make_unique<ToolSketchBlendCurve>(tool_id, *this, m_intf, flags);
 
     case ToolID::DELETE:
     case ToolID::CUT:

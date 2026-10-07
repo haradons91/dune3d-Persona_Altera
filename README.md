@@ -160,12 +160,53 @@ Known loose ends in this fork, not yet acted on:
    Front/Right/Home presumably want the same camera change as clicking
    those faces/the Home icon on the nav cube, and Origin's seven children
    presumably want their own visibility toggles.
- - Build out a proper Sketch ribbon "Modify" menu: today the sketch
-   ribbon's modify group only has standalone Fillet/Chamfer buttons
-   (SKETCH_FILLET/SKETCH_CHAMFER). It needs to become a real dropdown
-   menu, matching the solid-modeling "Modify" dropdown's shape, with:
-   Fillet, Chamfer (with its own submenu), Blend Curve, Offset, Trim,
-   Extend, Break, Sketch Scale, and Move/Copy.
+ - **The sketch ribbon's "Modify" dropdown is implemented** (Fillet,
+   Chamfer with its own 3-variant submenu, Blend Curve, Offset, Trim,
+   Extend, Break, Sketch Scale, Move, Copy -- the standalone Fillet/
+   Chamfer buttons stay too, same "quick buttons + full dropdown"
+   convention the solid Modify group already uses). A few scope notes:
+   - Fillet/Chamfer's equal-distance variant are the pre-existing
+     ToolSketchFillet/ToolSketchChamfer (live cursor-drag, unchanged).
+     Every other item uses a different, simpler interaction: a modal
+     datum-entry dialog (`show_enter_datum_window`, the same mechanism
+     `ToolRotate`/`ToolEnterDatum` already use) instead of a live drag,
+     since matching Fillet's exact drag-and-preview fidelity for 7
+     brand-new tools wasn't practical to build *and verify* without any
+     GUI automation in this environment -- only the underlying geometry
+     math was checked against hand-computed values (standalone `glm`
+     test programs), plus a clean build and crash-free startup. Live
+     interactive feel (does the preview track smoothly, does
+     hover/click selection work right) has not been verified.
+   - Chamfer's Distance-Distance/Distance-Angle submenu variants are a
+     separate new tool (`ToolSketchChamferAdvanced`) rather than
+     changes to the existing equal-distance tool, to avoid risking
+     regressions in that already-working one.
+   - Trim and Extend share one implementation: given two selected
+     lines, both just move each line's nearer endpoint to where their
+     underlying infinite lines intersect -- whether that shortens or
+     lengthens either line is a consequence of the input geometry, not
+     a different algorithm. Only straight lines are supported (no
+     arcs/circles).
+   - Break is the one tool with live cursor tracking (which point along
+     the curve to split at); every other new tool is selection + a
+     fixed dialog value.
+   - Sketch Scale scales about the active workplane's origin (fixed,
+     matching `GroupScale`'s convention from the solid-modeling Modify
+     dropdown) -- no center-point picking.
+   - Move/Copy's offset is entered as two sequential dialogs (X then Y)
+     since there's no existing two-field dialog. "Copy" clones the
+     selection first (`tool_paste.cpp`'s clone + constraint-remap
+     pattern) then moves the clones -- unlike the solid-modeling Move/
+     Copy's "Copy" checkbox, this one is fully implemented, since 2D
+     sketch entities have none of the document/body complexity that
+     left that one unimplemented.
+   - Offset creates new parallel entities rather than modifying the
+     originals, tied back to them with `ConstraintParallel` (lines) or
+     a pinned `ConstraintRadius` (arcs/circles).
+   - Blend Curve connects the nearest endpoints of two selected lines
+     (which may be far apart, unlike Fillet's shared corner) with a
+     tangent-continuous cubic Bezier, "bulge" entered via the same
+     dialog mechanism; only straight lines are supported.
 
 ## Questions
 

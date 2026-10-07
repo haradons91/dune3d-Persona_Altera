@@ -166,6 +166,7 @@ Dune3DAppWindow::Dune3DAppWindow(BaseObjectType *cobject, const Glib::RefPtr<Gtk
 
     m_ribbon_sketch_btn_fillet = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_fillet");
     m_ribbon_sketch_btn_chamfer = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_chamfer");
+    m_ribbon_sketch_modify_menu_button = refBuilder->get_widget<Gtk::MenuButton>("ribbon_sketch_modify_menu_button");
     m_ribbon_body_btn_measure = refBuilder->get_widget<Gtk::Button>("ribbon_body_btn_measure");
     m_ribbon_sketch_btn_measure = refBuilder->get_widget<Gtk::Button>("ribbon_sketch_btn_measure");
     m_open_recent_listbox->set_header_func(sigc::ptr_fun(header_func_separator));

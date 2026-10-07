@@ -188,6 +188,7 @@ Gtk::Button &get_ribbon_btn_line() { return *m_ribbon_btn_line; }
 
     Gtk::Button &get_ribbon_sketch_btn_fillet() { return *m_ribbon_sketch_btn_fillet; }
     Gtk::Button &get_ribbon_sketch_btn_chamfer() { return *m_ribbon_sketch_btn_chamfer; }
+    Gtk::MenuButton &get_ribbon_sketch_modify_menu_button() { return *m_ribbon_sketch_modify_menu_button; }
     Gtk::Button &get_ribbon_body_btn_measure() { return *m_ribbon_body_btn_measure; }
     Gtk::Button &get_ribbon_sketch_btn_measure() { return *m_ribbon_sketch_btn_measure; }
 
@@ -326,6 +327,7 @@ Gtk::Button *m_ribbon_btn_line = nullptr;
 
     Gtk::Button *m_ribbon_sketch_btn_fillet = nullptr;
     Gtk::Button *m_ribbon_sketch_btn_chamfer = nullptr;
+    Gtk::MenuButton *m_ribbon_sketch_modify_menu_button = nullptr;
     Gtk::Button *m_ribbon_body_btn_measure = nullptr;
     Gtk::Button *m_ribbon_sketch_btn_measure = nullptr;
     SketchPlaneSelector *m_sketch_plane_selector = nullptr;

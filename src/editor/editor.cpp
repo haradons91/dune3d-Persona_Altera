@@ -1453,6 +1453,46 @@ void Editor::init_header_bar()
         m_win.get_ribbon_modify_menu_button().set_popover(*popover);
     }
     {
+        // Sketch ribbon's own "Modify" dropdown -- mirrors the solid one
+        // above in shape, but for 2D sketch entities. Fillet/Chamfer are
+        // duplicated here on purpose (same convention as the solid
+        // dropdown keeping its own quick-access buttons alongside the
+        // full menu).
+        auto menu = Gio::Menu::create();
+        auto actions = Gio::SimpleActionGroup::create();
+        actions->add_action("fillet", [this] { trigger_action(ToolID::SKETCH_FILLET); });
+        actions->add_action("chamfer", [this] { trigger_action(ToolID::SKETCH_CHAMFER); });
+        actions->add_action("chamfer_distance_distance",
+                             [this] { trigger_action(ToolID::SKETCH_CHAMFER_DISTANCE_DISTANCE); });
+        actions->add_action("chamfer_distance_angle",
+                             [this] { trigger_action(ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE); });
+        actions->add_action("blend_curve", [this] { trigger_action(ToolID::SKETCH_BLEND_CURVE); });
+        actions->add_action("offset", [this] { trigger_action(ToolID::SKETCH_OFFSET); });
+        actions->add_action("trim", [this] { trigger_action(ToolID::SKETCH_TRIM); });
+        actions->add_action("extend", [this] { trigger_action(ToolID::SKETCH_EXTEND); });
+        actions->add_action("break", [this] { trigger_action(ToolID::SKETCH_BREAK); });
+        actions->add_action("scale", [this] { trigger_action(ToolID::SKETCH_SCALE); });
+        actions->add_action("move", [this] { trigger_action(ToolID::SKETCH_MOVE); });
+        actions->add_action("copy", [this] { trigger_action(ToolID::SKETCH_COPY); });
+        m_win.insert_action_group("ribbon_sketch_modify", actions);
+        menu->append("Fillet", "ribbon_sketch_modify.fillet");
+        auto chamfer_menu = Gio::Menu::create();
+        chamfer_menu->append("Equal Distance", "ribbon_sketch_modify.chamfer");
+        chamfer_menu->append("Distance-Distance", "ribbon_sketch_modify.chamfer_distance_distance");
+        chamfer_menu->append("Distance-Angle", "ribbon_sketch_modify.chamfer_distance_angle");
+        menu->append_submenu("Chamfer", chamfer_menu);
+        menu->append("Blend Curve", "ribbon_sketch_modify.blend_curve");
+        menu->append("Offset", "ribbon_sketch_modify.offset");
+        menu->append("Trim", "ribbon_sketch_modify.trim");
+        menu->append("Extend", "ribbon_sketch_modify.extend");
+        menu->append("Break", "ribbon_sketch_modify.break");
+        menu->append("Sketch Scale", "ribbon_sketch_modify.scale");
+        menu->append("Move", "ribbon_sketch_modify.move");
+        menu->append("Copy", "ribbon_sketch_modify.copy");
+        auto popover = Gtk::make_managed<Gtk::PopoverMenu>(menu, Gtk::PopoverMenu::Flags::NESTED);
+        m_win.get_ribbon_sketch_modify_menu_button().set_popover(*popover);
+    }
+    {
         // Constrain ribbon dropdown. Unlike Modify's placeholders above,
         // every one of these is a real, already-working tool -- previously
         // reachable only via the spacebar popover or a raw keyboard
