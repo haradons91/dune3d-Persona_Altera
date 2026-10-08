@@ -1,13 +1,14 @@
 #include "tool_sketch_chamfer_advanced.hpp"
 #include "document/document.hpp"
 #include "document/entity/entity_line2d.hpp"
+#include "document/entity/entity_workplane.hpp"
 #include "document/constraint/constraint_points_coincident.hpp"
 #include "editor/editor_interface.hpp"
-#include "dialogs/dialogs.hpp"
-#include "dialogs/enter_datum_window.hpp"
+#include "dialogs/rectangle_dimensions_window.hpp"
 #include "core/tool_id.hpp"
 #include "tool_common_impl.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <optional>
@@ -95,56 +96,132 @@ ToolResponse ToolSketchChamferAdvanced::begin(const ToolArgs &args)
     if (!m_line1 || !m_line2 || !setup_corner())
         return ToolResponse::end();
 
-    m_intf.get_dialogs().show_enter_datum_window("Enter first distance", DatumUnit::MM, 1.0);
-    m_intf.set_no_canvas_update(true);
+    m_preview = &add_entity<EntityLine2D>();
+    m_preview->m_wrkpl = m_line1->m_wrkpl;
+    m_preview->m_construction = true;
+    m_preview->m_selection_invisible = true;
+
+    m_dist1 = 1.0;
+    m_dist2 = m_tool_id == ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE ? 45.0 : 1.0;
+    m_active_is_first = true;
+
+    update_preview();
+    m_intf.show_rectangle_dimensions(m_dist1, m_dist2, true, true);
     m_intf.canvas_update_from_tool();
 
     return ToolResponse();
 }
 
-void ToolSketchChamferAdvanced::commit_chamfer(double first_value, double second_value)
+glm::dvec2 ToolSketchChamferAdvanced::point1() const
 {
-    const auto d1 = std::max(first_value, 1e-3);
-    glm::dvec2 point2;
+    return m_corner + m_line1_dir * std::max(m_dist1, 1e-3);
+}
+
+glm::dvec2 ToolSketchChamferAdvanced::point2() const
+{
+    const auto d1 = std::max(m_dist1, 1e-3);
     if (m_tool_id == ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE) {
-        const auto point1 = m_corner + m_line1_dir * d1;
-        const auto angle = second_value * M_PI / 180.0;
+        const auto p1 = m_corner + m_line1_dir * d1;
+        const auto angle = std::clamp(m_dist2, 1.0, 179.0) * M_PI / 180.0;
         const auto rot = M_PI - angle;
         const glm::dvec2 chamfer_dir(m_line1_dir.x * std::cos(rot) - m_line1_dir.y * std::sin(rot),
                                      m_line1_dir.x * std::sin(rot) + m_line1_dir.y * std::cos(rot));
-        const auto inter = line_line_intersect(point1, chamfer_dir, m_corner, m_line2_dir);
-        point2 = inter.value_or(m_corner + m_line2_dir * d1);
+        const auto inter = line_line_intersect(p1, chamfer_dir, m_corner, m_line2_dir);
+        return inter.value_or(m_corner + m_line2_dir * d1);
+    }
+    return m_corner + m_line2_dir * std::max(m_dist2, 1e-3);
+}
+
+void ToolSketchChamferAdvanced::update_preview()
+{
+    const auto workplane = get_workplane();
+    const auto cursor = workplane->project(get_cursor_pos_for_workplane(*workplane));
+
+    // Only the ACTIVE side tracks the mouse live -- Tab switches which
+    // one that is, matching Fillet/Offset's single-value mouse-drag
+    // pattern but doubled, one per side of the corner.
+    if (m_active_is_first) {
+        m_dist1 = std::max(glm::dot(cursor - m_corner, m_line1_dir), 1e-3);
+    }
+    else if (m_tool_id == ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE) {
+        // Invert the point1->chamfer_dir->angle relationship point2()
+        // uses: recover the angle that would make the chamfer line pass
+        // through the cursor.
+        const auto p1 = point1();
+        const auto dir = cursor - p1;
+        if (glm::length(dir) > 1e-9) {
+            const auto chamfer_dir = glm::normalize(dir);
+            const auto rot_actual = std::atan2(m_line1_dir.x * chamfer_dir.y - m_line1_dir.y * chamfer_dir.x,
+                                                glm::dot(m_line1_dir, chamfer_dir));
+            const auto angle_deg = (M_PI - rot_actual) * 180.0 / M_PI;
+            m_dist2 = std::clamp(angle_deg, 1.0, 179.0);
+        }
     }
     else {
-        point2 = m_corner + m_line2_dir * std::max(second_value, 1e-3);
+        m_dist2 = std::max(glm::dot(cursor - m_corner, m_line2_dir), 1e-3);
     }
-    const auto point1 = m_corner + m_line1_dir * d1;
+
+    const auto p1 = point1();
+    const auto p2 = point2();
+    m_preview->m_p1 = p1;
+    m_preview->m_p2 = p2;
+    m_preview->m_visible = true;
+
+    m_intf.update_rectangle_dimensions(m_dist1, m_dist2, true, true);
+    m_intf.position_rectangle_dimensions(workplane->transform(m_corner), workplane->transform(m_corner),
+                                         workplane->transform(p1), workplane->transform(m_corner),
+                                         workplane->transform(p2), false, false);
+}
+
+void ToolSketchChamferAdvanced::commit_chamfer()
+{
+    const auto p1 = point1();
+    const auto p2 = point2();
+
+    // If the two lines' shared corner came from an existing
+    // ConstraintPointsCoincident (e.g. a rectangle's corner), it's still
+    // demanding both points stay equal even though the chamfer is about
+    // to move them to two DIFFERENT points -- drop it first, or the
+    // solver fights that old constraint and just shrinks/drags the rest
+    // of the connected shape instead of actually chamfering the corner.
+    // Same bug class ToolSketchTrimExtend hit extending a rectangle edge.
+    const EntityAndPoint line1_corner_point{m_line1->m_uuid, static_cast<unsigned int>(m_line1_corner + 1)};
+    const EntityAndPoint line2_corner_point{m_line2->m_uuid, static_cast<unsigned int>(m_line2_corner + 1)};
+    for (auto it = get_doc().m_constraints.begin(); it != get_doc().m_constraints.end();) {
+        auto *coincident = dynamic_cast<ConstraintPointsCoincident *>(it->second.get());
+        if (coincident
+            && ((coincident->m_entity1 == line1_corner_point && coincident->m_entity2 == line2_corner_point)
+                || (coincident->m_entity1 == line2_corner_point && coincident->m_entity2 == line1_corner_point)))
+            it = get_doc().m_constraints.erase(it);
+        else
+            ++it;
+    }
 
     if (m_line1_corner == 0)
-        m_line1->m_p1 = point1;
+        m_line1->m_p1 = p1;
     else
-        m_line1->m_p2 = point1;
+        m_line1->m_p2 = p1;
     if (m_line2_corner == 0)
-        m_line2->m_p1 = point2;
+        m_line2->m_p1 = p2;
     else
-        m_line2->m_p2 = point2;
+        m_line2->m_p2 = p2;
+
+    if (m_preview)
+        get_doc().m_entities.erase(m_preview->m_uuid);
 
     auto &new_line = add_entity<EntityLine2D>();
     new_line.m_wrkpl = m_line1->m_wrkpl;
-    new_line.m_p1 = point1;
-    new_line.m_p2 = point2;
-
-    const EntityAndPoint line1_point{m_line1->m_uuid, static_cast<unsigned int>(m_line1_corner + 1)};
-    const EntityAndPoint line2_point{m_line2->m_uuid, static_cast<unsigned int>(m_line2_corner + 1)};
+    new_line.m_p1 = p1;
+    new_line.m_p2 = p2;
 
     auto &coincident1 = add_constraint<ConstraintPointsCoincident>();
     coincident1.m_wrkpl = m_line1->m_wrkpl;
-    coincident1.m_entity1 = line1_point;
+    coincident1.m_entity1 = line1_corner_point;
     coincident1.m_entity2 = {new_line.m_uuid, 1};
 
     auto &coincident2 = add_constraint<ConstraintPointsCoincident>();
     coincident2.m_wrkpl = m_line2->m_wrkpl;
-    coincident2.m_entity1 = line2_point;
+    coincident2.m_entity1 = line2_corner_point;
     coincident2.m_entity2 = {new_line.m_uuid, 2};
 
     set_current_group_solve_pending();
@@ -152,31 +229,61 @@ void ToolSketchChamferAdvanced::commit_chamfer(double first_value, double second
 
 ToolResponse ToolSketchChamferAdvanced::update(const ToolArgs &args)
 {
+    if (args.type == ToolEventType::MOVE) {
+        update_preview();
+        set_first_update_group_current();
+        return ToolResponse();
+    }
+
     if (args.type == ToolEventType::DATA) {
-        if (auto data = dynamic_cast<const ToolDataWindow *>(args.data.get())) {
-            if (data->event == ToolDataWindow::Event::OK) {
-                if (auto d = dynamic_cast<const ToolDataEnterDatumWindow *>(args.data.get())) {
-                    if (m_stage == Stage::FIRST) {
-                        m_first_value = d->value;
-                        m_stage = Stage::SECOND;
-                        const bool is_angle = m_tool_id == ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE;
-                        m_intf.get_dialogs().show_enter_datum_window(
-                                is_angle ? "Enter angle" : "Enter second distance",
-                                is_angle ? DatumUnit::DEGREE : DatumUnit::MM, is_angle ? 45.0 : 1.0);
-                        return ToolResponse();
-                    }
-                    else {
-                        commit_chamfer(m_first_value, d->value);
-                        return ToolResponse::commit();
-                    }
+        if (auto data = dynamic_cast<const ToolDataRectangleDimensionsWindow *>(args.data.get())) {
+            if (data->event == ToolDataWindow::Event::UPDATE) {
+                // Tab locks whichever side you're leaving at its current
+                // value and hands mouse-drag control to the other one.
+                if (data->lock_width) {
+                    m_dist1 = data->width;
+                    m_active_is_first = false;
                 }
-            }
-            else if (data->event == ToolDataWindow::Event::CLOSE) {
-                return ToolResponse::revert();
+                if (data->lock_height) {
+                    m_dist2 = data->height;
+                    m_active_is_first = true;
+                }
+                update_preview();
+                m_intf.canvas_update_from_tool();
             }
         }
+        return ToolResponse();
     }
-    return ToolResponse();
+
+    if (args.type != ToolEventType::ACTION)
+        return ToolResponse();
+
+    switch (args.action) {
+    case InToolActionID::LMB:
+        // First click locks side 1 at its current (dragged) value and
+        // hands mouse-drag control to side 2, same as Tab -- second
+        // click commits. Tab still works too, this is just a second way
+        // to advance without touching the keyboard.
+        if (m_active_is_first) {
+            m_active_is_first = false;
+            update_preview();
+            m_intf.canvas_update_from_tool();
+            return ToolResponse();
+        }
+        m_intf.hide_rectangle_dimensions();
+        commit_chamfer();
+        return ToolResponse::commit();
+
+    case InToolActionID::RMB:
+    case InToolActionID::CANCEL:
+        m_intf.hide_rectangle_dimensions();
+        if (m_preview)
+            get_doc().m_entities.erase(m_preview->m_uuid);
+        return ToolResponse::revert();
+
+    default:
+        return ToolResponse();
+    }
 }
 
 } // namespace dune3d

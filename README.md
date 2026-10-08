@@ -209,16 +209,33 @@ Known loose ends in this fork, not yet acted on:
      (which may be far apart, unlike Fillet's shared corner) with a
      tangent-continuous cubic Bezier, "bulge" entered via the same
      dialog mechanism; only straight lines are supported.
- - **Fix Sketch Modify**: Chamfer's Distance-Distance and Distance-Angle
-   submenu variants and Blend Curve are confirmed broken in actual use
+ - **Fix Sketch Modify**: Blend Curve is confirmed broken in actual use
    (the "not verified live" caveat above turned out to matter) -- needs
    real debugging against the live tool/canvas interaction, not just
-   re-checking the geometry math. (Trim, Extend, Break, and Offset have
-   all been rebuilt as real hover/live-drag-driven tools, sharing an
-   architecture closer to `ToolSketchFillet` than the original
+   re-checking the geometry math. (Trim, Extend, Break, Offset, and
+   Chamfer's Distance-Distance/Distance-Angle variants have all been
+   rebuilt as real hover/live-drag-driven tools, sharing an architecture
+   closer to `ToolSketchFillet` than the original
    pre-selection/one-shot/modal-dialog design, and confirmed working
    live -- see the items below for what's been tested there and what's
    still open.)
+ - **Chamfer's Distance-Distance/Distance-Angle rebuilt as a live-drag
+   tool with click-to-advance and confirmed working**: no longer two
+   sequential modal dialogs -- select the two corner lines first, then
+   invoke; a preview line connects the two chamfer points live as you
+   drag, with two textboxes (reusing `ToolDrawRectangle`'s existing
+   width/height + Tab-switch mechanism, since it already solved
+   "mouse drives one value, typing/Tab locks it and hands control to
+   the other" generically). First click locks side 1 at its current
+   value and hands mouse-drag to side 2 (same as Tab); second click
+   commits. Distance-Angle's angle value is derived by inverting the
+   existing point1->chamfer_dir->angle rotation formula against the
+   cursor position (verified against hand-computed values before
+   wiring up). Also fixes chamfering a rectangle's own corner just
+   shrinking the whole rectangle instead of actually cutting a diagonal
+   -- same root cause as the Extend/rectangle bug below (an existing
+   `ConstraintPointsCoincident` at the shared corner wasn't dropped
+   before moving the two points to their new, now-different positions).
  - **Sketch Modify: allow invoking a menu item with or without a
    pre-selection**: Chamfer, Offset, Scale, Move/Copy, and Blend Curve
    all still require selecting the right entity/entities *before*
