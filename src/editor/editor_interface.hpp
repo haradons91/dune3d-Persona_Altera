@@ -44,6 +44,11 @@ public:
     virtual void accept_extrude_dimension() = 0;
     virtual void hide_extrude_dimension() = 0;
     virtual void position_extrude_dimension(glm::dvec3 base, glm::dvec3 tip) = 0;
+    virtual void accept_offset_dimension() = 0;
+    virtual void show_offset_dimension(double distance) = 0;
+    virtual void update_offset_dimension(double distance) = 0;
+    virtual void hide_offset_dimension() = 0;
+    virtual void position_offset_dimension(glm::dvec3 base, glm::dvec3 tip) = 0;
 
     virtual void tool_bar_set_actions(const std::vector<ActionLabelInfo> &labels) = 0;
     virtual void tool_bar_set_tool_tip(const std::string &s) = 0;

@@ -2495,6 +2495,36 @@ void Editor::position_extrude_dimension(glm::dvec3 base, glm::dvec3 tip)
 {
     m_win.position_extrude_dimension(get_canvas().project_to_window(base), get_canvas().project_to_window(tip));
 }
+void Editor::accept_offset_dimension()
+{
+    // Unlike accept_extrude_dimension (which mutates a specific GroupExtrude
+    // directly), Offset is a plain ToolCommon-derived tool -- "accept" just
+    // means "simulate the LMB click that commits it", same trick
+    // accept_circle_dimension uses for Fillet/DrawCircle.
+    if (m_core.get_tool_id() != ToolID::SKETCH_OFFSET)
+        return;
+    ToolArgs args;
+    args.type = ToolEventType::ACTION;
+    args.action = InToolActionID::LMB;
+    ToolResponse response = m_core.tool_update(args);
+    tool_process(response);
+}
+void Editor::show_offset_dimension(double distance)
+{
+    m_win.show_offset_dimension(distance);
+}
+void Editor::update_offset_dimension(double distance)
+{
+    m_win.update_offset_dimension(distance);
+}
+void Editor::hide_offset_dimension()
+{
+    m_win.hide_offset_dimension();
+}
+void Editor::position_offset_dimension(glm::dvec3 base, glm::dvec3 tip)
+{
+    m_win.position_offset_dimension(get_canvas().project_to_window(base), get_canvas().project_to_window(tip));
+}
 void Editor::hide_rectangle_dimensions()
 {
     m_win.hide_rectangle_dimensions();

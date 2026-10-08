@@ -421,6 +421,42 @@ void Dune3DAppWindow::focus_extrude_dimension()
     if (m_rectangle_dimensions && m_rectangle_dimensions_active)
         Glib::signal_idle().connect_once([this] { m_rectangle_dimensions->focus_width(); });
 }
+void Dune3DAppWindow::show_offset_dimension(double distance)
+{
+    m_rectangle_dimensions->reset_offset_dimension_editing();
+    m_rectangle_dimensions->set_offset_dimension(distance);
+    m_rectangle_dimensions_box->set_visible(true);
+    m_rectangle_dimensions_active = true;
+    m_rectangle_dimensions->focus_width();
+}
+void Dune3DAppWindow::update_offset_dimension(double distance)
+{
+    m_rectangle_dimensions->set_offset_dimension(distance);
+}
+void Dune3DAppWindow::hide_offset_dimension()
+{
+    m_rectangle_dimensions->reset_offset_dimension_editing();
+    hide_rectangle_dimensions();
+}
+void Dune3DAppWindow::focus_offset_dimension()
+{
+    if (m_rectangle_dimensions && m_rectangle_dimensions_active)
+        Glib::signal_idle().connect_once([this] { m_rectangle_dimensions->focus_width(); });
+}
+void Dune3DAppWindow::position_offset_dimension(glm::dvec2 base, glm::dvec2 tip)
+{
+    m_rectangle_dimensions_box->set_halign(Gtk::Align::START);
+    m_rectangle_dimensions_box->set_valign(Gtk::Align::START);
+    const auto x_min = std::min(base.x, tip.x);
+    const auto x_max = std::max(base.x, tip.x);
+    const auto margin_start = std::max(0., std::min(base.x - 150., x_min - 35.));
+    const auto margin_top = std::max(0., base.y - 50.);
+    m_rectangle_dimensions_box->set_margin_start(margin_start);
+    m_rectangle_dimensions_box->set_margin_top(margin_top);
+    m_rectangle_dimensions->position_offset_dimension(x_min - margin_start, x_max - margin_start,
+                                                       base.y - margin_top, x_max - margin_start + 35.,
+                                                       base.y - margin_top + 30.);
+}
 void Dune3DAppWindow::position_extrude_dimension(glm::dvec2 base, glm::dvec2 tip)
 {
     m_rectangle_dimensions_box->set_halign(Gtk::Align::START);

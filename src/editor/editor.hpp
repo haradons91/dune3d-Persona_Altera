@@ -63,6 +63,11 @@ public:
     void update_extrude_dimension(double height) override;
     void hide_extrude_dimension() override;
     void position_extrude_dimension(glm::dvec3 base, glm::dvec3 tip) override;
+    void accept_offset_dimension() override;
+    void show_offset_dimension(double distance) override;
+    void update_offset_dimension(double distance) override;
+    void hide_offset_dimension() override;
+    void position_offset_dimension(glm::dvec3 base, glm::dvec3 tip) override;
     void tool_update_data(std::unique_ptr<ToolData> data) override;
     void enable_hover_selection(bool enable) override;
     std::optional<SelectableRef> get_hover_selection() const override;

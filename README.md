@@ -210,14 +210,33 @@ Known loose ends in this fork, not yet acted on:
      tangent-continuous cubic Bezier, "bulge" entered via the same
      dialog mechanism; only straight lines are supported.
  - **Fix Sketch Modify**: Chamfer's Distance-Distance and Distance-Angle
-   submenu variants, Blend Curve, and Offset are confirmed broken in
-   actual use (the "not verified live" caveat above turned out to
-   matter) -- needs real debugging against the live tool/canvas
-   interaction, not just re-checking the geometry math. (Trim, Extend,
-   and Break have all been rebuilt as real hover-driven tools, sharing
-   an architecture closer to `ToolSketchFillet` than the original
-   pre-selection/one-shot design, and confirmed working live -- see the
-   items below for what's been tested there and what's still open.)
+   submenu variants and Blend Curve are confirmed broken in actual use
+   (the "not verified live" caveat above turned out to matter) -- needs
+   real debugging against the live tool/canvas interaction, not just
+   re-checking the geometry math. (Trim, Extend, Break, and Offset have
+   all been rebuilt as real hover/live-drag-driven tools, sharing an
+   architecture closer to `ToolSketchFillet` than the original
+   pre-selection/one-shot/modal-dialog design, and confirmed working
+   live -- see the items below for what's been tested there and what's
+   still open.)
+ - **Offset rebuilt as a live-drag tool and confirmed working**: no
+   longer a modal dialog -- select an entity (line/arc/circle) first,
+   then invoke Offset; dragging the mouse grows/shrinks the preview
+   live (circles/arcs track cursor distance from center, lines track
+   perpendicular distance from the cursor), with an inline on-canvas
+   textbox (new `show/update/position/hide/accept_offset_dimension`
+   EditorInterface methods, mirroring Fillet's circle-dimension
+   plumbing but accepting negative values, which neither the existing
+   circle nor extrude dimension widgets did) for typing an exact value
+   -- positive grows/extends outward, negative shrinks/moves inward.
+ - **Offset TODO: live-update the textbox's displayed value while
+   dragging**: the number currently freezes as soon as the box gains
+   focus (which happens immediately on tool start) and only reflects
+   the mouse-tracked distance once you start typing over it -- the
+   preview geometry itself already resizes correctly while dragging,
+   this is just the readout. Matches Fillet's existing, accepted
+   behavior (same `m_*_user_editing` freeze-on-focus mechanism) rather
+   than being a new regression, but worth fixing for both.
  - **Test Trim on a rectangle (and other closed/connected shapes)**:
    confirmed working for two independent crossing lines. On a plain
    rectangle by itself (no other line crossing any of its sides) Trim

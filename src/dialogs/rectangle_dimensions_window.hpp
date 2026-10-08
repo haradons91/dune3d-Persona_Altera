@@ -23,6 +23,11 @@ public:
     double diameter = 0;
 };
 
+class ToolDataOffsetDimensionsWindow : public ToolDataWindow {
+public:
+    double distance = 0;
+};
+
 class RectangleDimensionsWindow : public Gtk::Fixed {
 public:
     RectangleDimensionsWindow(EditorInterface &intf, double width, double height);
@@ -42,6 +47,10 @@ public:
     void commit_extrude_dimension();
     void position_extrude_dimension(double base_x, double base_y, double tip_x, double tip_y, double guide_width,
                                     double guide_height);
+    void set_offset_dimension(double distance);
+    void reset_offset_dimension_editing();
+    void commit_offset_dimension();
+    void position_offset_dimension(double x_min, double x_max, double y, double guide_width, double guide_height);
     double get_width() const;
     double get_height() const;
 private:
@@ -62,9 +71,12 @@ private:
     bool m_circle_user_editing = false;
     bool m_extrude_mode = false;
     bool m_extrude_user_editing = false;
+    bool m_offset_mode = false;
+    bool m_offset_user_editing = false;
     EditorInterface &m_interface;
     void emit_dimensions(bool lock_width = true, bool lock_height = true);
     void emit_circle_dimension();
+    void emit_offset_dimension();
     static void update_entry_width(Gtk::Entry &entry);
     void focus_and_select(Gtk::Entry &entry);
 };

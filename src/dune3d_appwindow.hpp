@@ -213,6 +213,11 @@ Gtk::Button &get_ribbon_btn_line() { return *m_ribbon_btn_line; }
     void position_extrude_dimension(glm::dvec2 base, glm::dvec2 tip);
     void commit_extrude_dimension();
     void focus_extrude_dimension();
+    void show_offset_dimension(double distance);
+    void update_offset_dimension(double distance);
+    void hide_offset_dimension();
+    void position_offset_dimension(glm::dvec2 base, glm::dvec2 tip);
+    void focus_offset_dimension();
     void commit_and_focus_next_rectangle_dimension();
     void focus_circle_dimension();
     bool rectangle_dimensions_visible() const;

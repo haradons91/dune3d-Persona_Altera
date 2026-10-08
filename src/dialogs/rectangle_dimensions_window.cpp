@@ -2,6 +2,7 @@
 #include "editor/editor_interface.hpp"
 #include <format>
 #include <stdexcept>
+#include <cmath>
 
 namespace dune3d {
 RectangleDimensionsWindow::RectangleDimensionsWindow(EditorInterface &intf, double width, double height)
@@ -15,7 +16,7 @@ RectangleDimensionsWindow::RectangleDimensionsWindow(EditorInterface &intf, doub
         cr->set_source_rgba(0.35, 0.35, 0.35, 0.9);
         cr->set_line_width(1.0);
 
-        if (m_circle_mode || m_extrude_mode) {
+        if (m_circle_mode || m_extrude_mode || m_offset_mode) {
             if (m_extrude_mode)
                 return;
             cr->move_to(m_x_axis_min, m_x_axis_y);
@@ -65,25 +66,35 @@ RectangleDimensionsWindow::RectangleDimensionsWindow(EditorInterface &intf, doub
     m_width->signal_changed().connect([this] {
         update_entry_width(*m_width);
         rectangle_debug_log(std::format("[rectangle-input] width changed text='{}'", m_width->get_text().raw()));
-        if ((m_circle_mode || m_extrude_mode) && !m_updating) {
+        if ((m_circle_mode || m_extrude_mode || m_offset_mode) && !m_updating) {
             // Do not update the tool from inside GTK's text user action.
             // Re-entering the tool here causes GTK's "Cannot end irreversible
             // action while in user action" warning and interrupts typing.
             Glib::signal_timeout().connect_once([this] {
-                if (!m_circle_mode && !m_extrude_mode)
+                if (!m_circle_mode && !m_extrude_mode && !m_offset_mode)
                     return;
                 try {
                     size_t parsed = 0;
                     const auto text = m_width->get_text();
-                    const auto diameter = std::stod(text, &parsed);
-                    if (parsed == text.size() && diameter >= 0 && diameter <= 1e6) {
+                    const auto value = std::stod(text, &parsed);
+                    // Offset's distance is signed (negative = inward/
+                    // shrink) -- unlike diameter/height, which can never
+                    // go negative.
+                    const auto min_value = m_offset_mode ? -1e6 : 0.;
+                    if (parsed == text.size() && value >= min_value && value <= 1e6) {
                         if (m_extrude_mode) {
-                            m_interface.update_extrude_dimension(diameter);
+                            m_interface.update_extrude_dimension(value);
+                        }
+                        else if (m_offset_mode) {
+                            auto data = std::make_unique<ToolDataOffsetDimensionsWindow>();
+                            data->event = ToolDataWindow::Event::UPDATE;
+                            data->distance = value;
+                            m_interface.tool_update_data(std::move(data));
                         }
                         else {
                             auto data = std::make_unique<ToolDataCircleDimensionsWindow>();
                             data->event = ToolDataWindow::Event::UPDATE;
-                            data->diameter = diameter;
+                            data->diameter = value;
                             m_interface.tool_update_data(std::move(data));
                         }
                     }
@@ -105,7 +116,7 @@ RectangleDimensionsWindow::RectangleDimensionsWindow(EditorInterface &intf, doub
                 [this, entry_ptr](guint keyval, guint, Gdk::ModifierType) {
                     if (keyval == GDK_KEY_Tab || keyval == GDK_KEY_ISO_Left_Tab) {
                         auto *next_entry = entry_ptr == m_width ? m_height : m_width;
-                        if (m_circle_mode || m_extrude_mode || !next_entry->get_visible()) {
+                        if (m_circle_mode || m_extrude_mode || m_offset_mode || !next_entry->get_visible()) {
                             // Only one field is visible (circle/fillet tools
                             // always have one, and a 3-point rectangle's
                             // first edge only defines one dimension yet);
@@ -160,6 +171,10 @@ RectangleDimensionsWindow::RectangleDimensionsWindow(EditorInterface &intf, doub
             Glib::signal_idle().connect_once([this] { m_interface.accept_extrude_dimension(); });
             return;
         }
+        if (m_offset_mode) {
+            commit_offset_dimension();
+            return;
+        }
         emit_dimensions(true, false);
         m_interface.accept_rectangle_dimensions();
     });
@@ -185,6 +200,8 @@ void RectangleDimensionsWindow::set_dimensions(double width, double height, bool
     m_circle_user_editing = false;
     m_extrude_mode = false;
     m_extrude_user_editing = false;
+    m_offset_mode = false;
+    m_offset_user_editing = false;
     m_width->set_visible(width_visible);
     m_height->set_visible(height_visible);
     // Never leave focus on an entry that just became hidden (e.g. a 3-point
@@ -234,6 +251,70 @@ void RectangleDimensionsWindow::set_extrude_dimension(double height, bool force)
 void RectangleDimensionsWindow::reset_extrude_dimension_editing()
 {
     m_extrude_user_editing = false;
+}
+
+void RectangleDimensionsWindow::set_offset_dimension(double distance)
+{
+    m_offset_mode = true;
+    m_circle_mode = false;
+    m_extrude_mode = false;
+    m_height->set_visible(false);
+    // Same reasoning as set_circle_dimension: don't clobber the entry text
+    // mid-keystroke while the user is typing.
+    if (m_offset_user_editing)
+        return;
+    m_updating = true;
+    m_width->set_text(std::format("{:.3f}", distance));
+    update_entry_width(*m_width);
+    m_updating = false;
+}
+
+void RectangleDimensionsWindow::reset_offset_dimension_editing()
+{
+    m_offset_user_editing = false;
+}
+
+void RectangleDimensionsWindow::position_offset_dimension(double x_min, double x_max, double y, double guide_width,
+                                                           double guide_height)
+{
+    m_offset_mode = true;
+    m_height->set_visible(false);
+    m_dimension_guides->set_content_width(std::max(330, static_cast<int>(std::ceil(guide_width))));
+    m_dimension_guides->set_content_height(std::max(100, static_cast<int>(std::ceil(guide_height))));
+    m_x_axis_min = std::min(x_min, x_max);
+    m_x_axis_max = std::max(x_min, x_max);
+    m_x_axis_y = y;
+    const auto entry_width = std::max(1, m_width->get_width());
+    const auto entry_height = std::max(1, m_width->get_height());
+    constexpr double offset_dimension_text_buffer = 20.;
+    move(*m_width, (m_x_axis_min + m_x_axis_max - entry_width) / 2.,
+         m_x_axis_y - entry_height - offset_dimension_text_buffer);
+    m_dimension_guides->queue_draw();
+}
+
+void RectangleDimensionsWindow::commit_offset_dimension()
+{
+    emit_offset_dimension();
+    m_interface.accept_offset_dimension();
+}
+
+void RectangleDimensionsWindow::emit_offset_dimension()
+{
+    if (m_updating)
+        return;
+    try {
+        size_t parsed = 0;
+        const auto text = m_width->get_text();
+        const auto distance = std::stod(text, &parsed);
+        if (parsed != text.size() || std::abs(distance) > 1e6)
+            return;
+        auto data = std::make_unique<ToolDataOffsetDimensionsWindow>();
+        data->event = ToolDataWindow::Event::UPDATE;
+        data->distance = distance;
+        m_interface.tool_update_data(std::move(data));
+    }
+    catch (const std::exception &) {
+    }
 }
 
 void RectangleDimensionsWindow::commit_extrude_dimension()
@@ -306,6 +387,8 @@ void RectangleDimensionsWindow::focus_width()
         m_circle_user_editing = true;
     if (m_extrude_mode)
         m_extrude_user_editing = true;
+    if (m_offset_mode)
+        m_offset_user_editing = true;
     focus_and_select(*m_width);
 }
 void RectangleDimensionsWindow::commit_dimensions()
