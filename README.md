@@ -219,6 +219,14 @@ Known loose ends in this fork, not yet acted on:
    pre-selection/one-shot/modal-dialog design, and confirmed working
    live -- see the items below for what's been tested there and what's
    still open.)
+ - **Sketch Modify: allow invoking a menu item with or without a
+   pre-selection**: Chamfer, Offset, Scale, Move/Copy, and Blend Curve
+   all still require selecting the right entity/entities *before*
+   clicking the menu item -- with nothing (or the wrong thing) selected,
+   `can_begin()` fails and the tool silently does nothing, the same
+   architectural flaw Trim/Break originally had. Should work like
+   Fillet: either pre-select then invoke, OR invoke first and pick the
+   entity/entities by hovering/clicking on the canvas afterward.
  - **Offset rebuilt as a live-drag tool and confirmed working**: no
    longer a modal dialog -- select an entity (line/arc/circle) first,
    then invoke Offset; dragging the mouse grows/shrinks the preview
