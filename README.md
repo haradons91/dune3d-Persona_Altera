@@ -210,14 +210,14 @@ Known loose ends in this fork, not yet acted on:
      tangent-continuous cubic Bezier, "bulge" entered via the same
      dialog mechanism; only straight lines are supported.
  - **Fix Sketch Modify**: Chamfer's Distance-Distance and Distance-Angle
-   submenu variants, Blend Curve, Offset, and Break are confirmed broken
-   in actual use (the "not verified live" caveat above turned out to
+   submenu variants, Blend Curve, and Offset are confirmed broken in
+   actual use (the "not verified live" caveat above turned out to
    matter) -- needs real debugging against the live tool/canvas
-   interaction, not just re-checking the geometry math. (Trim and Extend
-   have both been rebuilt as real hover-driven tools, sharing an
-   architecture closer to `ToolSketchFillet` than the original one-shot
-   two-pre-selected-lines design, and confirmed working live -- see the
-   two items below for what's been tested there and what's still open.)
+   interaction, not just re-checking the geometry math. (Trim, Extend,
+   and Break have all been rebuilt as real hover-driven tools, sharing
+   an architecture closer to `ToolSketchFillet` than the original
+   pre-selection/one-shot design, and confirmed working live -- see the
+   items below for what's been tested there and what's still open.)
  - **Test Trim on a rectangle (and other closed/connected shapes)**:
    confirmed working for two independent crossing lines. On a plain
    rectangle by itself (no other line crossing any of its sides) Trim
@@ -237,6 +237,16 @@ Known loose ends in this fork, not yet acted on:
    corner from the rest of the shape instead of dragging an adjacent
    side along. Not yet tested: arcs/circles (currently `EntityLine2D`-
    only, same limitation as Trim).
+ - **Break rebuilt as a hover-driven tool and confirmed working**: like
+   the original design, it required pre-selecting a line/arc before
+   invoking the tool -- with nothing selected it silently failed to even
+   start. Rebuilt hover-driven (no pre-selection) like Trim/Extend,
+   sharing their open crosshair; the crosshair originally froze
+   whenever the cursor drifted off the hovered curve (same root cause
+   Trim/Extend hit and fixed) -- now tracks continuously. Shows a
+   preview point marking exactly where the split will land as the
+   cursor moves along the curve; splits a line or arc into two there on
+   click.
  - **Replace Sketch Modify's popup-dialog interactions with on-canvas
    arrows**: Move's two sequential X/Y popup dialogs should become
    Left/Right and Up/Down arrows instead; Copy's popup dialogs should

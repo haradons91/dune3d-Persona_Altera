@@ -3,80 +3,117 @@
 #include "document/entity/entity.hpp"
 #include "document/entity/entity_line2d.hpp"
 #include "document/entity/entity_arc2d.hpp"
+#include "document/entity/entity_point2d.hpp"
 #include "document/entity/entity_workplane.hpp"
 #include "document/constraint/constraint_points_coincident.hpp"
 #include "editor/editor_interface.hpp"
+#include "util/arc_util.hpp"
 #include "tool_common_impl.hpp"
 
 #include <algorithm>
-#include <sstream>
+#include <cmath>
 
 namespace dune3d {
 
-static Entity *breakable_selected_entity(Document &doc, const std::set<SelectableRef> &sel, const UUID &wrkpl)
-{
-    Entity *found = nullptr;
-    for (const auto &sr : sel) {
-        if (sr.type != SelectableRef::Type::ENTITY)
-            continue;
-        auto *entity = &doc.get_entity(sr.item);
-        bool ok = false;
-        if (auto line = dynamic_cast<EntityLine2D *>(entity))
-            ok = line->m_wrkpl == wrkpl;
-        else if (auto arc = dynamic_cast<EntityArc2D *>(entity))
-            ok = arc->m_wrkpl == wrkpl;
-        if (!ok)
-            continue;
-        if (found && found != entity)
-            return nullptr; // more than one distinct candidate -- ambiguous
-        found = entity;
-    }
-    return found;
-}
-
 ToolBase::CanBegin ToolSketchBreak::can_begin()
 {
-    if (get_workplane_uuid() == UUID())
-        return false;
-    return breakable_selected_entity(get_doc(), m_selection, get_workplane_uuid()) != nullptr;
+    return get_workplane_uuid() != UUID();
 }
 
 ToolResponse ToolSketchBreak::begin(const ToolArgs &args)
 {
-    m_entity = breakable_selected_entity(get_doc(), m_selection, get_workplane_uuid());
-    if (!m_entity)
-        return ToolResponse::end();
+    m_intf.enable_hover_selection();
     return ToolResponse();
 }
 
-glm::dvec2 ToolSketchBreak::compute_break_point()
+glm::dvec2 ToolSketchBreak::compute_break_point(Entity &entity)
 {
     const auto workplane = get_workplane();
     const auto cursor = workplane->project(get_cursor_pos_for_workplane(*workplane));
-    if (auto line = dynamic_cast<EntityLine2D *>(m_entity)) {
+    if (auto line = dynamic_cast<EntityLine2D *>(&entity)) {
         const auto d = line->m_p2 - line->m_p1;
         const auto len2 = glm::dot(d, d);
         auto t = len2 > 1e-12 ? glm::dot(cursor - line->m_p1, d) / len2 : 0.0;
         t = std::clamp(t, 0.02, 0.98);
         return line->m_p1 + d * t;
     }
-    else if (auto arc = dynamic_cast<EntityArc2D *>(m_entity)) {
+    else if (auto arc = dynamic_cast<EntityArc2D *>(&entity)) {
         const auto radius = glm::length(arc->m_from - arc->m_center);
-        const auto dir_len = glm::length(cursor - arc->m_center);
-        if (dir_len < 1e-9)
-            return arc->m_from;
-        return arc->m_center + (cursor - arc->m_center) / dir_len * radius;
+        const auto a0 = c2pi(angle(arc->m_from - arc->m_center));
+        const auto a1 = c2pi(angle(arc->m_to - arc->m_center));
+        const auto dphi = c2pi(a1 - a0);
+        const auto ac = c2pi(angle(cursor - arc->m_center));
+        const auto da = c2pi(ac - a0);
+        // Fraction along the arc's own sweep (0 at m_from, 1 at m_to) --
+        // outside that sweep (the cursor is over the "missing" part of
+        // the circle), clamp to whichever end of the sweep is nearer.
+        double t;
+        if (da <= dphi)
+            t = dphi > 1e-9 ? da / dphi : 0.0;
+        else
+            t = (da - dphi) <= (2 * M_PI - da) ? 1.0 : 0.0;
+        t = std::clamp(t, 0.02, 0.98);
+        return arc->m_center + euler(radius, a0 + t * dphi);
     }
     return cursor;
+}
+
+bool ToolSketchBreak::update_preview()
+{
+    const auto hover = m_intf.get_hover_selection();
+
+    // Unconditional every frame (not nested inside the "something is
+    // hovered" branch below): this is what drives the on-canvas
+    // crosshair (sets Editor's snap-indicator position as a side
+    // effect). Calling it only when an entity was hovered meant the
+    // crosshair froze in place whenever the cursor drifted off a curve,
+    // instead of continuously tracking the mouse -- same bug Trim/Extend
+    // hit and fixed this same way.
+    const auto workplane = get_workplane();
+    if (!workplane)
+        return false;
+    get_cursor_pos_for_workplane(*workplane);
+
+    const UUID wrkpl = get_workplane_uuid();
+    Entity *entity = nullptr;
+    if (hover && hover->type == SelectableRef::Type::ENTITY) {
+        auto &candidate = get_entity(hover->item);
+        if (auto line = dynamic_cast<EntityLine2D *>(&candidate)) {
+            if (line->m_wrkpl == wrkpl)
+                entity = &candidate;
+        }
+        else if (auto arc = dynamic_cast<EntityArc2D *>(&candidate)) {
+            if (arc->m_wrkpl == wrkpl)
+                entity = &candidate;
+        }
+    }
+
+    if (!entity) {
+        m_hovered_entity = nullptr;
+        if (m_preview)
+            m_preview->m_visible = false;
+        return false;
+    }
+
+    m_hovered_entity = entity;
+    m_break_point = compute_break_point(*entity);
+
+    if (!m_preview) {
+        m_preview = &add_entity<EntityPoint2D>();
+        m_preview->m_wrkpl = wrkpl;
+        m_preview->m_construction = true;
+        m_preview->m_selection_invisible = true;
+    }
+    m_preview->m_visible = true;
+    m_preview->m_p = m_break_point;
+    return true;
 }
 
 ToolResponse ToolSketchBreak::update(const ToolArgs &args)
 {
     if (args.type == ToolEventType::MOVE) {
-        m_break_point = compute_break_point();
-        std::ostringstream os;
-        os << "break at " << m_break_point.x << ", " << m_break_point.y;
-        m_intf.tool_bar_set_tool_tip(os.str());
+        update_preview();
+        set_first_update_group_current();
         return ToolResponse();
     }
 
@@ -85,10 +122,16 @@ ToolResponse ToolSketchBreak::update(const ToolArgs &args)
 
     switch (args.action) {
     case InToolActionID::LMB: {
-        const auto break_point = compute_break_point();
+        if (!m_hovered_entity)
+            return ToolResponse();
+
+        const auto break_point = m_break_point;
         const auto wrkpl = get_workplane_uuid();
 
-        if (auto line = dynamic_cast<EntityLine2D *>(m_entity)) {
+        if (m_preview)
+            get_doc().m_entities.erase(m_preview->m_uuid);
+
+        if (auto line = dynamic_cast<EntityLine2D *>(m_hovered_entity)) {
             const auto far_point = line->m_p2;
             line->m_p2 = break_point;
 
@@ -105,7 +148,7 @@ ToolResponse ToolSketchBreak::update(const ToolArgs &args)
             coincident.m_entity1 = {line->m_uuid, 2};
             coincident.m_entity2 = {new_line.m_uuid, 1};
         }
-        else if (auto arc = dynamic_cast<EntityArc2D *>(m_entity)) {
+        else if (auto arc = dynamic_cast<EntityArc2D *>(m_hovered_entity)) {
             const auto far_point = arc->m_to;
             arc->m_to = break_point;
 
@@ -133,6 +176,8 @@ ToolResponse ToolSketchBreak::update(const ToolArgs &args)
 
     case InToolActionID::RMB:
     case InToolActionID::CANCEL:
+        if (m_preview)
+            get_doc().m_entities.erase(m_preview->m_uuid);
         return ToolResponse::revert();
 
     default:
