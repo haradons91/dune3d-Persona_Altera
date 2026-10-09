@@ -115,20 +115,24 @@ static glm::dvec2 curve_tangent_dir(Entity *e, int local_index)
 
 ToolBase::CanBegin ToolSketchBlendCurve::can_begin()
 {
-    if (get_workplane_uuid() == UUID())
-        return false;
-    auto curves = selected_curves(m_selection, get_workplane_uuid(), get_doc());
-    return curves[0] && curves[1];
+    return get_workplane_uuid() != UUID();
 }
 
-ToolResponse ToolSketchBlendCurve::begin(const ToolArgs &args)
+bool ToolSketchBlendCurve::select_curve(Entity *&curve)
 {
-    auto curves = selected_curves(m_selection, get_workplane_uuid(), get_doc());
-    m_curve1 = curves[0];
-    m_curve2 = curves[1];
-    if (!m_curve1 || !m_curve2)
-        return ToolResponse::end();
+    const auto hover = m_intf.get_hover_selection();
+    if (!hover || hover->type != SelectableRef::Type::ENTITY)
+        return false;
+    auto *candidate = &get_entity(hover->item);
+    if (!curve_on_workplane(candidate, get_workplane_uuid()) || candidate == curve || candidate == m_curve1
+        || candidate == m_curve2 || candidate == m_preview)
+        return false;
+    curve = candidate;
+    return true;
+}
 
+bool ToolSketchBlendCurve::setup_connection()
+{
     const auto curve1_points = curve_endpoints(m_curve1);
     const auto curve2_points = curve_endpoints(m_curve2);
     double best = 1e18;
@@ -159,7 +163,19 @@ ToolResponse ToolSketchBlendCurve::begin(const ToolArgs &args)
     update_preview();
     m_intf.show_circle_dimension(m_bulge);
     m_intf.canvas_update_from_tool();
+    return true;
+}
 
+ToolResponse ToolSketchBlendCurve::begin(const ToolArgs &args)
+{
+    m_intf.enable_hover_selection();
+    auto curves = selected_curves(m_selection, get_workplane_uuid(), get_doc());
+    m_curve1 = curves[0];
+    m_curve2 = curves[1];
+    if (m_curve1 && m_curve2 && !setup_connection()) {
+        m_curve1 = nullptr;
+        m_curve2 = nullptr;
+    }
     return ToolResponse();
 }
 
@@ -205,14 +221,15 @@ void ToolSketchBlendCurve::update_preview()
 ToolResponse ToolSketchBlendCurve::update(const ToolArgs &args)
 {
     if (args.type == ToolEventType::MOVE) {
-        update_preview();
+        if (m_preview)
+            update_preview();
         set_first_update_group_current();
         return ToolResponse();
     }
 
     if (args.type == ToolEventType::DATA) {
         if (auto data = dynamic_cast<const ToolDataCircleDimensionsWindow *>(args.data.get())) {
-            if (data->event == ToolDataWindow::Event::UPDATE) {
+            if (data->event == ToolDataWindow::Event::UPDATE && m_preview) {
                 m_bulge_locked = true;
                 m_bulge = std::clamp(data->diameter, 0.05, 3.0);
                 apply_bulge(m_bulge);
@@ -230,6 +247,24 @@ ToolResponse ToolSketchBlendCurve::update(const ToolArgs &args)
 
     switch (args.action) {
     case InToolActionID::LMB: {
+        // Hover-pick phase: fill in whichever curve(s) weren't already
+        // pre-selected, same two-step pattern as ToolSketchFillet.
+        if (!m_curve1) {
+            select_curve(m_curve1);
+            return ToolResponse();
+        }
+        if (!m_curve2) {
+            if (!select_curve(m_curve2))
+                return ToolResponse();
+            if (!setup_connection()) {
+                m_curve1 = nullptr;
+                m_curve2 = nullptr;
+            }
+            return ToolResponse();
+        }
+        if (!m_preview)
+            return ToolResponse();
+
         m_intf.hide_circle_dimension();
         m_preview->m_selection_invisible = false;
 

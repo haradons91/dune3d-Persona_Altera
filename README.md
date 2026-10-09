@@ -266,13 +266,16 @@ Known loose ends in this fork, not yet acted on:
    actual check (point2's position stays within line2's own segment)
    generalizes correctly to non-right-angle corners too.
  - **Sketch Modify: allow invoking a menu item with or without a
-   pre-selection**: Chamfer, Offset, Scale, Move/Copy, and Blend Curve
-   all still require selecting the right entity/entities *before*
-   clicking the menu item -- with nothing (or the wrong thing) selected,
-   `can_begin()` fails and the tool silently does nothing, the same
-   architectural flaw Trim/Break originally had. Should work like
-   Fillet: either pre-select then invoke, OR invoke first and pick the
-   entity/entities by hovering/clicking on the canvas afterward.
+   pre-selection**: Offset, Scale, and Move/Copy still require selecting
+   the right entity/entities *before* clicking the menu item -- with
+   nothing (or the wrong thing) selected, `can_begin()` fails and the
+   tool silently does nothing, the same architectural flaw Trim/Break
+   originally had. (Chamfer's Distance-Distance/Distance-Angle variants
+   and Blend Curve have both been fixed, hover-driven like Fillet now:
+   either pre-select then invoke, or invoke first and click to pick each
+   line/curve one at a time. Offset/Scale/Move-Copy need a different
+   interaction since they take 1+ entities, not a fixed count -- click
+   to select just one, ctrl+click to add/remove more, Enter to finish.)
  - **Offset rebuilt as a live-drag tool and confirmed working**: no
    longer a modal dialog -- select an entity (line/arc/circle) first,
    then invoke Offset; dragging the mouse grows/shrinks the preview

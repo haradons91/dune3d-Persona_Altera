@@ -18,6 +18,10 @@ class EntityLine2D;
 // mechanism ToolDrawRectangle already uses) -- Tab locks the active
 // side's current value and switches the mouse-drag + keyboard focus to
 // the other side.
+//
+// Hover-driven like ToolSketchFillet: pre-selecting two lines before
+// invoking still works, but isn't required -- click to pick each line
+// one at a time if nothing (or only one) was pre-selected.
 class ToolSketchChamferAdvanced : public ToolCommon {
 public:
     using ToolCommon::ToolCommon;
@@ -56,7 +60,9 @@ private:
     double m_dist2 = 1.0;
     bool m_active_is_first = true;
 
+    bool select_line(EntityLine2D *&line);
     bool setup_corner();
+    bool setup_preview();
     glm::dvec2 point1() const;
     glm::dvec2 point2() const;
     glm::dvec2 point2_for_angle(double angle_deg) const;

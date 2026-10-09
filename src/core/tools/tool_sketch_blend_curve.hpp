@@ -26,6 +26,10 @@ class EntityBezier2D;
 // constraint this codebase already uses for any ARC_2D/BEZIER_2D pair,
 // despite the name) -- both persistently enforce tangency, so the blend
 // stays tangent if the connected curve is later edited.
+//
+// Hover-driven like ToolSketchFillet: pre-selecting two curves before
+// invoking still works, but isn't required -- click to pick each curve
+// one at a time if nothing (or only one) was pre-selected.
 class ToolSketchBlendCurve : public ToolCommon {
 public:
     using ToolCommon::ToolCommon;
@@ -54,6 +58,8 @@ private:
     double m_bulge = 0.5;
     bool m_bulge_locked = false;
 
+    bool select_curve(Entity *&curve);
+    bool setup_connection();
     void apply_bulge(double bulge);
     double compute_live_bulge(glm::dvec2 cursor) const;
     void update_preview();

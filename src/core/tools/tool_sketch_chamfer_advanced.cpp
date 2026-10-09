@@ -80,23 +80,26 @@ bool ToolSketchChamferAdvanced::setup_corner()
 
 ToolBase::CanBegin ToolSketchChamferAdvanced::can_begin()
 {
-    if (get_workplane_uuid() == UUID())
-        return false;
-    auto lines = selected_lines(m_selection, get_workplane_uuid(), get_doc());
-    if (!lines[0] || !lines[1])
-        return false;
-    m_line1 = lines[0];
-    m_line2 = lines[1];
-    return setup_corner();
+    return get_workplane_uuid() != UUID();
 }
 
-ToolResponse ToolSketchChamferAdvanced::begin(const ToolArgs &args)
+bool ToolSketchChamferAdvanced::select_line(EntityLine2D *&line)
 {
-    auto lines = selected_lines(m_selection, get_workplane_uuid(), get_doc());
-    m_line1 = lines[0];
-    m_line2 = lines[1];
-    if (!m_line1 || !m_line2 || !setup_corner())
-        return ToolResponse::end();
+    const auto hover = m_intf.get_hover_selection();
+    if (!hover || hover->type != SelectableRef::Type::ENTITY)
+        return false;
+    auto *candidate = dynamic_cast<EntityLine2D *>(&get_entity(hover->item));
+    if (!candidate || candidate->m_wrkpl != get_workplane_uuid() || candidate == line || candidate == m_line1
+        || candidate == m_line2)
+        return false;
+    line = candidate;
+    return true;
+}
+
+bool ToolSketchChamferAdvanced::setup_preview()
+{
+    if (!setup_corner())
+        return false;
 
     m_preview = &add_entity<EntityLine2D>();
     m_preview->m_wrkpl = m_line1->m_wrkpl;
@@ -110,7 +113,19 @@ ToolResponse ToolSketchChamferAdvanced::begin(const ToolArgs &args)
     update_preview();
     m_intf.show_rectangle_dimensions(m_dist1, m_dist2, true, true);
     m_intf.canvas_update_from_tool();
+    return true;
+}
 
+ToolResponse ToolSketchChamferAdvanced::begin(const ToolArgs &args)
+{
+    m_intf.enable_hover_selection();
+    auto lines = selected_lines(m_selection, get_workplane_uuid(), get_doc());
+    m_line1 = lines[0];
+    m_line2 = lines[1];
+    if (m_line1 && m_line2 && !setup_preview()) {
+        m_line1 = nullptr;
+        m_line2 = nullptr;
+    }
     return ToolResponse();
 }
 
@@ -270,14 +285,15 @@ void ToolSketchChamferAdvanced::commit_chamfer()
 ToolResponse ToolSketchChamferAdvanced::update(const ToolArgs &args)
 {
     if (args.type == ToolEventType::MOVE) {
-        update_preview();
+        if (m_preview)
+            update_preview();
         set_first_update_group_current();
         return ToolResponse();
     }
 
     if (args.type == ToolEventType::DATA) {
         if (auto data = dynamic_cast<const ToolDataRectangleDimensionsWindow *>(args.data.get())) {
-            if (data->event == ToolDataWindow::Event::UPDATE) {
+            if (data->event == ToolDataWindow::Event::UPDATE && m_preview) {
                 // Tab locks whichever side you're leaving at its current
                 // value and hands mouse-drag control to the other one.
                 if (data->lock_width) {
@@ -300,6 +316,24 @@ ToolResponse ToolSketchChamferAdvanced::update(const ToolArgs &args)
 
     switch (args.action) {
     case InToolActionID::LMB:
+        // Hover-pick phase: fill in whichever line(s) weren't already
+        // pre-selected, same two-step pattern as ToolSketchFillet.
+        if (!m_line1) {
+            select_line(m_line1);
+            return ToolResponse();
+        }
+        if (!m_line2) {
+            if (!select_line(m_line2))
+                return ToolResponse();
+            if (!setup_preview()) {
+                m_line1 = nullptr;
+                m_line2 = nullptr;
+            }
+            return ToolResponse();
+        }
+        if (!m_preview)
+            return ToolResponse();
+
         // First click locks side 1 at its current (dragged) value and
         // hands mouse-drag control to side 2, same as Tab -- second
         // click commits. Tab still works too, this is just a second way
