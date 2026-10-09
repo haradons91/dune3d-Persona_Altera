@@ -73,6 +73,8 @@ bool ToolSketchChamferAdvanced::setup_corner()
         return false;
     m_line1_dir = (line1_end - m_corner) / line1_len;
     m_line2_dir = (line2_end - m_corner) / line2_len;
+    m_line1_len = line1_len;
+    m_line2_len = line2_len;
     return true;
 }
 
@@ -117,18 +119,30 @@ glm::dvec2 ToolSketchChamferAdvanced::point1() const
     return m_corner + m_line1_dir * std::max(m_dist1, 1e-3);
 }
 
-glm::dvec2 ToolSketchChamferAdvanced::point2() const
+glm::dvec2 ToolSketchChamferAdvanced::point2_for_angle(double angle_deg) const
 {
     const auto d1 = std::max(m_dist1, 1e-3);
-    if (m_tool_id == ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE) {
-        const auto p1 = m_corner + m_line1_dir * d1;
-        const auto angle = std::clamp(m_dist2, 1.0, 179.0) * M_PI / 180.0;
-        const auto rot = M_PI - angle;
-        const glm::dvec2 chamfer_dir(m_line1_dir.x * std::cos(rot) - m_line1_dir.y * std::sin(rot),
-                                     m_line1_dir.x * std::sin(rot) + m_line1_dir.y * std::cos(rot));
-        const auto inter = line_line_intersect(p1, chamfer_dir, m_corner, m_line2_dir);
-        return inter.value_or(m_corner + m_line2_dir * d1);
-    }
+    const auto p1 = m_corner + m_line1_dir * d1;
+    const auto angle = std::clamp(angle_deg, 1.0, 179.0) * M_PI / 180.0;
+    // Rotate line1_dir TOWARD whichever side line2 actually sits on (not
+    // a fixed CCW direction) -- a corner's two lines can meet with either
+    // handedness (e.g. a rectangle's bottom-right corner vs. its
+    // bottom-left), and assuming one fixed direction sends the chamfer
+    // line off to the wrong side of the corner entirely for the other
+    // handedness.
+    const auto cross = m_line1_dir.x * m_line2_dir.y - m_line1_dir.y * m_line2_dir.x;
+    const auto rot_sign = cross >= 0 ? 1.0 : -1.0;
+    const auto rot = rot_sign * (M_PI - angle);
+    const glm::dvec2 chamfer_dir(m_line1_dir.x * std::cos(rot) - m_line1_dir.y * std::sin(rot),
+                                 m_line1_dir.x * std::sin(rot) + m_line1_dir.y * std::cos(rot));
+    const auto inter = line_line_intersect(p1, chamfer_dir, m_corner, m_line2_dir);
+    return inter.value_or(m_corner + m_line2_dir * d1);
+}
+
+glm::dvec2 ToolSketchChamferAdvanced::point2() const
+{
+    if (m_tool_id == ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE)
+        return point2_for_angle(m_dist2);
     return m_corner + m_line2_dir * std::max(m_dist2, 1e-3);
 }
 
@@ -141,7 +155,9 @@ void ToolSketchChamferAdvanced::update_preview()
     // one that is, matching Fillet/Offset's single-value mouse-drag
     // pattern but doubled, one per side of the corner.
     if (m_active_is_first) {
-        m_dist1 = std::max(glm::dot(cursor - m_corner, m_line1_dir), 1e-3);
+        // Clamped to line1's own length -- the chamfer point can't be
+        // dragged past the actual edge it sits on.
+        m_dist1 = std::clamp(glm::dot(cursor - m_corner, m_line1_dir), 1e-3, m_line1_len);
     }
     else if (m_tool_id == ToolID::SKETCH_CHAMFER_DISTANCE_ANGLE) {
         // Invert the point1->chamfer_dir->angle relationship point2()
@@ -153,12 +169,36 @@ void ToolSketchChamferAdvanced::update_preview()
             const auto chamfer_dir = glm::normalize(dir);
             const auto rot_actual = std::atan2(m_line1_dir.x * chamfer_dir.y - m_line1_dir.y * chamfer_dir.x,
                                                 glm::dot(m_line1_dir, chamfer_dir));
-            const auto angle_deg = (M_PI - rot_actual) * 180.0 / M_PI;
-            m_dist2 = std::clamp(angle_deg, 1.0, 179.0);
+            const auto cross = m_line1_dir.x * m_line2_dir.y - m_line1_dir.y * m_line2_dir.x;
+            const auto rot_sign = cross >= 0 ? 1.0 : -1.0;
+            const auto angle_deg = (M_PI - rot_actual * rot_sign) * 180.0 / M_PI;
+            // angle_deg naturally spans the full circle (0,360] as the
+            // cursor goes all the way around point1 -- only the part
+            // within the corner's actual wedge (roughly 1..179) is a
+            // valid chamfer. Beyond that, the chamfer line shouldn't be
+            // allowed to extend past line2's own far endpoint either --
+            // the exact bound (not just "near 90 degrees") is wherever
+            // point2 would land beyond line2's own current length,
+            // checked by its parametric position along line2's own
+            // direction. (For a right-angle corner this is exactly the
+            // Pythagorean bound: hypotenuse <= sqrt(d1^2 + line2_len^2),
+            // reached right as point2 hits line2's far end -- it just
+            // generalizes correctly to non-right-angle corners too,
+            // where the relationship isn't a plain right triangle.)
+            // Reject anything past either bound and leave m_dist2 at its
+            // last valid value instead of snapping the preview out to a
+            // degenerate position.
+            if (angle_deg >= 1.0 && angle_deg <= 179.0) {
+                const auto candidate_point2 = point2_for_angle(angle_deg);
+                const auto t2 = glm::dot(candidate_point2 - m_corner, m_line2_dir);
+                if (t2 >= 1e-3 && t2 <= m_line2_len)
+                    m_dist2 = angle_deg;
+            }
         }
     }
     else {
-        m_dist2 = std::max(glm::dot(cursor - m_corner, m_line2_dir), 1e-3);
+        // Same reasoning as m_dist1 above, clamped to line2's own length.
+        m_dist2 = std::clamp(glm::dot(cursor - m_corner, m_line2_dir), 1e-3, m_line2_len);
     }
 
     const auto p1 = point1();

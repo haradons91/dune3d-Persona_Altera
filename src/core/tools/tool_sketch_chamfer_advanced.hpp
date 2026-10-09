@@ -42,6 +42,14 @@ private:
     glm::dvec2 m_corner{};
     glm::dvec2 m_line1_dir{}, m_line2_dir{};
     int m_line1_corner = -1, m_line2_corner = -1;
+    // Each line's own original length -- neither chamfer point should be
+    // draggable past the actual edge it sits on. Also bounds how far out
+    // point2 is allowed to land for Distance-Angle (an angle near where
+    // the chamfer line would run parallel to line2 is mathematically
+    // near-degenerate and shoots the intersection off to an unreasonable
+    // distance).
+    double m_line1_len = 0;
+    double m_line2_len = 0;
     // Side 1's distance, and side 2's value -- a plain distance for the
     // Distance-Distance variant, an angle in degrees for Distance-Angle.
     double m_dist1 = 1.0;
@@ -51,6 +59,7 @@ private:
     bool setup_corner();
     glm::dvec2 point1() const;
     glm::dvec2 point2() const;
+    glm::dvec2 point2_for_angle(double angle_deg) const;
     void update_preview();
     void commit_chamfer();
 };

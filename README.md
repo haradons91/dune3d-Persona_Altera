@@ -236,6 +236,22 @@ Known loose ends in this fork, not yet acted on:
    -- same root cause as the Extend/rectangle bug below (an existing
    `ConstraintPointsCoincident` at the shared corner wasn't dropped
    before moving the two points to their new, now-different positions).
+   Three more bugs found via live testing, all fixed: (1) Distance-Angle
+   assumed a fixed rotation handedness, so the chamfer line shot off to
+   the wrong side of the corner entirely for one of the two possible
+   corner orientations (e.g. a rectangle's bottom-right corner vs. its
+   bottom-left) -- now rotates toward whichever side line2 actually sits
+   on, via the sign of their cross product. (2) Dragging the angle past
+   the corner's own valid wedge (or near where the chamfer would run
+   parallel to line2, inherently degenerate for any right-angle corner)
+   snapped the preview out to an absurd, far-off position instead of
+   holding still -- both are now rejected, holding the last valid value.
+   (3) All four distances (both sides, both modes) could be dragged past
+   the actual length of the edge they sit on -- now clamped to each
+   line's own remaining length. For a right-angle corner this reduces to
+   the Pythagorean bound (hypotenuse <= sqrt(d1^2 + line2_len^2)); the
+   actual check (point2's position stays within line2's own segment)
+   generalizes correctly to non-right-angle corners too.
  - **Sketch Modify: allow invoking a menu item with or without a
    pre-selection**: Chamfer, Offset, Scale, Move/Copy, and Blend Curve
    all still require selecting the right entity/entities *before*
