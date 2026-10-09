@@ -205,20 +205,33 @@ Known loose ends in this fork, not yet acted on:
    - Offset creates new parallel entities rather than modifying the
      originals, tied back to them with `ConstraintParallel` (lines) or
      a pinned `ConstraintRadius` (arcs/circles).
-   - Blend Curve connects the nearest endpoints of two selected lines
-     (which may be far apart, unlike Fillet's shared corner) with a
-     tangent-continuous cubic Bezier, "bulge" entered via the same
-     dialog mechanism; only straight lines are supported.
- - **Fix Sketch Modify**: Blend Curve is confirmed broken in actual use
-   (the "not verified live" caveat above turned out to matter) -- needs
-   real debugging against the live tool/canvas interaction, not just
-   re-checking the geometry math. (Trim, Extend, Break, Offset, and
-   Chamfer's Distance-Distance/Distance-Angle variants have all been
-   rebuilt as real hover/live-drag-driven tools, sharing an architecture
-   closer to `ToolSketchFillet` than the original
+   - Blend Curve connects the nearest endpoints of two selected curves
+     with a tangent-continuous cubic Bezier.
+ - **Fix Sketch Modify: done**. Trim, Extend, Break, Offset, Chamfer's
+   Distance-Distance/Distance-Angle variants, and Blend Curve have all
+   been rebuilt as real hover/live-drag-driven tools, sharing an
+   architecture closer to `ToolSketchFillet` than the original
    pre-selection/one-shot/modal-dialog design, and confirmed working
    live -- see the items below for what's been tested there and what's
-   still open.)
+   still open.
+ - **Blend Curve rebuilt as a live-drag tool and extended to arcs/conics,
+   confirmed working**: no longer a modal dialog -- select two curves
+   first, then invoke; a preview Bezier connects their nearest endpoints
+   live as you drag the "bulge" (how far it bows out, as a fraction of
+   the chord length), with the same inline textbox mechanism as
+   Fillet/Offset. Originally lines-only; extended to also connect
+   EntityArc2D and EntityBezier2D endpoints (a "conic," drawn by
+   ToolDrawConic, is an EntityBezier2D under the hood) in any
+   combination. A line endpoint gets `ConstraintBezierLineTangent`; an
+   arc/conic endpoint gets `ConstraintArcArcTangent` (the generic
+   curve-curve tangent constraint this codebase already uses for any
+   ARC_2D/BEZIER_2D pair, despite the name) -- both persistently enforce
+   tangency. Also fixes a real bug found while extending it: the second
+   connection point's control-point direction was flipped, producing a
+   visibly kinked (non-tangent) curve instead of a smooth blend even for
+   two plain lines -- verified by hand-tracing the actual cubic Bezier
+   tangent formula before fixing. Circles are explicitly out of scope
+   (no natural "endpoint" to connect to).
  - **Chamfer's Distance-Distance/Distance-Angle rebuilt as a live-drag
    tool with click-to-advance and confirmed working**: no longer two
    sequential modal dialogs -- select the two corner lines first, then
@@ -307,13 +320,13 @@ Known loose ends in this fork, not yet acted on:
    preview point marking exactly where the split will land as the
    cursor moves along the curve; splits a line or arc into two there on
    click.
- - **Replace Sketch Modify's popup-dialog interactions with on-canvas
+ - **Replace Move/Copy/Scale's popup-dialog interactions with on-canvas
    arrows**: Move's two sequential X/Y popup dialogs should become
    Left/Right and Up/Down arrows instead; Copy's popup dialogs should
    become the same Left/Right and Up/Down arrows; Scale's popup dialog
-   should become scale arrows. (Likely also affects Offset's distance
-   popup and Blend Curve's bulge popup, same underlying pattern -- worth
-   checking once Move/Copy/Scale's arrows exist.)
+   should become scale arrows. (Offset and Blend Curve already moved off
+   popup dialogs onto the same inline on-canvas textbox mechanism as
+   Fillet, during their live-drag rebuilds -- just these three left.)
  - **Rename the Chamfer submenu items**: "Equal Distance" -> "Equal
    Distance Chamfer", "Distance-Distance" -> "Two Distance Chamfer",
    "Distance-Angle" -> "Distance and Angle Chamfer".

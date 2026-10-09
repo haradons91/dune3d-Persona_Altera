@@ -2585,7 +2585,7 @@ void Editor::accept_rectangle_dimensions()
 
 void Editor::accept_circle_dimension()
 {
-    if (m_core.get_tool_id() != ToolID::DRAW_CIRCLE_2D && m_core.get_tool_id() != ToolID::SKETCH_FILLET)
+    if (!any_of(m_core.get_tool_id(), ToolID::DRAW_CIRCLE_2D, ToolID::SKETCH_FILLET, ToolID::SKETCH_BLEND_CURVE))
         return;
     ToolArgs args;
     args.type = ToolEventType::ACTION;
